@@ -5,6 +5,8 @@
 ## Build generated
 build/
 **/build/
+build-device/
+**/build-device/
 DerivedData/
 **/DerivedData/
 

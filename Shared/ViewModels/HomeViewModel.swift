@@ -105,21 +105,18 @@ final class HomeViewModel: ViewModel, Stateful {
 
             backgroundRefreshTask = Task { [weak self] in
                 do {
-                    self?.nextUpViewModel.send(.refresh)
-                    self?.recentlyAddedViewModel.send(.refresh)
-
-                    let resumeItems = try await self?.getResumeItems() ?? []
+                    try await self?.refresh()
 
                     guard !Task.isCancelled else { return }
 
                     await MainActor.run {
                         guard let self else { return }
-                        self.resumeItems.elements = resumeItems
                         self.backgroundStates.remove(.refresh)
-                        self.cacheCurrentHomeState()
                     }
                 } catch is CancellationError {
-                    // cancelled
+                    await MainActor.run {
+                        self?.backgroundStates.remove(.refresh)
+                    }
                 } catch {
                     guard !Task.isCancelled else { return }
 

@@ -1,0 +1,69 @@
+//
+// Swiftfin is subject to the terms of the Mozilla Public
+// License, v2.0. If a copy of the MPL was not distributed with this
+// file, you can obtain one at https://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) 2026 Jellyfin & Jellyfin Contributors
+//
+
+import SwiftUI
+
+extension AddTaskTriggerView {
+
+    struct TimeLimitSection: View {
+
+        @Binding
+        private var taskTriggerInfo: EmbyTaskTrigger
+
+        @State
+        private var tempTimeLimit: Int?
+
+        // MARK: - Init
+
+        init(taskTriggerInfo: Binding<EmbyTaskTrigger>) {
+            self._taskTriggerInfo = taskTriggerInfo
+            _tempTimeLimit = State(initialValue: Int(Duration.ticks(taskTriggerInfo.wrappedValue.maxRuntimeTicks ?? 0).hours))
+        }
+
+        // MARK: - Body
+
+        var body: some View {
+            Section {
+                ChevronButton(
+                    L10n.timeLimit.localizedCapitalized,
+                    subtitle: subtitleString,
+                    description: L10n.taskTriggerTimeLimit
+                ) {
+                    TextField(
+                        L10n.hours,
+                        value: $tempTimeLimit,
+                        format: .number
+                    )
+                    .keyboardType(.numberPad)
+                } onSave: {
+                    if tempTimeLimit != nil && tempTimeLimit != 0 {
+                        taskTriggerInfo.maxRuntimeTicks = Duration.hours(tempTimeLimit ?? 0).ticks
+                    } else {
+                        taskTriggerInfo.maxRuntimeTicks = nil
+                    }
+                } onCancel: {
+                    if let maxRuntimeTicks = taskTriggerInfo.maxRuntimeTicks {
+                        tempTimeLimit = Int(Duration.ticks(maxRuntimeTicks).hours)
+                    } else {
+                        tempTimeLimit = nil
+                    }
+                }
+            }
+        }
+
+        // MARK: - Create Subtitle String
+
+        private var subtitleString: String {
+            if let maxRuntimeTicks = taskTriggerInfo.maxRuntimeTicks {
+                Duration.ticks(maxRuntimeTicks).formatted(.hourMinuteAbbreviated)
+            } else {
+                L10n.none
+            }
+        }
+    }
+}

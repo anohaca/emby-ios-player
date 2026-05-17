@@ -1,0 +1,140 @@
+//
+// Swiftfin is subject to the terms of the Mozilla Public
+// License, v2.0. If a copy of the MPL was not distributed with this
+// file, you can obtain one at https://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) 2026 Jellyfin & Jellyfin Contributors
+//
+
+import SwiftUI
+
+struct AddTaskTriggerView: View {
+
+    @ObservedObject
+    var observer: ServerTaskObserver
+
+    @Router
+    private var router
+
+    @State
+    private var isPresentingNotSaved = false
+    @State
+    private var taskTriggerInfo: EmbyTaskTrigger
+
+    static let defaultTimeOfDayTicks = 0
+    static let defaultDayOfWeek: EmbyTaskDayOfWeek = .sunday
+    static let defaultIntervalTicks = Duration.hours(1).ticks
+
+    private let emptyTaskTriggerInfo: EmbyTaskTrigger
+
+    private var hasUnsavedChanges: Bool {
+        taskTriggerInfo != emptyTaskTriggerInfo
+    }
+
+    private var isDuplicate: Bool {
+        observer.task.triggers?.contains(where: { $0 == taskTriggerInfo }) ?? false
+    }
+
+    init(observer: ServerTaskObserver) {
+        self.observer = observer
+
+        let newTrigger = EmbyTaskTrigger(
+            dayOfWeek: nil,
+            intervalTicks: nil,
+            maxRuntimeTicks: nil,
+            timeOfDayTicks: nil,
+            type: EmbyTaskTriggerType.startupTrigger
+        )
+
+        _taskTriggerInfo = State(initialValue: newTrigger)
+        self.emptyTaskTriggerInfo = newTrigger
+    }
+
+    // MARK: - View for EmbyTaskTriggerType.dailyTrigger
+
+    @ViewBuilder
+    private var dailyView: some View {
+        TimeRow(taskTriggerInfo: $taskTriggerInfo)
+    }
+
+    // MARK: - View for EmbyTaskTriggerType.weeklyTrigger
+
+    @ViewBuilder
+    private var weeklyView: some View {
+        Picker(
+            L10n.dayOfWeek,
+            selection: $taskTriggerInfo.dayOfWeek.coalesce(AddTaskTriggerView.defaultDayOfWeek)
+        ) {
+            ForEach(DayOfWeek.allCases, id: \.self) { day in
+                Text(day.displayTitle)
+                    .tag(day)
+            }
+        }
+        TimeRow(taskTriggerInfo: $taskTriggerInfo)
+    }
+
+    // MARK: - View for EmbyTaskTriggerType.intervalTrigger
+
+    @ViewBuilder
+    private var intervalView: some View {
+        IntervalRow(taskTriggerInfo: $taskTriggerInfo)
+    }
+
+    // MARK: - Body
+
+    var body: some View {
+        Form {
+            Section {
+                TriggerTypeRow(taskTriggerInfo: $taskTriggerInfo)
+
+                if let taskType = taskTriggerInfo.type {
+                    if taskType == EmbyTaskTriggerType.dailyTrigger {
+                        dailyView
+                    } else if taskType == EmbyTaskTriggerType.weeklyTrigger {
+                        weeklyView
+                    } else if taskType == EmbyTaskTriggerType.intervalTrigger {
+                        intervalView
+                    }
+                }
+            } footer: {
+                if isDuplicate {
+                    Label(L10n.triggerAlreadyExists, systemImage: "exclamationmark.circle.fill")
+                        .labelStyle(.sectionFooterWithImage(imageStyle: .orange))
+                }
+            }
+
+            TimeLimitSection(taskTriggerInfo: $taskTriggerInfo)
+        }
+        .animation(.linear(duration: 0.2), value: isDuplicate)
+        .animation(.linear(duration: 0.2), value: taskTriggerInfo.type)
+        .interactiveDismissDisabled(true)
+        .navigationTitle(L10n.addTrigger.localizedCapitalized)
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarCloseButton {
+            if hasUnsavedChanges {
+                isPresentingNotSaved = true
+            } else {
+                router.dismiss()
+            }
+        }
+        .topBarTrailing {
+            Button(L10n.save) {
+
+                UIDevice.impact(.light)
+
+                observer.addTrigger(taskTriggerInfo)
+                router.dismiss()
+            }
+            .buttonStyle(.toolbarPill)
+            .disabled(isDuplicate)
+        }
+        .alert(L10n.unsavedChangesMessage, isPresented: $isPresentingNotSaved) {
+            Button(L10n.close, role: .destructive) {
+                router.dismiss()
+            }
+            Button(L10n.cancel, role: .cancel) {
+                isPresentingNotSaved = false
+            }
+        }
+    }
+}

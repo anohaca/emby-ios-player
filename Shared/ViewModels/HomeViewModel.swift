@@ -8,6 +8,7 @@
 
 import Combine
 import CoreStore
+import Defaults
 import Factory
 import Foundation
 import IdentifiedCollections
@@ -60,6 +61,7 @@ final class HomeViewModel: ViewModel, Stateful {
     private var backgroundRefreshTask: AnyCancellable?
     private var notificationRefreshTask: AnyCancellable?
     private var refreshTask: AnyCancellable?
+    private static let resumeItemLimit = 20
 
     var nextUpViewModel: NextUpLibraryViewModel = .init()
     var recentlyAddedViewModel: RecentlyAddedLibraryViewModel = .init()
@@ -232,8 +234,8 @@ final class HomeViewModel: ViewModel, Stateful {
         try await refreshLibrary(nextUpViewModel)
         try await refreshLibrary(recentlyAddedViewModel)
 
-        let resumeItems = try await getResumeItems()
         let libraries = try await getLibraries()
+        let resumeItems = try await getResumeItems(for: libraries)
 
         for library in libraries {
             try await refreshLibrary(library)
@@ -295,16 +297,51 @@ final class HomeViewModel: ViewModel, Stateful {
         .asAnyCancellable()
     }
 
-    private func getResumeItems() async throws -> [BaseItemDto] {
+    private func getResumeItems(for libraries: [LatestInLibraryViewModel]) async throws -> [BaseItemDto] {
+        let libraryIDs = Self.libraryIDs(from: libraries)
+        let hiddenLibraryIDs = Self.hiddenHomeLibraryIDs().intersection(libraryIDs)
+
+        guard hiddenLibraryIDs.isNotEmpty else {
+            return sortedResumeItems(try await getResumeItems(parentID: nil))
+        }
+
+        let visibleLibraryIDs = libraryIDs.filter { !hiddenLibraryIDs.contains($0) }
+        guard visibleLibraryIDs.isNotEmpty else { return [] }
+
+        var items: [BaseItemDto] = []
+        for libraryID in visibleLibraryIDs {
+            items.append(contentsOf: try await getResumeItems(parentID: libraryID))
+        }
+
+        return sortedResumeItems(Self.uniqueItems(items))
+    }
+
+    private func getResumeItems(parentID: String?) async throws -> [BaseItemDto] {
+        var parameters = EmbyPortResumeItemsParameters()
+        parameters.enableUserData = true
+        parameters.fields = .MinimumFields + [.primaryImageAspectRatio]
+        parameters.limit = Self.resumeItemLimit
+        parameters.mediaTypes = [.video]
+        parameters.parentID = parentID
+        parameters.sortBy = [.datePlayed]
+        parameters.sortOrder = [.descending]
+
         let response: EmbyPortItemsResponse<BaseItemDto> = try await userSession.embyClient.resumeItems(
+            parameters,
             as: EmbyPortItemsResponse<BaseItemDto>.self
         )
 
+        return response.items ?? []
+    }
+
+    private func sortedResumeItems(_ items: [BaseItemDto]) -> [BaseItemDto] {
         return ResumeItemRecencyStore.sorted(
-            response.items ?? [],
+            items,
             serverID: userSession.server.id,
             userID: userSession.user.id
         )
+        .prefix(Self.resumeItemLimit)
+        .asArray
     }
 
     private func reorderResumeItemsFromLocalRecency() {
@@ -426,6 +463,43 @@ final class HomeViewModel: ViewModel, Stateful {
             id: \.unwrappedIDHashOrZero,
             uniquingIDsWith: { lhs, _ in lhs }
         )
+    }
+
+    private static func hiddenHomeLibraryIDs() -> Set<String> {
+        var ids = Set<String>()
+
+        for sectionID in Defaults[.Customization.Home.hiddenSectionIDs] {
+            if let libraryID = HomeSectionDescriptor.latestInLibrarySourceID(from: sectionID) {
+                ids.insert(libraryID)
+            }
+        }
+
+        return ids
+    }
+
+    private static func libraryIDs(from libraries: [LatestInLibraryViewModel]) -> [String] {
+        var ids: [String] = []
+
+        for library in libraries {
+            guard let id = library.parent?.id else { continue }
+            ids.append(id)
+        }
+
+        return uniqueIDs(ids)
+    }
+
+    private static func uniqueIDs(_ ids: [String]) -> [String] {
+        var seen = Set<String>()
+        return ids.filter { seen.insert($0).inserted }
+    }
+
+    private static func uniqueItems(_ items: [BaseItemDto]) -> [BaseItemDto] {
+        var seen = Set<String>()
+
+        return items.filter { item in
+            guard let id = item.id, id.isNotEmpty else { return true }
+            return seen.insert(id).inserted
+        }
     }
 }
 

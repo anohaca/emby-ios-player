@@ -184,6 +184,10 @@ struct HomeView: View {
             guard !isRefreshing else { return }
             isPullRefreshControlActive = false
         }
+        .onChange(of: hiddenSectionIDs) { _ in
+            guard viewModel.state == .content else { return }
+            viewModel.send(.backgroundRefresh)
+        }
         #if DEBUG
         .task {
             await runPlaybackExitLayoutSmokeIfNeeded()

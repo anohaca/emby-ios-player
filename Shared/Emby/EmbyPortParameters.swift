@@ -54,9 +54,13 @@ struct EmbyPortNextUpParameters {
 }
 
 struct EmbyPortResumeItemsParameters {
+    var enableUserData: Bool?
     var fields: [ItemFields]?
     var limit: Int?
+    var mediaTypes: [MediaType]?
     var parentID: String?
+    var sortBy: [ItemSortBy]?
+    var sortOrder: [SortOrder]?
     var userID: String?
 }
 

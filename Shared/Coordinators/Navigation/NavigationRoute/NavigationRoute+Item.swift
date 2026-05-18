@@ -201,12 +201,18 @@ extension NavigationRoute {
         }
     }
 
-    static func item(item: BaseItemDto) -> NavigationRoute {
+    static func item(
+        item: BaseItemDto,
+        shouldReturnHomeFromEpisodeBack: Bool = true
+    ) -> NavigationRoute {
         NavigationRoute(
             id: "item-\(item.id ?? "Unknown")",
             withNamespace: { .push(.zoom(sourceID: "item", namespace: $0)) }
         ) {
-            ItemView(item: item)
+            ItemView(
+                item: item,
+                shouldReturnHomeFromEpisodeBack: shouldReturnHomeFromEpisodeBack
+            )
         }
     }
 

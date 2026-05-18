@@ -23,8 +23,11 @@ extension SeriesEpisodeSelector {
 
         @StateObject
         private var proxy = CollectionHStackProxy()
+        @StateObject
+        private var playbackDisplayState = SeriesEpisodeSelector.EpisodePlaybackDisplayState()
 
         let playButtonItem: BaseItemDto?
+        let inheritsPlayedState: Bool
 
         private func contentView(viewModel: SeasonItemViewModel) -> some View {
             CollectionHStack(
@@ -32,13 +35,28 @@ extension SeriesEpisodeSelector {
                 id: \.unwrappedIDHashOrZero,
                 columns: UIDevice.isPhone ? 1.5 : 3.5
             ) { episode in
-                SeriesEpisodeSelector.EpisodeCard(episode: episode)
+                SeriesEpisodeSelector.EpisodeCard(
+                    episode: episode,
+                    playbackDisplayState: playbackDisplayState
+                )
             }
             .clipsToBounds(false)
             .scrollBehavior(.continuousLeadingEdge)
             .insets(horizontal: EdgeInsets.edgePadding)
             .itemSpacing(EdgeInsets.edgePadding / 2)
             .proxy(proxy)
+            .onAppear {
+                refreshPlaybackDisplayState()
+            }
+            .onChange(of: inheritsPlayedState) { _ in
+                refreshPlaybackDisplayState()
+            }
+            .onChange(of: viewModel.elements) { _ in
+                refreshPlaybackDisplayState()
+            }
+            .onChange(of: viewModel.userDataDisplayRevision) { _ in
+                refreshPlaybackDisplayState()
+            }
             .onFirstAppear {
                 guard !didScrollToPlayButtonItem else { return }
                 didScrollToPlayButtonItem = true
@@ -55,6 +73,13 @@ extension SeriesEpisodeSelector {
                     proxy.scrollTo(index: targetIndex, animated: false)
                 }
             }
+        }
+
+        private func refreshPlaybackDisplayState() {
+            playbackDisplayState.update(
+                parentIsPlayed: inheritsPlayedState,
+                episodes: Array(viewModel.elements)
+            )
         }
 
         var body: some View {

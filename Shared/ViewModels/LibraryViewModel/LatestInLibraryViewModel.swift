@@ -27,11 +27,18 @@ final class LatestInLibraryViewModel: PagingLibraryViewModel<BaseItemDto>, Ident
 
         let cumulativeLimit = (page + 1) * pageSize
         let pageStart = page * pageSize
+        let response = try await latestItems(limit: cumulativeLimit)
 
-        var unplayedParameters = parameters(limit: cumulativeLimit)
+        guard pageStart < response.count else { return [] }
+
+        return await addingChildImageFallbacks(to: Array(response.dropFirst(pageStart).prefix(pageSize)))
+    }
+
+    private func latestItems(limit: Int) async throws -> [BaseItemDto] {
+        var unplayedParameters = parameters(limit: limit)
         unplayedParameters.isPlayed = false
 
-        var playedParameters = parameters(limit: cumulativeLimit)
+        var playedParameters = parameters(limit: limit)
         playedParameters.isPlayed = true
 
         async let unplayedResponse: [BaseItemDto] = userSession.embyClient.latestItems(
@@ -43,15 +50,11 @@ final class LatestInLibraryViewModel: PagingLibraryViewModel<BaseItemDto>, Ident
             as: [BaseItemDto].self
         )
 
-        let mergedItems = mergedLatestItems(
+        return mergedLatestItems(
             unplayed: try await unplayedResponse,
             played: try await playedResponse,
-            limit: cumulativeLimit
+            limit: limit
         )
-
-        guard pageStart < mergedItems.count else { return [] }
-
-        return await addingChildImageFallbacks(to: Array(mergedItems.dropFirst(pageStart).prefix(pageSize)))
     }
 
     override func getRandomItem() async -> BaseItemDto? {
@@ -68,10 +71,9 @@ final class LatestInLibraryViewModel: PagingLibraryViewModel<BaseItemDto>, Ident
     }
 
     private func parameters(limit: Int) -> EmbyPortLatestMediaParameters {
-
         var parameters = EmbyPortLatestMediaParameters()
         parameters.parentID = parent?.id
-        parameters.fields = .MinimumFields
+        parameters.fields = .MinimumFields + [.dateCreated, .dateLastMediaAdded]
         parameters.enableUserData = true
         parameters.limit = limit
 
@@ -139,37 +141,48 @@ final class LatestInLibraryViewModel: PagingLibraryViewModel<BaseItemDto>, Ident
     ) -> [BaseItemDto] {
         var elements: [BaseItemDto] = []
         var seenIDs: Set<String> = []
-        var unplayedIndex = 0
-        var playedIndex = 0
 
-        while elements.count < limit, unplayedIndex < unplayed.count || playedIndex < played.count {
-            if unplayedIndex < unplayed.count {
-                append(unplayed[unplayedIndex], to: &elements, seenIDs: &seenIDs)
-                unplayedIndex += 1
-            }
-
-            if elements.count >= limit { break }
-
-            if playedIndex < played.count {
-                append(played[playedIndex], to: &elements, seenIDs: &seenIDs)
-                playedIndex += 1
-            }
+        for item in unplayed + played {
+            guard append(item, to: &elements, seenIDs: &seenIDs) else { continue }
         }
 
         return elements
+            .sorted(by: latestSortPrecedes(_:_:))
+            .prefix(limit)
+            .map { $0 }
     }
 
     private func append(
         _ item: BaseItemDto,
         to elements: inout [BaseItemDto],
         seenIDs: inout Set<String>
-    ) {
+    ) -> Bool {
         guard let id = item.id else {
             elements.append(item)
-            return
+            return true
         }
 
-        guard seenIDs.insert(id).inserted else { return }
+        guard seenIDs.insert(id).inserted else { return false }
         elements.append(item)
+        return true
+    }
+
+    private func latestSortPrecedes(_ lhs: BaseItemDto, _ rhs: BaseItemDto) -> Bool {
+        let lhsDate = latestSortDate(for: lhs)
+        let rhsDate = latestSortDate(for: rhs)
+
+        if lhsDate != rhsDate {
+            return lhsDate > rhsDate
+        }
+
+        return latestSortIdentity(for: lhs).localizedStandardCompare(latestSortIdentity(for: rhs)) == .orderedAscending
+    }
+
+    private func latestSortDate(for item: BaseItemDto) -> Date {
+        item.dateLastMediaAdded ?? item.dateCreated ?? .distantPast
+    }
+
+    private func latestSortIdentity(for item: BaseItemDto) -> String {
+        item.sortName ?? item.name ?? item.id ?? .emptyDash
     }
 }

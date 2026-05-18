@@ -6,8 +6,10 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
+import Combine
 import Defaults
 import Foundation
+import IdentifiedCollections
 
 // Since we don't view care to view seasons directly, this doesn't subclass from `ItemViewModel`.
 // If we ever care for viewing seasons directly, subclass from that and have the library view model
@@ -15,6 +17,9 @@ import Foundation
 final class SeasonItemViewModel: PagingLibraryViewModel<BaseItemDto>, Identifiable {
 
     let season: BaseItemDto
+    @Published
+    private(set) var userDataDisplayRevision = 0
+
     private let seriesID: String?
 
     var id: String? {
@@ -25,6 +30,8 @@ final class SeasonItemViewModel: PagingLibraryViewModel<BaseItemDto>, Identifiab
         self.season = season
         self.seriesID = seriesID ?? season.seriesID ?? season.parentID
         super.init(parent: season)
+
+        observeUserDataOverrideChanges()
     }
 
     override func get(page: Int) async throws -> [BaseItemDto] {
@@ -46,8 +53,57 @@ final class SeasonItemViewModel: PagingLibraryViewModel<BaseItemDto>, Identifiab
             as: EmbyPortItemsResponse<BaseItemDto>.self
         )
 
-        let items = response.items ?? []
+        return applyingUserDataOverrides(to: response.items ?? [])
+    }
 
-        return items
+    private func observeUserDataOverrideChanges() {
+        Notifications[.itemShouldRefreshMetadata]
+            .publisher
+            .receive(on: RunLoop.main)
+            .sink { [weak self] itemID in
+                guard let self, self.shouldApplyUserDataOverrideChange(for: itemID) else { return }
+
+                self.applyUserDataOverridesToVisibleEpisodes()
+            }
+            .store(in: &cancellables)
+    }
+
+    private func shouldApplyUserDataOverrideChange(for itemID: String) -> Bool {
+        itemID == season.id ||
+            itemID == seriesID ||
+            elements.contains { $0.id == itemID || $0.parentID == itemID || $0.seasonID == itemID || $0.seriesID == itemID }
+    }
+
+    private func applyUserDataOverridesToVisibleEpisodes() {
+        elements = IdentifiedArray(
+            applyingUserDataOverrides(to: Array(elements)),
+            id: \.unwrappedIDHashOrZero,
+            uniquingIDsWith: { lhs, _ in lhs }
+        )
+        userDataDisplayRevision += 1
+    }
+
+    private func applyingUserDataOverrides(to episodes: [BaseItemDto]) -> [BaseItemDto] {
+        guard let userSession else { return episodes }
+
+        return HomeItemUserDataOverrideStore.applyingOverrides(
+            to: episodes.map(episodeWithKnownRelationships),
+            serverID: userSession.server.id,
+            userID: userSession.user.id
+        )
+    }
+
+    private func episodeWithKnownRelationships(_ episode: BaseItemDto) -> BaseItemDto {
+        var copy = episode
+
+        if copy.seriesID == nil {
+            copy.seriesID = seriesID
+        }
+
+        if copy.seasonID == nil {
+            copy.seasonID = season.id
+        }
+
+        return copy
     }
 }

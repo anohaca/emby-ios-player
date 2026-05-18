@@ -31,6 +31,8 @@ struct ItemView: View {
     @StateObject
     private var viewModel: ItemViewModel
 
+    private let shouldReturnHomeFromEpisodeBack: Bool
+
     private static func typeViewModel(for item: BaseItemDto) -> ItemViewModel {
         switch item.type {
         case .boxSet, .person, .musicArtist:
@@ -49,8 +51,12 @@ struct ItemView: View {
         }
     }
 
-    init(item: BaseItemDto) {
+    init(
+        item: BaseItemDto,
+        shouldReturnHomeFromEpisodeBack: Bool = true
+    ) {
         self._viewModel = StateObject(wrappedValue: Self.typeViewModel(for: item))
+        self.shouldReturnHomeFromEpisodeBack = shouldReturnHomeFromEpisodeBack
     }
 
     @ViewBuilder
@@ -105,11 +111,26 @@ struct ItemView: View {
     }
 
     private var shouldReturnHomeFromBack: Bool {
-        viewModel.item.type == .episode
+        shouldReturnHomeFromEpisodeBack && viewModel.item.type == .episode
+    }
+
+    private var transitionBackgroundColor: Color {
+        let imageType: ImageType = switch viewModel.item.type {
+        case .episode, .musicVideo, .video:
+            .primary
+        default:
+            .backdrop
+        }
+
+        return (viewModel.item.blurHash(for: imageType)?.averageLinearColor ?? Color.secondarySystemFill)
+            .mediaDetailBackgroundColor
     }
 
     var body: some View {
         ZStack {
+            transitionBackgroundColor
+                .ignoresSafeArea()
+
             switch viewModel.state {
             case .content:
                 innerBody
@@ -120,6 +141,7 @@ struct ItemView: View {
                 ProgressView()
             }
         }
+        .background(transitionBackgroundColor.ignoresSafeArea())
         .animation(.linear(duration: 0.1), value: viewModel.state)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(shouldReturnHomeFromBack)

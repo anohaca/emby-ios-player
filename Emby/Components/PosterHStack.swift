@@ -21,6 +21,28 @@ struct PosterHStack<Element: Poster, Data: Collection>: View where Data.Element 
     private var trailingContent: () -> any View
     private var action: (Element, Namespace.ID) -> Void
 
+    @StateObject
+    private var baseItemOverlayState = BaseItemPosterOverlayState()
+
+    private var baseItems: [BaseItemDto] {
+        data.compactMap { $0 as? BaseItemDto }
+    }
+
+    private var baseItemOverlaySignature: Int {
+        var hasher = Hasher()
+
+        for item in baseItems {
+            hasher.combine(item.id)
+            hasher.combine(item.userData?.isFavorite)
+            hasher.combine(item.userData?.isPlayed)
+            hasher.combine(item.userData?.playbackPositionTicks)
+            hasher.combine(item.userData?.playedPercentage)
+            hasher.combine(item.userData?.unplayedItemCount)
+        }
+
+        return hasher.finalize()
+    }
+
     private var layout: CollectionHStackLayout {
         if UIDevice.isPhone {
             .grid(
@@ -56,6 +78,22 @@ struct PosterHStack<Element: Poster, Data: Collection>: View where Data.Element 
         .insets(horizontal: EdgeInsets.edgePadding)
         .itemSpacing(EdgeInsets.edgePadding / 2)
         .scrollBehavior(.continuousLeadingEdge)
+        .posterOverlay(for: BaseItemDto.self) { item in
+            PosterButton<BaseItemDto>.BaseItemOverlay(
+                displayState: baseItemOverlayState,
+                item: item
+            )
+        }
+        .onAppear {
+            refreshBaseItemOverlayState()
+        }
+        .onChange(of: baseItemOverlaySignature) { _ in
+            refreshBaseItemOverlayState()
+        }
+    }
+
+    private func refreshBaseItemOverlayState() {
+        baseItemOverlayState.update(items: baseItems)
     }
 
     var body: some View {

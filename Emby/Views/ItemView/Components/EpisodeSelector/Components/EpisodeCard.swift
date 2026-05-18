@@ -11,6 +11,41 @@ import SwiftUI
 
 extension SeriesEpisodeSelector {
 
+    final class EpisodePlaybackDisplayState: ObservableObject {
+
+        static let `default` = EpisodePlaybackDisplayState()
+
+        @Published
+        private var revision = 0
+
+        private var parentIsPlayed = false
+        private var episodePlayedStates: [String: Bool] = [:]
+
+        func update(parentIsPlayed: Bool, episodes: [BaseItemDto]) {
+            let newEpisodePlayedStates = Dictionary(
+                episodes.compactMap { episode -> (String, Bool)? in
+                    guard let id = episode.id else { return nil }
+                    return (id, episode.userData?.isPlayed == true)
+                },
+                uniquingKeysWith: { _, new in new }
+            )
+
+            guard self.parentIsPlayed != parentIsPlayed || episodePlayedStates != newEpisodePlayedStates else { return }
+
+            self.parentIsPlayed = parentIsPlayed
+            self.episodePlayedStates = newEpisodePlayedStates
+            revision += 1
+        }
+
+        func isPlayed(_ episode: BaseItemDto) -> Bool {
+            if parentIsPlayed {
+                return true
+            }
+
+            return episode.id.flatMap { episodePlayedStates[$0] } ?? episode.userData?.isPlayed == true
+        }
+    }
+
     struct EpisodeCard: View {
 
         @Default(.accentColor)
@@ -24,16 +59,35 @@ extension SeriesEpisodeSelector {
         @Router
         private var router
 
+        @ObservedObject
+        private var playbackDisplayState: EpisodePlaybackDisplayState
+
         let episode: BaseItemDto
+
+        init(
+            episode: BaseItemDto,
+            playbackDisplayState: EpisodePlaybackDisplayState = .default
+        ) {
+            self.episode = episode
+            self.playbackDisplayState = playbackDisplayState
+        }
+
+        private var isPlayedForDisplay: Bool {
+            playbackDisplayState.isPlayed(episode)
+        }
+
+        private var progressLabelForDisplay: String? {
+            isPlayedForDisplay ? nil : episode.progressLabel
+        }
 
         @ViewBuilder
         private var overlayView: some View {
-            if let progressLabel = episode.progressLabel {
+            if let progressLabel = progressLabelForDisplay {
                 LandscapePosterProgressBar(
                     title: progressLabel,
                     progress: (episode.userData?.playedPercentage ?? 0) / 100
                 )
-            } else if episode.userData?.isPlayed ?? false, showPlayed {
+            } else if isPlayedForDisplay, showPlayed {
                 WatchedIndicator(size: 25)
             }
         }
@@ -76,7 +130,13 @@ extension SeriesEpisodeSelector {
                     subHeader: episode.episodeLocator ?? .emptyDash,
                     content: episodeContent
                 ) {
-                    router.route(to: .item(item: episode), in: namespace)
+                    router.route(
+                        to: .item(
+                            item: episode,
+                            shouldReturnHomeFromEpisodeBack: false
+                        ),
+                        in: namespace
+                    )
                 }
             }
         }

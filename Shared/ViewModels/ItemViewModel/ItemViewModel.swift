@@ -110,6 +110,11 @@ class ItemViewModel: ViewModel, Stateful {
         self.item = item
         super.init()
 
+        let overriddenItem = applyingUserDataOverrides(to: item)
+        if overriddenItem != item {
+            self.item = overriddenItem
+        }
+
         Notifications[.itemShouldRefreshMetadata]
             .publisher
             .sink { [weak self] itemID in
@@ -165,9 +170,10 @@ class ItemViewModel: ViewModel, Stateful {
                     guard !Task.isCancelled else { return }
 
                     await MainActor.run {
+                        let fullItem = self.applyingUserDataOverrides(to: results.fullItem)
                         self.backgroundStates.remove(.refresh)
-                        if results.fullItem.id != self.item.id || results.fullItem != self.item {
-                            self.item = results.fullItem
+                        if fullItem.id != self.item.id || fullItem != self.item {
+                            self.item = fullItem
                         }
 
                         if !results.similarItems.elementsEqual(self.similarItems, by: { $0.id == $1.id }) {
@@ -224,7 +230,7 @@ class ItemViewModel: ViewModel, Stateful {
 
                     await MainActor.run {
                         self.backgroundStates.remove(.refresh)
-                        self.item = results.fullItem
+                        self.item = self.applyingUserDataOverrides(to: results.fullItem)
                         self.similarItems = results.similarItems
                         self.specialFeatures = results.specialFeatures
                         self.localTrailers = results.localTrailers
@@ -256,7 +262,7 @@ class ItemViewModel: ViewModel, Stateful {
                 do {
                     await MainActor.run {
                         self.backgroundStates.remove(.refresh)
-                        self.item = newItem
+                        self.item = self.applyingUserDataOverrides(to: newItem)
                     }
                 }
             }
@@ -294,18 +300,34 @@ class ItemViewModel: ViewModel, Stateful {
             toggleIsPlayedTask = Task {
 
                 let beforeIsPlayed = item.userData?.isPlayed ?? false
+                let newIsPlayed = !beforeIsPlayed
 
                 await MainActor.run {
-                    item.userData?.isPlayed?.toggle()
+                    item = HomeItemUserDataOverrideStore.applyingPlayedState(newIsPlayed, to: item)
                 }
 
+                HomeItemUserDataOverrideStore.markPlayed(
+                    item: item,
+                    isPlayed: newIsPlayed,
+                    serverID: userSession.server.id,
+                    userID: userSession.user.id
+                )
+                notifyHomeAndRelatedItemsShouldRefresh()
+
                 do {
-                    try await setIsPlayed(!beforeIsPlayed)
+                    try await setIsPlayed(newIsPlayed)
                 } catch {
                     await MainActor.run {
-                        item.userData?.isPlayed = beforeIsPlayed
+                        item = HomeItemUserDataOverrideStore.applyingPlayedState(beforeIsPlayed, to: item)
                         // emit event that toggle unsuccessful
                     }
+                    HomeItemUserDataOverrideStore.markPlayed(
+                        item: item,
+                        isPlayed: beforeIsPlayed,
+                        serverID: userSession.server.id,
+                        userID: userSession.user.id
+                    )
+                    notifyHomeAndRelatedItemsShouldRefresh()
                 }
             }
             .asAnyCancellable()
@@ -408,12 +430,29 @@ class ItemViewModel: ViewModel, Stateful {
         return response?.items ?? []
     }
 
+    private func applyingUserDataOverrides(to item: BaseItemDto) -> BaseItemDto {
+        guard let userSession else { return item }
+
+        return HomeItemUserDataOverrideStore.applyingOverrides(
+            to: item,
+            serverID: userSession.server.id,
+            userID: userSession.user.id
+        )
+    }
+
     private func setIsPlayed(_ isPlayed: Bool) async throws {
 
         guard let itemID = item.id else { return }
 
         try await userSession.embyClient.setPlayed(isPlayed, itemID: itemID)
-        Notifications[.itemShouldRefreshMetadata].post(itemID)
+        try? await userSession.embyClient.clearPlaybackProgress(itemID: itemID)
+        HomeItemUserDataOverrideStore.markPlayed(
+            item: item,
+            isPlayed: isPlayed,
+            serverID: userSession.server.id,
+            userID: userSession.user.id
+        )
+        notifyHomeAndRelatedItemsShouldRefresh()
     }
 
     private func setIsFavorite(_ isFavorite: Bool) async throws {
@@ -421,6 +460,10 @@ class ItemViewModel: ViewModel, Stateful {
         guard let itemID = item.id else { return }
 
         try await userSession.embyClient.setFavorite(isFavorite, itemID: itemID)
-        Notifications[.itemShouldRefreshMetadata].post(itemID)
+        notifyHomeAndRelatedItemsShouldRefresh()
+    }
+
+    private func notifyHomeAndRelatedItemsShouldRefresh() {
+        HomeRefreshInvalidationStore.markAndPostRelatedMetadataRefresh(for: item, userSession: userSession)
     }
 }

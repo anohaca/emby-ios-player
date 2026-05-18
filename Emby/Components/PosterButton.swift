@@ -11,6 +11,53 @@ import SwiftUI
 
 // TODO: expose `ImageView.image` modifier for image aspect fill/fit
 
+final class BaseItemPosterOverlayState: ObservableObject {
+
+    struct Value: Equatable {
+        let isFavorite: Bool
+        let isPlayed: Bool
+        let playbackPositionTicks: Int
+        let playedPercentage: Double
+        let unplayedItemCount: Int?
+
+        init(userData: UserItemDataDto?) {
+            isFavorite = userData?.isFavorite == true
+            isPlayed = userData?.isPlayed == true
+            playbackPositionTicks = userData?.playbackPositionTicks ?? 0
+            playedPercentage = userData?.playedPercentage ?? 0
+            unplayedItemCount = userData?.unplayedItemCount
+        }
+    }
+
+    @Published
+    private var revision = 0
+
+    private var values: [String: Value] = [:]
+
+    func update(items: [BaseItemDto]) {
+        let newValues = Dictionary(
+            items.compactMap { item -> (String, Value)? in
+                guard let id = item.id else { return nil }
+                return (id, Value(userData: item.userData))
+            },
+            uniquingKeysWith: { _, new in new }
+        )
+
+        guard values != newValues else { return }
+
+        values = newValues
+        revision += 1
+    }
+
+    func value(for item: BaseItemDto) -> Value {
+        if let id = item.id, let value = values[id] {
+            return value
+        }
+
+        return Value(userData: item.userData)
+    }
+}
+
 struct PosterButton<Item: Poster>: View {
 
     @EnvironmentTypeValue<Item>(\.posterOverlayRegistry)
@@ -236,6 +283,58 @@ extension PosterButton {
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
+                }
+            }
+        }
+    }
+
+    struct BaseItemOverlay: View {
+
+        @Default(.accentColor)
+        private var accentColor
+        @Default(.Customization.Indicators.showFavorited)
+        private var showFavorited
+        @Default(.Customization.Indicators.showProgress)
+        private var showProgress
+        @Default(.Customization.Indicators.showUnplayed)
+        private var showUnplayed
+        @Default(.Customization.Indicators.showPlayed)
+        private var showPlayed
+
+        @ObservedObject
+        var displayState: BaseItemPosterOverlayState
+
+        let item: BaseItemDto
+
+        private var userData: BaseItemPosterOverlayState.Value {
+            displayState.value(for: item)
+        }
+
+        var body: some View {
+            ZStack {
+                if item.canBePlayed, !item.isLiveStream, userData.isPlayed {
+                    WatchedIndicator(size: 25)
+                        .isVisible(showPlayed)
+                } else {
+                    if userData.playbackPositionTicks > 0 {
+                        ProgressIndicator(progress: userData.playedPercentage / 100, height: 5)
+                            .isVisible(showProgress)
+                    } else if item.canBePlayed,
+                              !item.isLiveStream,
+                              showUnplayed != .none
+                    {
+                        UnwatchedIndicator(
+                            size: 25,
+                            count:
+                            showUnplayed == .count ? userData.unplayedItemCount : nil
+                        )
+                        .foregroundStyle(accentColor.overlayColor, accentColor)
+                    }
+                }
+
+                if userData.isFavorite {
+                    FavoriteIndicator(size: 25)
+                        .isVisible(showFavorited)
                 }
             }
         }

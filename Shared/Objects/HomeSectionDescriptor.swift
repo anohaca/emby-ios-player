@@ -15,6 +15,11 @@ struct HomeSectionDescriptor: Identifiable, Hashable, Displayable, SystemImageab
     static let recentlyAddedID = "recentlyAdded"
 
     private static let latestInLibraryPrefix = "latestInLibrary:"
+    private static let standardSectionIDs = [
+        continueWatchingID,
+        nextUpID,
+        recentlyAddedID,
+    ]
 
     let id: String
     let displayTitle: String
@@ -35,7 +40,7 @@ struct HomeSectionDescriptor: Identifiable, Hashable, Displayable, SystemImageab
             .init(
                 id: recentlyAddedID,
                 displayTitle: L10n.recentlyAdded.localizedCapitalized,
-                systemImage: "clock.badge.plus"
+                systemImage: "clock.arrow.circlepath"
             ),
         ]
     }
@@ -62,13 +67,30 @@ struct HomeSectionDescriptor: Identifiable, Hashable, Displayable, SystemImageab
         using storedOrder: [String]
     ) -> [HomeSectionDescriptor] {
         let sectionsByID = Dictionary(uniqueKeysWithValues: sections.map { ($0.id, $0) })
+        let normalizedOrder = normalizedStoredOrder(storedOrder, for: sections)
         var seen = Set<String>()
 
-        let orderedSections = storedOrder.compactMap { id -> HomeSectionDescriptor? in
+        let orderedSections = normalizedOrder.compactMap { id -> HomeSectionDescriptor? in
             guard seen.insert(id).inserted else { return nil }
             return sectionsByID[id]
         }
 
         return orderedSections + sections.filter { seen.insert($0.id).inserted }
+    }
+
+    private static func normalizedStoredOrder(
+        _ storedOrder: [String],
+        for sections: [HomeSectionDescriptor]
+    ) -> [String] {
+        let availableIDs = Set(sections.map(\.id))
+        var order = storedOrder.filter { availableIDs.contains($0) }
+        let missingStandardIDs = standardSectionIDs.filter { availableIDs.contains($0) && !order.contains($0) }
+
+        if missingStandardIDs.isNotEmpty {
+            order = standardSectionIDs.filter { availableIDs.contains($0) } + order
+        }
+
+        var seen = Set<String>()
+        return order.filter { seen.insert($0).inserted }
     }
 }

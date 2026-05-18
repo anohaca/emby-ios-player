@@ -150,6 +150,10 @@ struct HomeView: View {
         .onFirstAppear {
             viewModel.send(.refresh)
         }
+        .onAppear {
+            viewModel.send(.applyUserDataOverrides)
+            viewModel.send(.refreshIfPendingInvalidation)
+        }
         .navigationTitle(L10n.home)
         .topBarTrailing {
 
@@ -167,10 +171,12 @@ struct HomeView: View {
         .sinceLastDisappear { interval in
             if interval > 60 ||
                 viewModel.notificationsReceived.contains(.itemMetadataDidChange) ||
+                viewModel.notificationsReceived.contains(.itemShouldRefreshMetadata) ||
                 viewModel.notificationsReceived.contains(.resumeItemRecencyDidChange)
             {
                 viewModel.send(.backgroundRefresh)
                 viewModel.notificationsReceived.remove(.itemMetadataDidChange)
+                viewModel.notificationsReceived.remove(.itemShouldRefreshMetadata)
                 viewModel.notificationsReceived.remove(.resumeItemRecencyDidChange)
             }
         }

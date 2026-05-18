@@ -19,8 +19,10 @@ final class HomeViewModel: ViewModel, Stateful {
     // MARK: Action
 
     enum Action: Equatable {
+        case applyUserDataOverrides
         case backgroundRefresh
         case error(ErrorMessage)
+        case refreshIfPendingInvalidation
         case setIsPlayed(Bool, BaseItemDto)
         case refresh
     }
@@ -56,6 +58,7 @@ final class HomeViewModel: ViewModel, Stateful {
     var notificationsReceived: NotificationSet = .init()
 
     private var backgroundRefreshTask: AnyCancellable?
+    private var notificationRefreshTask: AnyCancellable?
     private var refreshTask: AnyCancellable?
 
     var nextUpViewModel: NextUpLibraryViewModel = .init()
@@ -75,7 +78,24 @@ final class HomeViewModel: ViewModel, Stateful {
                 // the view will cause layout issues since it will redraw while in landscape.
                 // TODO: look for better solution
                 DispatchQueue.main.async {
-                    self?.notificationsReceived.insert(.itemMetadataDidChange)
+                    guard let self else { return }
+                    self.notificationsReceived.insert(.itemMetadataDidChange)
+                    self.markPendingHomeRefresh()
+                    self.applyUserDataOverridesToVisibleItems()
+                    self.scheduleNotificationDrivenRefresh()
+                }
+            }
+            .store(in: &cancellables)
+
+        Notifications[.itemShouldRefreshMetadata]
+            .publisher
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.notificationsReceived.insert(.itemShouldRefreshMetadata)
+                    self.markPendingHomeRefresh()
+                    self.applyUserDataOverridesToVisibleItems()
+                    self.scheduleNotificationDrivenRefresh()
                 }
             }
             .store(in: &cancellables)
@@ -86,11 +106,11 @@ final class HomeViewModel: ViewModel, Stateful {
                 DispatchQueue.main.async {
                     guard let self else { return }
                     self.notificationsReceived.insert(.resumeItemRecencyDidChange)
+                    self.markPendingHomeRefresh()
                     self.reorderResumeItemsFromLocalRecency()
+                    self.applyUserDataOverridesToVisibleItems()
 
-                    if self.state == .content {
-                        self.send(.backgroundRefresh)
-                    }
+                    self.scheduleNotificationDrivenRefresh()
                 }
             }
             .store(in: &cancellables)
@@ -98,6 +118,12 @@ final class HomeViewModel: ViewModel, Stateful {
 
     func respond(to action: Action) -> State {
         switch action {
+        case .applyUserDataOverrides:
+            applyUserDataOverridesToVisibleItems()
+            if state == .content {
+                cacheCurrentHomeState()
+            }
+            return state
         case .backgroundRefresh:
 
             backgroundRefreshTask?.cancel()
@@ -135,6 +161,18 @@ final class HomeViewModel: ViewModel, Stateful {
             return state
         case let .error(error):
             return .error(error)
+        case .refreshIfPendingInvalidation:
+            applyUserDataOverridesToVisibleItems()
+
+            guard hasPendingHomeRefresh() else { return state }
+
+            if state == .content {
+                self.send(.backgroundRefresh)
+            } else {
+                self.send(.refresh)
+            }
+
+            return state
         case let .setIsPlayed(isPlayed, item): ()
             Task {
                 try await setIsPlayed(isPlayed, for: item)
@@ -204,13 +242,57 @@ final class HomeViewModel: ViewModel, Stateful {
         await MainActor.run {
             self.resumeItems.elements = resumeItems
             self.libraries = libraries
+            self.applyUserDataOverridesToVisibleItems()
             self.cacheCurrentHomeState()
+            _ = self.consumePendingHomeRefresh()
         }
     }
 
     private func refreshLibrary(_ viewModel: PagingLibraryViewModel<BaseItemDto>) async throws {
         try await viewModel.refresh()
         viewModel.state = .content
+    }
+
+    private func markPendingHomeRefresh() {
+        guard let userSession else { return }
+        HomeRefreshInvalidationStore.mark(
+            serverID: userSession.server.id,
+            userID: userSession.user.id
+        )
+    }
+
+    private func consumePendingHomeRefresh() -> Bool {
+        guard let userSession else { return false }
+        return HomeRefreshInvalidationStore.consume(
+            serverID: userSession.server.id,
+            userID: userSession.user.id
+        )
+    }
+
+    private func hasPendingHomeRefresh() -> Bool {
+        guard let userSession else { return false }
+        return HomeRefreshInvalidationStore.hasPending(
+            serverID: userSession.server.id,
+            userID: userSession.user.id
+        )
+    }
+
+    private func scheduleNotificationDrivenRefresh() {
+        notificationRefreshTask?.cancel()
+
+        notificationRefreshTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+            } catch {
+                return
+            }
+
+            await MainActor.run {
+                guard let self, self.state == .content, self.hasPendingHomeRefresh() else { return }
+                self.send(.backgroundRefresh)
+            }
+        }
+        .asAnyCancellable()
     }
 
     private func getResumeItems() async throws -> [BaseItemDto] {
@@ -231,6 +313,56 @@ final class HomeViewModel: ViewModel, Stateful {
             serverID: userSession.server.id,
             userID: userSession.user.id
         )
+    }
+
+    private func applyUserDataOverridesToVisibleItems() {
+        guard let userSession else { return }
+
+        let serverID = userSession.server.id
+        let userID = userSession.user.id
+
+        let recentlyAddedItems = HomeItemUserDataOverrideStore.applyingOverrides(
+            to: Array(recentlyAddedViewModel.elements),
+            serverID: serverID,
+            userID: userID
+        )
+        let libraryItems = libraries.map { library in
+            (
+                library,
+                HomeItemUserDataOverrideStore.applyingOverrides(
+                    to: Array(library.elements),
+                    serverID: serverID,
+                    userID: userID
+                )
+            )
+        }
+        let visiblePlayedItemIDs = HomeItemUserDataOverrideStore.playedItemIDs(
+            in: recentlyAddedItems + libraryItems.flatMap { $0.1 },
+            serverID: serverID,
+            userID: userID
+        )
+
+        resumeItems.elements = HomeItemUserDataOverrideStore.filteredResumeItems(
+            resumeItems.elements,
+            serverID: serverID,
+            userID: userID,
+            playedAncestorIDs: visiblePlayedItemIDs
+        )
+
+        nextUpViewModel.elements = Self.identifiedItems(
+            HomeItemUserDataOverrideStore.filteredNextUpItems(
+                Array(nextUpViewModel.elements),
+                serverID: serverID,
+                userID: userID,
+                playedAncestorIDs: visiblePlayedItemIDs
+            )
+        )
+
+        recentlyAddedViewModel.elements = Self.identifiedItems(recentlyAddedItems)
+
+        for (library, items) in libraryItems {
+            library.elements = Self.identifiedItems(items)
+        }
     }
 
     @discardableResult
@@ -371,6 +503,344 @@ private enum HomeViewModelCacheStore {
     }
 }
 
+enum HomeRefreshInvalidationStore {
+
+    private static let keyPrefix = "HomeRefreshInvalidation"
+
+    static func markAndPostRelatedMetadataRefresh(for item: BaseItemDto, userSession: UserSession) {
+        mark(serverID: userSession.server.id, userID: userSession.user.id)
+
+        for id in relatedMetadataIDs(for: item) {
+            Notifications[.itemShouldRefreshMetadata].post(id)
+        }
+    }
+
+    static func mark(serverID: String, userID: String) {
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: key(serverID: serverID, userID: userID))
+    }
+
+    static func consume(serverID: String, userID: String) -> Bool {
+        let key = key(serverID: serverID, userID: userID)
+        guard UserDefaults.standard.object(forKey: key) != nil else { return false }
+        UserDefaults.standard.removeObject(forKey: key)
+        return true
+    }
+
+    static func hasPending(serverID: String, userID: String) -> Bool {
+        UserDefaults.standard.object(forKey: key(serverID: serverID, userID: userID)) != nil
+    }
+
+    private static func key(serverID: String, userID: String) -> String {
+        "\(keyPrefix).\(serverID).\(userID)"
+    }
+
+    private static func relatedMetadataIDs(for item: BaseItemDto) -> Set<String> {
+        Set([
+            item.id,
+            item.parentID,
+            item.seasonID,
+            item.seriesID,
+        ].compactMap { $0 })
+    }
+}
+
+enum HomeItemUserDataOverrideStore {
+
+    private struct Entry: Codable {
+        let itemID: String
+        let isPlayed: Bool
+        let changedAt: TimeInterval
+        let appliesToRelatedItems: Bool?
+
+        var shouldApplyToRelatedItems: Bool {
+            appliesToRelatedItems ?? true
+        }
+    }
+
+    private static let keyPrefix = "HomeItemUserDataOverride"
+    private static let maxAge: TimeInterval = 30 * 24 * 60 * 60
+    private static let parentOnlyMaxAge: TimeInterval = 60
+
+    static func markPlayed(
+        itemID: String,
+        isPlayed: Bool,
+        serverID: String,
+        userID: String,
+        appliesToRelatedItems: Bool = true
+    ) {
+        var entries = load(serverID: serverID, userID: userID)
+        entries[itemID] = Entry(
+            itemID: itemID,
+            isPlayed: isPlayed,
+            changedAt: Date().timeIntervalSince1970,
+            appliesToRelatedItems: appliesToRelatedItems
+        )
+        save(entries, serverID: serverID, userID: userID)
+    }
+
+    static func markPlayed(
+        item: BaseItemDto,
+        isPlayed: Bool,
+        serverID: String,
+        userID: String
+    ) {
+        guard let itemID = item.id else { return }
+
+        var entries = load(serverID: serverID, userID: userID)
+        let changedAt = Date().timeIntervalSince1970
+
+        entries[itemID] = Entry(
+            itemID: itemID,
+            isPlayed: isPlayed,
+            changedAt: changedAt,
+            appliesToRelatedItems: true
+        )
+
+        for ancestorID in watchedAncestorIDsAffectedByChildPlayback(for: item) {
+            if isPlayed {
+                if entries[ancestorID]?.shouldApplyToRelatedItems == false {
+                    entries.removeValue(forKey: ancestorID)
+                }
+            } else {
+                entries[ancestorID] = Entry(
+                    itemID: ancestorID,
+                    isPlayed: false,
+                    changedAt: changedAt,
+                    appliesToRelatedItems: false
+                )
+            }
+        }
+
+        save(entries, serverID: serverID, userID: userID)
+    }
+
+    static func clear(itemID: String?, serverID: String, userID: String) {
+        guard let itemID else { return }
+
+        var entries = load(serverID: serverID, userID: userID)
+        entries.removeValue(forKey: itemID)
+        save(entries, serverID: serverID, userID: userID)
+    }
+
+    static func clearRelatedItems(for item: BaseItemDto, serverID: String, userID: String) {
+        var entries = load(serverID: serverID, userID: userID)
+
+        for id in relatedIDs(for: item) {
+            entries.removeValue(forKey: id)
+        }
+
+        save(entries, serverID: serverID, userID: userID)
+    }
+
+    static func filteredResumeItems(
+        _ items: [BaseItemDto],
+        serverID: String,
+        userID: String,
+        playedAncestorIDs: Set<String> = []
+    ) -> [BaseItemDto] {
+        let entries = load(serverID: serverID, userID: userID)
+
+        return items
+            .filter { item in
+                entry(for: item, in: entries)?.isPlayed != true && !hasPlayedAncestor(item, in: playedAncestorIDs)
+            }
+            .map { applying(entries: entries, to: $0) }
+    }
+
+    static func filteredNextUpItems(
+        _ items: [BaseItemDto],
+        serverID: String,
+        userID: String,
+        playedAncestorIDs: Set<String> = []
+    ) -> [BaseItemDto] {
+        let entries = load(serverID: serverID, userID: userID)
+
+        return items
+            .filter { item in
+                entry(for: item, in: entries)?.isPlayed != true && !hasPlayedAncestor(item, in: playedAncestorIDs)
+            }
+            .map { applying(entries: entries, to: $0) }
+    }
+
+    static func applyingOverrides(
+        to items: [BaseItemDto],
+        serverID: String,
+        userID: String
+    ) -> [BaseItemDto] {
+        let entries = load(serverID: serverID, userID: userID)
+        return items.map { applying(entries: entries, to: $0) }
+    }
+
+    static func applyingOverrides(
+        to item: BaseItemDto,
+        serverID: String,
+        userID: String
+    ) -> BaseItemDto {
+        let entries = load(serverID: serverID, userID: userID)
+        return applying(entries: entries, to: item)
+    }
+
+    static func applyingItemOnlyOverride(
+        to item: BaseItemDto,
+        serverID: String,
+        userID: String
+    ) -> BaseItemDto {
+        let entries = load(serverID: serverID, userID: userID)
+        guard let itemID = item.id, let entry = entries[itemID] else { return item }
+        return applyingPlayedState(entry.isPlayed, to: item)
+    }
+
+    static func applyingItemOnlyOverrides(
+        to items: [BaseItemDto],
+        serverID: String,
+        userID: String
+    ) -> [BaseItemDto] {
+        let entries = load(serverID: serverID, userID: userID)
+        return items.map { item in
+            guard let itemID = item.id, let entry = entries[itemID] else { return item }
+            return applyingPlayedState(entry.isPlayed, to: item)
+        }
+    }
+
+    static func latestChangedItemID(
+        in itemIDs: [String],
+        serverID: String,
+        userID: String
+    ) -> String? {
+        let entries = load(serverID: serverID, userID: userID)
+        let itemIDSet = Set(itemIDs)
+
+        return entries.values
+            .filter { itemIDSet.contains($0.itemID) }
+            .max { $0.changedAt < $1.changedAt }?
+            .itemID
+    }
+
+    static func playedItemIDs(
+        in items: [BaseItemDto],
+        serverID: String,
+        userID: String
+    ) -> Set<String> {
+        let entries = load(serverID: serverID, userID: userID)
+
+        return Set(
+            items.compactMap { item in
+                guard applying(entries: entries, to: item).userData?.isPlayed == true else { return nil }
+                return item.id
+            }
+        )
+    }
+
+    static func applyingPlayedState(_ isPlayed: Bool, to item: BaseItemDto) -> BaseItemDto {
+        var copy = item
+        var userData = copy.userData ?? UserItemDataDto()
+
+        userData.isPlayed = isPlayed
+        userData.playbackPositionTicks = 0
+        userData.playedPercentage = isPlayed ? 100 : 0
+        userData.lastPlayedDate = isPlayed ? Date() : nil
+
+        if isPlayed {
+            userData.playCount = max(userData.playCount ?? 0, 1)
+        } else {
+            userData.playCount = 0
+        }
+
+        copy.userData = userData
+        return copy
+    }
+
+    private static func applying(entries: [String: Entry], to item: BaseItemDto) -> BaseItemDto {
+        guard let entry = entry(for: item, in: entries) else { return item }
+        return applyingPlayedState(entry.isPlayed, to: item)
+    }
+
+    private static func entry(for item: BaseItemDto, in entries: [String: Entry]) -> Entry? {
+        let itemID = item.id
+
+        return relatedIDs(for: item)
+            .compactMap { id -> Entry? in
+                guard let entry = entries[id] else { return nil }
+                guard id == itemID || entry.shouldApplyToRelatedItems else { return nil }
+                return entry
+            }
+            .max { $0.changedAt < $1.changedAt }
+    }
+
+    private static func hasPlayedAncestor(_ item: BaseItemDto, in playedAncestorIDs: Set<String>) -> Bool {
+        relatedIDs(for: item).contains { playedAncestorIDs.contains($0) }
+    }
+
+    private static func relatedIDs(for item: BaseItemDto) -> [String] {
+        [
+            item.id,
+            item.parentID,
+            item.seasonID,
+            item.seriesID,
+        ].compactMap { $0 }
+    }
+
+    private static func watchedAncestorIDsAffectedByChildPlayback(for item: BaseItemDto) -> [String] {
+        switch item.type {
+        case .episode:
+            return uniqueIDs([
+                item.seasonID,
+                item.parentID,
+                item.seriesID,
+            ], excluding: item.id)
+        case .season:
+            return uniqueIDs([
+                item.seriesID,
+                item.parentID,
+            ], excluding: item.id)
+        default:
+            return []
+        }
+    }
+
+    private static func uniqueIDs(_ ids: [String?], excluding excludedID: String?) -> [String] {
+        var seen = Set<String>()
+
+        return ids.compactMap { id in
+            guard let id, id.isNotEmpty, id != excludedID, seen.insert(id).inserted else { return nil }
+            return id
+        }
+    }
+
+    private static func load(serverID: String, userID: String) -> [String: Entry] {
+        let storageKey = key(serverID: serverID, userID: userID)
+        let now = Date().timeIntervalSince1970
+        let data = UserDefaults.standard.data(forKey: storageKey)
+        var entries = data
+            .flatMap { try? JSONDecoder().decode([String: Entry].self, from: $0) } ?? [:]
+
+        entries = entries.filter { _, entry in
+            let maxEntryAge = entry.shouldApplyToRelatedItems ? maxAge : parentOnlyMaxAge
+            return now - entry.changedAt <= maxEntryAge
+        }
+        save(entries, serverID: serverID, userID: userID)
+
+        return entries
+    }
+
+    private static func save(_ entries: [String: Entry], serverID: String, userID: String) {
+        let storageKey = key(serverID: serverID, userID: userID)
+
+        guard entries.isNotEmpty else {
+            UserDefaults.standard.removeObject(forKey: storageKey)
+            return
+        }
+
+        if let data = try? JSONEncoder().encode(entries) {
+            UserDefaults.standard.set(data, forKey: storageKey)
+        }
+    }
+
+    private static func key(serverID: String, userID: String) -> String {
+        "\(keyPrefix).\(serverID).\(userID)"
+    }
+}
+
 enum ResumeItemRecencyStore {
 
     private static let maxEntries = 300
@@ -481,5 +951,13 @@ extension HomeViewModel {
     private func setIsPlayed(_ isPlayed: Bool, for item: BaseItemDto) async throws {
         guard let itemID = item.id else { return }
         try await userSession.embyClient.setPlayed(isPlayed, itemID: itemID)
+        try? await userSession.embyClient.clearPlaybackProgress(itemID: itemID)
+        HomeItemUserDataOverrideStore.markPlayed(
+            item: item,
+            isPlayed: isPlayed,
+            serverID: userSession.server.id,
+            userID: userSession.user.id
+        )
+        HomeRefreshInvalidationStore.markAndPostRelatedMetadataRefresh(for: item, userSession: userSession)
     }
 }

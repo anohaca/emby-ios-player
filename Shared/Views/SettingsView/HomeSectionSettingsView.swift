@@ -21,9 +21,21 @@ struct HomeSectionSettingsView: View {
 
     @StateObject
     private var viewModel = HomeViewModel()
+    @State
+    private var editMode: EditMode = .active
 
     @Injected(\.currentUserSession)
     private var userSession
+
+    private struct SectionRow: Identifiable {
+
+        let section: HomeSectionDescriptor
+        let isHidden: Bool
+
+        var id: String {
+            "\(isHidden ? "disabled" : "enabled"):\(section.id)"
+        }
+    }
 
     private var sections: [HomeSectionDescriptor] {
         let dynamicSections: [HomeSectionDescriptor] = viewModel.libraries.compactMap { libraryViewModel in
@@ -49,6 +61,14 @@ struct HomeSectionSettingsView: View {
         sections.filter(isHidden)
     }
 
+    private var enabledRows: [SectionRow] {
+        enabledSections.map { SectionRow(section: $0, isHidden: false) }
+    }
+
+    private var disabledRows: [SectionRow] {
+        disabledSections.map { SectionRow(section: $0, isHidden: true) }
+    }
+
     private func isHidden(_ section: HomeSectionDescriptor) -> Bool {
         if section.id == HomeSectionDescriptor.recentlyAddedID, !showRecentlyAdded {
             return true
@@ -58,6 +78,7 @@ struct HomeSectionSettingsView: View {
     }
 
     private func setHidden(_ hidden: Bool, for section: HomeSectionDescriptor) {
+        let currentOrderIDs = sections.map(\.id)
         var hiddenIDs = hiddenSectionIDs
 
         if hidden {
@@ -72,9 +93,7 @@ struct HomeSectionSettingsView: View {
             showRecentlyAdded = !hidden
         }
 
-        if !sectionOrder.contains(section.id) {
-            sectionOrder.append(section.id)
-        }
+        sectionOrder = uniqueIDs(currentOrderIDs)
     }
 
     private func moveEnabledSections(fromOffsets source: IndexSet, toOffset destination: Int) {
@@ -115,8 +134,8 @@ struct HomeSectionSettingsView: View {
                     Text(L10n.none)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(enabledSections) { section in
-                        row(for: section, isHidden: false)
+                    ForEach(enabledRows) { rowData in
+                        row(for: rowData.section, isHidden: rowData.isHidden)
                     }
                     .onMove(perform: moveEnabledSections)
                 }
@@ -127,16 +146,19 @@ struct HomeSectionSettingsView: View {
                     Text(L10n.none)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(disabledSections) { section in
-                        row(for: section, isHidden: true)
+                    ForEach(disabledRows) { rowData in
+                        row(for: rowData.section, isHidden: rowData.isHidden)
                     }
                 }
             }
         }
         .animation(.linear(duration: 0.2), value: sectionOrder)
         .animation(.linear(duration: 0.2), value: hiddenSectionIDs)
-        .environment(\.editMode, .constant(.active))
+        .environment(\.editMode, $editMode)
         .navigationTitle("首页类别")
+        .onAppear {
+            editMode = .active
+        }
         .onFirstAppear {
             guard userSession != nil else { return }
             viewModel.send(.refresh)

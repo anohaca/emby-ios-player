@@ -33,6 +33,10 @@ struct SeriesEpisodeSelector: View {
         focusItem ?? viewModel.playButtonItem
     }
 
+    private var selectedSeasonInheritsPlayedState: Bool {
+        viewModel.item.userData?.isPlayed == true
+    }
+
     @ViewBuilder
     private var seasonSelectorMenu: some View {
         if let seasonDisplayName = selectionViewModel?.season.displayTitle,
@@ -72,7 +76,11 @@ struct SeriesEpisodeSelector: View {
 
             Group {
                 if let selectionViewModel {
-                    EpisodeHStack(viewModel: selectionViewModel, playButtonItem: scrollTargetItem)
+                    EpisodeHStack(
+                        viewModel: selectionViewModel,
+                        playButtonItem: scrollTargetItem,
+                        inheritsPlayedState: selectedSeasonInheritsPlayedState
+                    )
                 } else {
                     LoadingHStack()
                 }

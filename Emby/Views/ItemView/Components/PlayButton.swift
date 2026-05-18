@@ -36,7 +36,11 @@ extension ItemView {
         private var title: String {
             /// Use the Season/Episode label for the Series ItemView
             if let seriesViewModel = viewModel as? SeriesItemViewModel,
-               let seasonEpisodeLabel = seriesViewModel.playButtonItem?.seasonEpisodeLabel
+               seriesViewModel.item.userData?.isPlayed == true
+            {
+                L10n.played
+            } else if let seriesViewModel = viewModel as? SeriesItemViewModel,
+                      let seasonEpisodeLabel = seriesViewModel.playButtonItem?.seasonEpisodeLabel
             {
                 seasonEpisodeLabel
 
@@ -112,6 +116,28 @@ extension ItemView {
                 return
             }
 
+            let playbackMediaSource = mediaSourceForPlayback(
+                item: playButtonItem,
+                selectedMediaSource: selectedMediaSource
+            )
+            let shouldKeepSelectedTracks = playbackMediaSource.map {
+                mediaSource($0, matches: selectedMediaSource)
+            } ?? false
+            let selectedAudioStreamIndex = shouldKeepSelectedTracks ? viewModel.selectedAudioStreamIndex : nil
+            let selectedSubtitleStreamIndex = shouldKeepSelectedTracks ? viewModel.selectedSubtitleStreamIndex : nil
+
+            #if DEBUG
+            NSLog(
+                "EmbyPlayButton target=%@ title=%@ source=%@ selectedSource=%@ audio=%d subtitle=%d",
+                playButtonItem.id ?? "<nil>",
+                playButtonItem.seasonEpisodeLabel ?? playButtonItem.displayTitle,
+                playbackMediaSource?.id ?? "<auto>",
+                selectedMediaSource.id ?? "<nil>",
+                selectedAudioStreamIndex ?? -999,
+                selectedSubtitleStreamIndex ?? -999
+            )
+            #endif
+
             let queue: (any MediaPlayerQueue)? = {
                 if playButtonItem.type == .episode {
                     return EpisodeMediaPlayerQueue(episode: playButtonItem)
@@ -122,9 +148,9 @@ extension ItemView {
             let provider = MediaPlayerItemProvider(item: playButtonItem) { item in
                 try await MediaPlayerItem.build(
                     for: item,
-                    mediaSource: selectedMediaSource,
-                    selectedAudioStreamIndex: viewModel.selectedAudioStreamIndex,
-                    selectedSubtitleStreamIndex: viewModel.selectedSubtitleStreamIndex
+                    mediaSource: playbackMediaSource,
+                    selectedAudioStreamIndex: selectedAudioStreamIndex,
+                    selectedSubtitleStreamIndex: selectedSubtitleStreamIndex
                 ) {
                     if fromBeginning {
                         $0.userData?.playbackPositionTicks = 0
@@ -138,6 +164,34 @@ extension ItemView {
                     queue: queue
                 )
             )
+        }
+
+        private func mediaSourceForPlayback(
+            item: BaseItemDto,
+            selectedMediaSource: MediaSourceInfo
+        ) -> MediaSourceInfo? {
+            guard let itemMediaSources = item.mediaSources, itemMediaSources.isNotEmpty else {
+                return item.type == .episode ? nil : selectedMediaSource
+            }
+
+            return itemMediaSources.first { mediaSource($0, matches: selectedMediaSource) }
+                ?? itemMediaSources.first
+        }
+
+        private func mediaSource(_ lhs: MediaSourceInfo, matches rhs: MediaSourceInfo) -> Bool {
+            if let lhsID = lhs.id, lhsID.isNotEmpty, lhsID == rhs.id {
+                return true
+            }
+
+            if let lhsETag = lhs.eTag, lhsETag.isNotEmpty, lhsETag == rhs.eTag {
+                return true
+            }
+
+            if let lhsPath = lhs.path, lhsPath.isNotEmpty, lhsPath == rhs.path {
+                return true
+            }
+
+            return false
         }
     }
 }

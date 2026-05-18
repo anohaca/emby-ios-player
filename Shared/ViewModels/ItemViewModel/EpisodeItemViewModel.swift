@@ -77,7 +77,11 @@ final class EpisodeItemViewModel: ItemViewModel {
 
         guard let seriesItem = response.items?.first else { throw ErrorMessage("Expected series item missing") }
 
-        return seriesItem
+        return HomeItemUserDataOverrideStore.applyingOverrides(
+            to: seriesItem,
+            serverID: userSession.server.id,
+            userID: userSession.user.id
+        )
     }
 
     @MainActor

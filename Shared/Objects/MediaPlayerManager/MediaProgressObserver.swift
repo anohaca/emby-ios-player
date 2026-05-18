@@ -174,6 +174,7 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
                 if let itemID {
                     Notifications[.resumeItemRecencyDidChange].post(itemID)
                 }
+                self.notifyRelatedMetadataShouldRefresh(for: item)
             }
         }
     }
@@ -234,6 +235,12 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
     }
 
     private func recordResumeRecency(for item: MediaPlayerItem, notifyHome: Bool = false) {
+        HomeItemUserDataOverrideStore.clearRelatedItems(
+            for: item.baseItem,
+            serverID: userSession.server.id,
+            userID: userSession.user.id
+        )
+
         ResumeItemRecencyStore.markPlayback(
             itemID: item.baseItem.id,
             serverID: userSession.server.id,
@@ -243,5 +250,10 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
         if notifyHome, let itemID = item.baseItem.id {
             Notifications[.resumeItemRecencyDidChange].post(itemID)
         }
+    }
+
+    @MainActor
+    private func notifyRelatedMetadataShouldRefresh(for item: MediaPlayerItem) {
+        HomeRefreshInvalidationStore.markAndPostRelatedMetadataRefresh(for: item.baseItem, userSession: userSession)
     }
 }

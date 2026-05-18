@@ -78,10 +78,14 @@ struct NavigationRoute: Identifiable, Hashable {
     var destination: some View {
         if case let .push(style) = transitionStyle {
             content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(EmbyAppBackgroundView())
                 .backport
                 .navigationTransition(style)
         } else {
             content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(EmbyAppBackgroundView())
         }
     }
 }

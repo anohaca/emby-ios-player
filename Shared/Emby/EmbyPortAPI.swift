@@ -1009,6 +1009,15 @@ final class EmbyPortSessionClient: @unchecked Sendable {
         )
     }
 
+    func clearPlaybackProgress(itemID: String) async throws {
+        try await reportPlaybackStopped(
+            itemID: itemID,
+            mediaSourceID: nil,
+            playSessionID: nil,
+            positionTicks: 0
+        )
+    }
+
     func setFavorite(_ isFavorite: Bool, itemID: String) async throws {
         try await sendEmpty(
             path: "/Users/\(configuration.userID)/FavoriteItems/\(itemID)",

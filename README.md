@@ -1,5 +1,7 @@
 # Emby iOS Player
 
+[简体中文](README.zh-CN.md)
+
 An unofficial Emby-compatible iOS/tvOS client focused on a native SwiftUI
 interface and a libmpv-backed playback experience.
 

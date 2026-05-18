@@ -1,6 +1,6 @@
 # Notices
 
-This project is an unofficial Emby-compatible iOS/tvOS client. It is not
+This project is an unofficial Emby-compatible iOS client. It is not
 affiliated with, sponsored by, or endorsed by Emby, Jellyfin, Swiftfin, or their
 respective owners.
 

@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-一个非官方的 Emby 兼容 iOS/tvOS 客户端，重点是原生 SwiftUI 界面和基于 libmpv 的播放体验。
+一个非官方的 Emby 兼容 iOS 客户端，重点是原生 SwiftUI 界面和基于 libmpv 的播放体验。
 
 本项目是基于 Swiftfin UI 与导航代码进行的社区移植版本，服务端接口边界已适配 Emby API，iOS 播放路径接入本地 libmpv。项目不隶属于 Emby、Jellyfin 或 Swiftfin，也未获得它们的官方背书。
 

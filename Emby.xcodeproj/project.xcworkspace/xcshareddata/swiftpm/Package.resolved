@@ -245,15 +245,6 @@
       }
     },
     {
-      "identity" : "tvospicker",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/ViacomInc/TVOSPicker",
-      "state" : {
-        "revision" : "90806460f3b3e7564344647241c157aeb0b27a71",
-        "version" : "0.3.0"
-      }
-    },
-    {
       "identity" : "udpbroadcastconnection",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/gunterhager/UDPBroadcastConnection",

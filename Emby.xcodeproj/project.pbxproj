@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		53ABFDDC267972BF00886593 /* TVServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 53ABFDDB267972BF00886593 /* TVServices.framework */; };
 		62666DFD27E5014F00EC0ECD /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5362E4AE267D40B5000E2F71 /* AudioToolbox.framework */; };
 		62666DFE27E5015700EC0ECD /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5362E4AA267D40AD000E2F71 /* AVFoundation.framework */; };
 		62666DFF27E5016400EC0ECD /* CFNetwork.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5362E4B0267D40B9000E2F71 /* CFNetwork.framework */; };
@@ -21,24 +20,9 @@
 		62666E0E27E501AF00EC0ECD /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5362E4C4267D40F0000E2F71 /* Security.framework */; };
 		62666E1027E501B400EC0ECD /* VideoToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 62666E0F27E501B400EC0ECD /* VideoToolbox.framework */; };
 		62666E1127E501B900EC0ECD /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5362E4C8267D40F7000E2F71 /* UIKit.framework */; };
-		62666E1327E501C300EC0ECD /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 62666E1227E501C300EC0ECD /* AudioToolbox.framework */; };
-		62666E1527E501C800EC0ECD /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 62666E1427E501C800EC0ECD /* AVFoundation.framework */; };
-		62666E1727E501CC00EC0ECD /* CFNetwork.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 62666E1627E501CC00EC0ECD /* CFNetwork.framework */; };
-		62666E1927E501D000EC0ECD /* CoreFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 62666E1827E501D000EC0ECD /* CoreFoundation.framework */; };
-		62666E1B27E501D400EC0ECD /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 62666E1A27E501D400EC0ECD /* CoreGraphics.framework */; };
-		62666E1D27E501DB00EC0ECD /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 62666E1C27E501DB00EC0ECD /* CoreMedia.framework */; };
-		62666E1F27E501DF00EC0ECD /* CoreText.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 62666E1E27E501DF00EC0ECD /* CoreText.framework */; };
-		62666E2127E501E400EC0ECD /* CoreVideo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 62666E2027E501E400EC0ECD /* CoreVideo.framework */; };
-		62666E2327E501EB00EC0ECD /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 62666E2227E501EB00EC0ECD /* Foundation.framework */; };
 		62666E2427E501F300EC0ECD /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5362E4BC267D40D8000E2F71 /* Foundation.framework */; };
-		62666E2A27E5020A00EC0ECD /* OpenGLES.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 62666E2927E5020A00EC0ECD /* OpenGLES.framework */; };
-		62666E2C27E5021000EC0ECD /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 62666E2B27E5021000EC0ECD /* QuartzCore.framework */; };
-		62666E2E27E5021400EC0ECD /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 62666E2D27E5021400EC0ECD /* Security.framework */; };
-		62666E3027E5021800EC0ECD /* VideoToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 62666E2F27E5021800EC0ECD /* VideoToolbox.framework */; };
-		62666E3227E5021E00EC0ECD /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 62666E3127E5021E00EC0ECD /* UIKit.framework */; };
 		62666E3E27E503FA00EC0ECD /* MediaAccessibility.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5362E4BE267D40E4000E2F71 /* MediaAccessibility.framework */; };
 		62666E3F27E5040300EC0ECD /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5362E4C6267D40F4000E2F71 /* SystemConfiguration.framework */; };
-		BD88CB422D77E6A0006BB5E3 /* TVOSPicker in Frameworks */ = {isa = PBXBuildFile; productRef = BD88CB412D77E6A0006BB5E3 /* TVOSPicker */; };
 		E1002B682793CFBA00E47059 /* Algorithms in Frameworks */ = {isa = PBXBuildFile; productRef = E1002B672793CFBA00E47059 /* Algorithms */; };
 		E1002B6B2793E36600E47059 /* Algorithms in Frameworks */ = {isa = PBXBuildFile; productRef = E1002B6A2793E36600E47059 /* Algorithms */; };
 		E10706102942F57D00646DAF /* Pulse in Frameworks */ = {isa = PBXBuildFile; productRef = E107060F2942F57D00646DAF /* Pulse */; };
@@ -113,7 +97,6 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		535870602669D21600D05A09 /* Emby tvOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Emby tvOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		5362E4A7267D4067000E2F71 /* GoogleCast.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GoogleCast.framework; path = "../../Downloads/GoogleCastSDK-ios-4.6.0_dynamic/GoogleCast.framework"; sourceTree = "<group>"; };
 		5362E4AA267D40AD000E2F71 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		5362E4AC267D40B1000E2F71 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
@@ -132,7 +115,6 @@
 		5362E4C6267D40F4000E2F71 /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
 		5362E4C8267D40F7000E2F71 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		5377CBF1263B596A003A4E83 /* Emby iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Emby iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		53ABFDDB267972BF00886593 /* TVServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = TVServices.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS15.0.sdk/System/Library/Frameworks/TVServices.framework; sourceTree = DEVELOPER_DIR; };
 		62666E0027E5016900EC0ECD /* CoreFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreFoundation.framework; path = System/Library/Frameworks/CoreFoundation.framework; sourceTree = SDKROOT; };
 		62666E0527E5017A00EC0ECD /* CoreVideo.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreVideo.framework; path = System/Library/Frameworks/CoreVideo.framework; sourceTree = SDKROOT; };
 		62666E0727E5018D00EC0ECD /* libbz2.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libbz2.tbd; path = usr/lib/libbz2.tbd; sourceTree = SDKROOT; };
@@ -141,24 +123,6 @@
 		62666E0A27E501A100EC0ECD /* libxml2.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libxml2.tbd; path = usr/lib/libxml2.tbd; sourceTree = SDKROOT; };
 		62666E0B27E501A500EC0ECD /* OpenGLES.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGLES.framework; path = System/Library/Frameworks/OpenGLES.framework; sourceTree = SDKROOT; };
 		62666E0F27E501B400EC0ECD /* VideoToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = VideoToolbox.framework; path = System/Library/Frameworks/VideoToolbox.framework; sourceTree = SDKROOT; };
-		62666E1227E501C300EC0ECD /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS15.4.sdk/System/Library/Frameworks/AudioToolbox.framework; sourceTree = DEVELOPER_DIR; };
-		62666E1427E501C800EC0ECD /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS15.4.sdk/System/Library/Frameworks/AVFoundation.framework; sourceTree = DEVELOPER_DIR; };
-		62666E1627E501CC00EC0ECD /* CFNetwork.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CFNetwork.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS15.4.sdk/System/Library/Frameworks/CFNetwork.framework; sourceTree = DEVELOPER_DIR; };
-		62666E1827E501D000EC0ECD /* CoreFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreFoundation.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS15.4.sdk/System/Library/Frameworks/CoreFoundation.framework; sourceTree = DEVELOPER_DIR; };
-		62666E1A27E501D400EC0ECD /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS15.4.sdk/System/Library/Frameworks/CoreGraphics.framework; sourceTree = DEVELOPER_DIR; };
-		62666E1C27E501DB00EC0ECD /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS15.4.sdk/System/Library/Frameworks/CoreMedia.framework; sourceTree = DEVELOPER_DIR; };
-		62666E1E27E501DF00EC0ECD /* CoreText.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreText.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS15.4.sdk/System/Library/Frameworks/CoreText.framework; sourceTree = DEVELOPER_DIR; };
-		62666E2027E501E400EC0ECD /* CoreVideo.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreVideo.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS15.4.sdk/System/Library/Frameworks/CoreVideo.framework; sourceTree = DEVELOPER_DIR; };
-		62666E2227E501EB00EC0ECD /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS15.4.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
-		62666E2527E501FA00EC0ECD /* libbz2.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libbz2.tbd; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS15.4.sdk/usr/lib/libbz2.tbd; sourceTree = DEVELOPER_DIR; };
-		62666E2627E501FE00EC0ECD /* libc++.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = "libc++.tbd"; path = "Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS15.4.sdk/usr/lib/libc++.tbd"; sourceTree = DEVELOPER_DIR; };
-		62666E2727E5020200EC0ECD /* libiconv.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libiconv.tbd; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS15.4.sdk/usr/lib/libiconv.tbd; sourceTree = DEVELOPER_DIR; };
-		62666E2827E5020600EC0ECD /* libxml2.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libxml2.tbd; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS15.4.sdk/usr/lib/libxml2.tbd; sourceTree = DEVELOPER_DIR; };
-		62666E2927E5020A00EC0ECD /* OpenGLES.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGLES.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS15.4.sdk/System/Library/Frameworks/OpenGLES.framework; sourceTree = DEVELOPER_DIR; };
-		62666E2B27E5021000EC0ECD /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS15.4.sdk/System/Library/Frameworks/QuartzCore.framework; sourceTree = DEVELOPER_DIR; };
-		62666E2D27E5021400EC0ECD /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS15.4.sdk/System/Library/Frameworks/Security.framework; sourceTree = DEVELOPER_DIR; };
-		62666E2F27E5021800EC0ECD /* VideoToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = VideoToolbox.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS15.4.sdk/System/Library/Frameworks/VideoToolbox.framework; sourceTree = DEVELOPER_DIR; };
-		62666E3127E5021E00EC0ECD /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS15.4.sdk/System/Library/Frameworks/UIKit.framework; sourceTree = DEVELOPER_DIR; };
 		62666E3A27E503E400EC0ECD /* GoogleCastSDK.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = GoogleCastSDK.xcframework; path = Frameworks/GoogleCastSDK.xcframework; sourceTree = "<group>"; };
 		628B95212670CABD0091AF3B /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		628B95232670CABD0091AF3B /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
@@ -174,107 +138,17 @@
 			);
 			target = 5377CBF0263B596A003A4E83 /* Emby iOS */;
 		};
-		E14561A32DFCAE51008FF700 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Resources/Assets.xcassets,
-			);
-			target = 5358705F2669D21600D05A09 /* Emby tvOS */;
-		};
-		E14565D92DFCAE6E008FF700 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Extensions/EmbyAPI/TaskTriggerInfoType.swift,
-				Objects/ItemArrayElements.swift,
-				ViewModels/AdminDashboard/ActiveSessionsViewModel.swift,
-				ViewModels/AdminDashboard/AddServerUserViewModel.swift,
-				ViewModels/AdminDashboard/APIKeysViewModel.swift,
-				ViewModels/AdminDashboard/DevicesViewModel.swift,
-				ViewModels/AdminDashboard/ServerActivityDetailViewModel.swift,
-				ViewModels/AdminDashboard/ServerActivityViewModel.swift,
-				ViewModels/AdminDashboard/ServerLogs/ServerLogsViewModel.swift,
-				ViewModels/AdminDashboard/ServerTaskObserver.swift,
-				ViewModels/AdminDashboard/ServerTasksViewModel.swift,
-				ViewModels/AdminDashboard/ServerUserAdminViewModel.swift,
-				ViewModels/AdminDashboard/ServerUsersViewModel.swift,
-				ViewModels/DownloadListViewModel.swift,
-				ViewModels/ItemAdministration/IdentifyItemViewModel.swift,
-				ViewModels/ItemAdministration/ItemEditorViewModel/GenreEditorViewModel.swift,
-				ViewModels/ItemAdministration/ItemEditorViewModel/PeopleEditorViewModel.swift,
-				ViewModels/ItemAdministration/ItemEditorViewModel/StudioEditorViewModel.swift,
-				ViewModels/ItemAdministration/ItemEditorViewModel/TagEditorViewModel.swift,
-				ViewModels/ItemAdministration/ItemImagesViewModel.swift,
-				ViewModels/ItemAdministration/RemoteImageInfoViewModel.swift,
-				ViewModels/ServerCheckViewModel.swift,
-			);
-			target = 5358705F2669D21600D05A09 /* Emby tvOS */;
-		};
-		E14567272DFCAEFD008FF700 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Resources/Info.plist,
-			);
-			target = 5358705F2669D21600D05A09 /* Emby tvOS */;
-		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		E14560852DFCAE51008FF700 /* Emby */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (E14561A22DFCAE51008FF700 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, E14561A32DFCAE51008FF700 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = Emby; sourceTree = "<group>"; };
-		E14563272DFCAE6E008FF700 /* Shared */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (E14565D92DFCAE6E008FF700 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = Shared; sourceTree = "<group>"; };
+		E14560852DFCAE51008FF700 /* Emby */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (E14561A22DFCAE51008FF700 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = Emby; sourceTree = "<group>"; };
+		E14563272DFCAE6E008FF700 /* Shared */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Shared; sourceTree = "<group>"; };
 		E14565DD2DFCAE78008FF700 /* Scripts */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Scripts; sourceTree = "<group>"; };
-		E145669F2DFCAEFD008FF700 /* Emby tvOS */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (E14567272DFCAEFD008FF700 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = "Emby tvOS"; sourceTree = "<group>"; };
 		E1456FC82DFCB323008FF700 /* Translations */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Translations; sourceTree = "<group>"; };
 		E150B7D12DFF2E7C00DC7CF4 /* XcodeConfig */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = XcodeConfig; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		5358705D2669D21600D05A09 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				62666E1727E501CC00EC0ECD /* CFNetwork.framework in Frameworks */,
-				62666E3227E5021E00EC0ECD /* UIKit.framework in Frameworks */,
-				62666E2A27E5020A00EC0ECD /* OpenGLES.framework in Frameworks */,
-				E1002B6B2793E36600E47059 /* Algorithms in Frameworks */,
-				62666E1D27E501DB00EC0ECD /* CoreMedia.framework in Frameworks */,
-				62666E3027E5021800EC0ECD /* VideoToolbox.framework in Frameworks */,
-				BD88CB422D77E6A0006BB5E3 /* TVOSPicker in Frameworks */,
-				62666E2327E501EB00EC0ECD /* Foundation.framework in Frameworks */,
-				62666E2127E501E400EC0ECD /* CoreVideo.framework in Frameworks */,
-				E1392FED2BA218A80034110D /* SwiftUIIntrospect in Frameworks */,
-				E13AF3B828A0C598009093AB /* NukeExtensions in Frameworks */,
-				E1575E58293E7685001665B1 /* Files in Frameworks */,
-				E1B5F7A729577BCE004B26CF /* Pulse in Frameworks */,
-				E1A09F792D05935A00835265 /* CollectionHStack in Frameworks */,
-				E13AF3BA28A0C598009093AB /* NukeUI in Frameworks */,
-				E1B5F7AB29577BCE004B26CF /* PulseUI in Frameworks */,
-				E1B5F7A929577BCE004B26CF /* PulseLogHandler in Frameworks */,
-				62666E1B27E501D400EC0ECD /* CoreGraphics.framework in Frameworks */,
-				62666E2C27E5021000EC0ECD /* QuartzCore.framework in Frameworks */,
-				E14000BD2EF622AC00354A3C /* StatefulMacros in Frameworks */,
-				62666E1927E501D000EC0ECD /* CoreFoundation.framework in Frameworks */,
-				E19D41B22BF2BFA50082B8B2 /* KeychainSwift in Frameworks */,
-				E18443CB2A037773002DDDC8 /* UDPBroadcast in Frameworks */,
-				E1155ACB2D0584A90021557A /* IdentifiedCollections in Frameworks */,
-				62666E2E27E5021400EC0ECD /* Security.framework in Frameworks */,
-				E1B5F7AD29577BDD004B26CF /* OrderedCollections in Frameworks */,
-				53ABFDDC267972BF00886593 /* TVServices.framework in Frameworks */,
-				62666E1F27E501DF00EC0ECD /* CoreText.framework in Frameworks */,
-				E13DD3CD27164CA7009D4DAF /* CoreStore in Frameworks */,
-				E1A7B1652B9A9F7800152546 /* PreferencesView in Frameworks */,
-				E1A09F772D05935A00835265 /* CollectionVGrid in Frameworks */,
-				E1153DD22BBB649C00424D36 /* SVGKit in Frameworks */,
-				62666E1527E501C800EC0ECD /* AVFoundation.framework in Frameworks */,
-				E13AF3BC28A0C59E009093AB /* BlurHashKit in Frameworks */,
-				62666E1327E501C300EC0ECD /* AudioToolbox.framework in Frameworks */,
-				E1E2D7BF2E3FD936004E2E5F /* Transmission in Frameworks */,
-				E13AF3B628A0C598009093AB /* Nuke in Frameworks */,
-				E12186DE2718F1C50010884C /* Defaults in Frameworks */,
-				E1E6B0022F00100000EE0002 /* Get in Frameworks */,
-				E192608828D2E5F0002314B4 /* Factory in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		5377CBEE263B596A003A4E83 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -350,11 +224,10 @@
 /* Begin PBXGroup section */
 		5377CBE8263B596A003A4E83 = {
 			isa = PBXGroup;
-			children = (
-				E14560852DFCAE51008FF700 /* Emby */,
-				E145669F2DFCAEFD008FF700 /* Emby tvOS */,
-				E14563272DFCAE6E008FF700 /* Shared */,
-				E1456FC82DFCB323008FF700 /* Translations */,
+				children = (
+					E14560852DFCAE51008FF700 /* Emby */,
+					E14563272DFCAE6E008FF700 /* Shared */,
+					E1456FC82DFCB323008FF700 /* Translations */,
 				5377CBF2263B596A003A4E83 /* Products */,
 				53D5E3DB264B47EE00BADDC8 /* Frameworks */,
 				E14565DD2DFCAE78008FF700 /* Scripts */,
@@ -363,40 +236,21 @@
 			sourceTree = "<group>";
 		};
 		5377CBF2263B596A003A4E83 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				5377CBF1263B596A003A4E83 /* Emby iOS.app */,
-				535870602669D21600D05A09 /* Emby tvOS.app */,
-			);
+				isa = PBXGroup;
+				children = (
+					5377CBF1263B596A003A4E83 /* Emby iOS.app */,
+				);
 			name = Products;
 			sourceTree = "<group>";
 		};
 		53D5E3DB264B47EE00BADDC8 /* Frameworks */ = {
 			isa = PBXGroup;
-			children = (
-				E1B2AB9628808CDF0072B3B9 /* GoogleCast.xcframework */,
-				637FCAF3287B5B2600C0A353 /* UDPBroadcast.xcframework */,
-				62666E3A27E503E400EC0ECD /* GoogleCastSDK.xcframework */,
-				62666E3127E5021E00EC0ECD /* UIKit.framework */,
-				62666E2F27E5021800EC0ECD /* VideoToolbox.framework */,
-				62666E2D27E5021400EC0ECD /* Security.framework */,
-				62666E2B27E5021000EC0ECD /* QuartzCore.framework */,
-				62666E2927E5020A00EC0ECD /* OpenGLES.framework */,
-				62666E2827E5020600EC0ECD /* libxml2.tbd */,
-				62666E2727E5020200EC0ECD /* libiconv.tbd */,
-				62666E2627E501FE00EC0ECD /* libc++.tbd */,
-				62666E2527E501FA00EC0ECD /* libbz2.tbd */,
-				62666E2227E501EB00EC0ECD /* Foundation.framework */,
-				62666E2027E501E400EC0ECD /* CoreVideo.framework */,
-				62666E1E27E501DF00EC0ECD /* CoreText.framework */,
-				62666E1C27E501DB00EC0ECD /* CoreMedia.framework */,
-				62666E1A27E501D400EC0ECD /* CoreGraphics.framework */,
-				62666E1827E501D000EC0ECD /* CoreFoundation.framework */,
-				62666E1627E501CC00EC0ECD /* CFNetwork.framework */,
-				62666E1427E501C800EC0ECD /* AVFoundation.framework */,
-				62666E1227E501C300EC0ECD /* AudioToolbox.framework */,
-				62666E0F27E501B400EC0ECD /* VideoToolbox.framework */,
-				62666E0B27E501A500EC0ECD /* OpenGLES.framework */,
+				children = (
+					E1B2AB9628808CDF0072B3B9 /* GoogleCast.xcframework */,
+					637FCAF3287B5B2600C0A353 /* UDPBroadcast.xcframework */,
+					62666E3A27E503E400EC0ECD /* GoogleCastSDK.xcframework */,
+					62666E0F27E501B400EC0ECD /* VideoToolbox.framework */,
+					62666E0B27E501A500EC0ECD /* OpenGLES.framework */,
 				62666E0A27E501A100EC0ECD /* libxml2.tbd */,
 				62666E0927E5019C00EC0ECD /* libiconv.tbd */,
 				62666E0827E5019800EC0ECD /* libc++.tbd */,
@@ -416,12 +270,11 @@
 				5362E4B4267D40C5000E2F71 /* CoreData.framework */,
 				5362E4B2267D40BE000E2F71 /* CoreBluetooth.framework */,
 				5362E4B0267D40B9000E2F71 /* CFNetwork.framework */,
-				5362E4AE267D40B5000E2F71 /* AudioToolbox.framework */,
-				5362E4AC267D40B1000E2F71 /* Accelerate.framework */,
-				5362E4AA267D40AD000E2F71 /* AVFoundation.framework */,
-				5362E4A7267D4067000E2F71 /* GoogleCast.framework */,
-				53ABFDDB267972BF00886593 /* TVServices.framework */,
-				628B95212670CABD0091AF3B /* WidgetKit.framework */,
+					5362E4AE267D40B5000E2F71 /* AudioToolbox.framework */,
+					5362E4AC267D40B1000E2F71 /* Accelerate.framework */,
+					5362E4AA267D40AD000E2F71 /* AVFoundation.framework */,
+					5362E4A7267D4067000E2F71 /* GoogleCast.framework */,
+					628B95212670CABD0091AF3B /* WidgetKit.framework */,
 				628B95232670CABD0091AF3B /* SwiftUI.framework */,
 			);
 			name = Frameworks;
@@ -430,60 +283,6 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		5358705F2669D21600D05A09 /* Emby tvOS */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 535870712669D21700D05A09 /* Build configuration list for PBXNativeTarget "Emby tvOS" */;
-			buildPhases = (
-				4EC71FBD2D1620AF00D0B3A8 /* Alphabetize Strings */,
-				6286F0A3271C0ABA00C40ED5 /* Run Swiftgen.swift */,
-				BD83D7852B55EEB600652C24 /* Run SwiftFormat */,
-				E1A1B5C42F00000000000002 /* Run SwiftLint */,
-				5358705C2669D21600D05A09 /* Sources */,
-				5358705D2669D21600D05A09 /* Frameworks */,
-				5358705E2669D21600D05A09 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				E14563272DFCAE6E008FF700 /* Shared */,
-				E145669F2DFCAEFD008FF700 /* Emby tvOS */,
-				E1456FC82DFCB323008FF700 /* Translations */,
-				E150B7D12DFF2E7C00DC7CF4 /* XcodeConfig */,
-			);
-			name = "Emby tvOS";
-			packageProductDependencies = (
-				E13DD3CC27164CA7009D4DAF /* CoreStore */,
-				E12186DD2718F1C50010884C /* Defaults */,
-				E1002B6A2793E36600E47059 /* Algorithms */,
-				E13AF3B528A0C598009093AB /* Nuke */,
-				E13AF3B728A0C598009093AB /* NukeExtensions */,
-				E13AF3B928A0C598009093AB /* NukeUI */,
-				E13AF3BB28A0C59E009093AB /* BlurHashKit */,
-				E192608728D2E5F0002314B4 /* Factory */,
-				E1575E57293E7685001665B1 /* Files */,
-				E1B5F7A629577BCE004B26CF /* Pulse */,
-				E1B5F7A829577BCE004B26CF /* PulseLogHandler */,
-				E1B5F7AA29577BCE004B26CF /* PulseUI */,
-				E1B5F7AC29577BDD004B26CF /* OrderedCollections */,
-				E18443CA2A037773002DDDC8 /* UDPBroadcast */,
-				E1A7B1642B9A9F7800152546 /* PreferencesView */,
-				E1392FEC2BA218A80034110D /* SwiftUIIntrospect */,
-				E1153DD12BBB649C00424D36 /* SVGKit */,
-				E19D41B12BF2BFA50082B8B2 /* KeychainSwift */,
-				E1155ACA2D0584A90021557A /* IdentifiedCollections */,
-				E1A09F762D05935A00835265 /* CollectionVGrid */,
-				E1A09F782D05935A00835265 /* CollectionHStack */,
-				BD88CB412D77E6A0006BB5E3 /* TVOSPicker */,
-				E1E2D7BE2E3FD936004E2E5F /* Transmission */,
-				E1E6B0042F00100000EE0004 /* Get */,
-				E14000BC2EF622AC00354A3C /* StatefulMacros */,
-			);
-			productName = "EmbyPlayer tvOS";
-			productReference = 535870602669D21600D05A09 /* Emby tvOS.app */;
-			productType = "com.apple.product-type.application";
-		};
 		5377CBF0263B596A003A4E83 /* Emby iOS */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 5377CC1B263B596B003A4E83 /* Build configuration list for PBXNativeTarget "Emby iOS" */;
@@ -567,15 +366,12 @@
 				KnownAssetTags = (
 					New,
 				);
-				LastSwiftUpdateCheck = 1250;
-				LastUpgradeCheck = 1610;
-				TargetAttributes = {
-					5358705F2669D21600D05A09 = {
-						CreatedOnToolsVersion = 12.5;
-					};
-					5377CBF0263B596A003A4E83 = {
-						CreatedOnToolsVersion = 12.5;
-					};
+					LastSwiftUpdateCheck = 1250;
+					LastUpgradeCheck = 1610;
+					TargetAttributes = {
+						5377CBF0263B596A003A4E83 = {
+							CreatedOnToolsVersion = 12.5;
+						};
 				};
 			};
 			buildConfigurationList = 5377CBEC263B596A003A4E83 /* Build configuration list for PBXProject "Emby" */;
@@ -655,32 +451,23 @@
 				E1153DCE2BBB634F00424D36 /* XCRemoteSwiftPackageReference "SVGKit" */,
 				E145EB492BE16849003BF6F3 /* XCRemoteSwiftPackageReference "keychain-swift" */,
 				E14EA1632BF70A8E00DE757A /* XCRemoteSwiftPackageReference "Mantis" */,
-				E176EBDC2D050067009F4CF1 /* XCRemoteSwiftPackageReference "swift-identified-collections" */,
-				E1A09F702D05933D00835265 /* XCRemoteSwiftPackageReference "CollectionVGrid" */,
-				E1A09F732D05935100835265 /* XCRemoteSwiftPackageReference "CollectionHStack" */,
-				BD88CB402D77E6A0006BB5E3 /* XCRemoteSwiftPackageReference "TVOSPicker" */,
-				E164308A2E3AA9710028D4E8 /* XCRemoteSwiftPackageReference "Transmission" */,
-				E1E6B0052F00100000EE0005 /* XCRemoteSwiftPackageReference "Get" */,
+					E176EBDC2D050067009F4CF1 /* XCRemoteSwiftPackageReference "swift-identified-collections" */,
+					E1A09F702D05933D00835265 /* XCRemoteSwiftPackageReference "CollectionVGrid" */,
+					E1A09F732D05935100835265 /* XCRemoteSwiftPackageReference "CollectionHStack" */,
+					E164308A2E3AA9710028D4E8 /* XCRemoteSwiftPackageReference "Transmission" */,
+					E1E6B0052F00100000EE0005 /* XCRemoteSwiftPackageReference "Get" */,
 				E1C404CB2EF61D4C00959C4F /* XCRemoteSwiftPackageReference "StatefulMacro" */,
 			);
 			productRefGroup = 5377CBF2263B596A003A4E83 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (
-				5377CBF0263B596A003A4E83 /* Emby iOS */,
-				5358705F2669D21600D05A09 /* Emby tvOS */,
-			);
-		};
+				targets = (
+					5377CBF0263B596A003A4E83 /* Emby iOS */,
+				);
+			};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		5358705E2669D21600D05A09 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		5377CBEF263B596A003A4E83 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -692,26 +479,6 @@
 
 /* Begin PBXShellScriptBuildPhase section */
 		4EC71FBC2D16201C00D0B3A8 /* Alphabetize Strings */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"$(SRCROOT)/Translations/en.lproj/Localizable.strings",
-			);
-			name = "Alphabetize Strings";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(DERIVED_FILE_DIR)/alphabetizeStrings.txt",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "xcrun --sdk macosx swift \"${SRCROOT}/Scripts/Translations/AlphabetizeStrings.swift\"\n";
-		};
-		4EC71FBD2D1620AF00D0B3A8 /* Alphabetize Strings */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -750,45 +517,7 @@
 			shellPath = /bin/sh;
 			shellScript = "# Add Homebrew to the path to support Apple Silicon Homebrew SwiftGen installations\nexport PATH=/opt/homebrew/bin:$PATH\n\nif which swiftgen >/dev/null; then\n  swiftgen\nelse\n  echo \"warning: SwiftGen not installed; using checked-in generated resources.\"\n  exit 0\nfi\n";
 		};
-		6286F0A3271C0ABA00C40ED5 /* Run Swiftgen.swift */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Run Swiftgen.swift";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# Add Homebrew to the path to support Apple Silicon Homebrew SwiftGen installations\nexport PATH=/opt/homebrew/bin:$PATH \n\nif which swiftgen >/dev/null; then\n  swiftgen\nelse\n  echo \"warning: SwiftGen not installed; using checked-in generated resources.\"\n  exit 0\nfi\n";
-		};
 		BD0BA2282AD64BB200306A8D /* Run SwiftFormat */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Run SwiftFormat";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# Add Homebrew to the path to support Apple Silicon Homebrew SwiftFormat installations\nexport PATH=/opt/homebrew/bin:$PATH\n\n# Skip phase if the action is not build (ie. analyze, archive, etc).\nif [ \"$ACTION\" != \"build\" ]; then\n    exit 0\nfi\n\nif which swiftformat >/dev/null; then\n    swiftformat .\nelse\n    echo \"error: SwiftFormat not installed, check contributing.md for installation instructions.\"\nfi\n";
-		};
-		BD83D7852B55EEB600652C24 /* Run SwiftFormat */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -826,35 +555,9 @@
 			shellPath = /bin/sh;
 			shellScript = "export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\n\nif command -v swiftlint >/dev/null; then\n  swiftlint lint\nelse\n  echo \"warning: SwiftLint not installed. Run 'brew bundle --file Brewfile' from the repository root.\"\nfi\n";
 		};
-		E1A1B5C42F00000000000002 /* Run SwiftLint */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Run SwiftLint";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\n\nif command -v swiftlint >/dev/null; then\n  swiftlint lint\nelse\n  echo \"warning: SwiftLint not installed. Run 'brew bundle --file Brewfile' from the repository root.\"\nfi\n";
-		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		5358705C2669D21600D05A09 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		5377CBED263B596A003A4E83 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -865,65 +568,6 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		535870722669D21700D05A09 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
-				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 70;
-				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = "";
-				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				FRAMEWORK_SEARCH_PATHS = "$(inherited)";
-				INFOPLIST_FILE = "Emby tvOS/Resources/Info.plist";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = 1.4.1;
-				PRODUCT_BUNDLE_IDENTIFIER = org.emby.iosplayer;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = appletvos;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 3;
-				TVOS_DEPLOYMENT_TARGET = 17.0;
-			};
-			name = Debug;
-		};
-		535870732669D21700D05A09 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
-				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 70;
-				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = "";
-				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				FRAMEWORK_SEARCH_PATHS = "$(inherited)";
-				INFOPLIST_FILE = "Emby tvOS/Resources/Info.plist";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = 1.4.1;
-				PRODUCT_BUNDLE_IDENTIFIER = org.emby.iosplayer;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = appletvos;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 3;
-				TVOS_DEPLOYMENT_TARGET = 17.0;
-			};
-			name = Release;
-		};
 		5377CC19263B596B003A4E83 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReferenceAnchor = E150B7D12DFF2E7C00DC7CF4 /* XcodeConfig */;
@@ -1281,15 +925,6 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		535870712669D21700D05A09 /* Build configuration list for PBXNativeTarget "Emby tvOS" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				535870722669D21700D05A09 /* Debug */,
-				535870732669D21700D05A09 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		5377CBEC263B596A003A4E83 /* Build configuration list for PBXProject "Emby" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -1324,14 +959,6 @@
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 26.0.0;
-			};
-		};
-		BD88CB402D77E6A0006BB5E3 /* XCRemoteSwiftPackageReference "TVOSPicker" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ViacomInc/TVOSPicker";
-			requirement = {
-				kind = upToNextMinorVersion;
-				minimumVersion = 0.3.0;
 			};
 		};
 		E1002B662793CFBA00E47059 /* XCRemoteSwiftPackageReference "swift-algorithms" */ = {
@@ -1505,11 +1132,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		BD88CB412D77E6A0006BB5E3 /* TVOSPicker */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = BD88CB402D77E6A0006BB5E3 /* XCRemoteSwiftPackageReference "TVOSPicker" */;
-			productName = TVOSPicker;
-		};
 		E1002B672793CFBA00E47059 /* Algorithms */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = E1002B662793CFBA00E47059 /* XCRemoteSwiftPackageReference "swift-algorithms" */;

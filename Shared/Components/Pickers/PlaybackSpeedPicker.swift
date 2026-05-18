@@ -105,15 +105,49 @@ struct PlaybackSpeedPicker: View {
                     }
                 }
             }
-            .alert(L10n.playbackSpeed, isPresented: $isPresentingCustomSpeed) {
-                TextField(L10n.playbackSpeed, value: $customSpeed.clamp(min: 0.1, max: 10.0), format: .number)
-                    .keyboardType(.decimalPad)
+            .customPlaybackSpeedAlert(
+                isPresented: $isPresentingCustomSpeed,
+                customSpeed: $customSpeed,
+                selection: selection
+            )
+    }
+}
 
-                Button(L10n.ok) {
-                    selection.wrappedValue = .custom(customSpeed)
-                }
-            } message: {
-                Text(L10n.customPlaybackSpeedDescription)
+private extension View {
+
+    @ViewBuilder
+    func customPlaybackSpeedAlert(
+        isPresented: Binding<Bool>,
+        customSpeed: Binding<Float>,
+        selection: Binding<PlaybackSpeed>
+    ) -> some View {
+        #if os(iOS)
+        background(
+            AlertTextFieldPresenter(
+                title: L10n.playbackSpeed,
+                message: L10n.customPlaybackSpeedDescription,
+                placeholder: L10n.playbackSpeed,
+                text: "\(customSpeed.wrappedValue)",
+                keyboardType: .decimalPad,
+                isPresented: isPresented
+            ) { text in
+                let normalizedText = text.replacingOccurrences(of: ",", with: ".")
+                let speed = clamp(Float(normalizedText) ?? customSpeed.wrappedValue, min: 0.1, max: 10.0)
+                customSpeed.wrappedValue = speed
+                selection.wrappedValue = .custom(speed)
             }
+        )
+        #else
+        alert(L10n.playbackSpeed, isPresented: isPresented) {
+            TextField(L10n.playbackSpeed, value: customSpeed.clamp(min: 0.1, max: 10.0), format: .number)
+                .keyboardType(.decimalPad)
+
+            Button(L10n.ok) {
+                selection.wrappedValue = .custom(customSpeed.wrappedValue)
+            }
+        } message: {
+            Text(L10n.customPlaybackSpeedDescription)
+        }
+        #endif
     }
 }

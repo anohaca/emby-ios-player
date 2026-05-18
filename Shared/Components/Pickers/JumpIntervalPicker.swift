@@ -8,6 +8,10 @@
 
 import SwiftUI
 
+#if os(iOS)
+import UIKit
+#endif
+
 // TODO: Generic StorablePicker?
 // - Combine JumpIntervalPicker & PlaybackSpeedPicker if possible
 
@@ -106,15 +110,194 @@ struct JumpIntervalPicker: View {
                     }
                 }
             }
-            .alert(L10n.jump, isPresented: $isPresentingCustomInterval) {
-                TextField(L10n.duration, value: $customSeconds.clamp(min: 1, max: 600), format: .number)
-                    .keyboardType(.numberPad)
-
-                Button(L10n.ok) {
-                    selection.wrappedValue = .custom(interval: Duration.seconds(customSeconds))
-                }
-            } message: {
-                Text(L10n.customJumpIntervalDescription)
-            }
+            .customJumpIntervalAlert(
+                isPresented: $isPresentingCustomInterval,
+                customSeconds: $customSeconds,
+                selection: selection
+            )
     }
 }
+
+private extension View {
+
+    @ViewBuilder
+    func customJumpIntervalAlert(
+        isPresented: Binding<Bool>,
+        customSeconds: Binding<Int>,
+        selection: Binding<MediaJumpInterval>
+    ) -> some View {
+        #if os(iOS)
+        background(
+            AlertTextFieldPresenter(
+                title: L10n.jump,
+                message: L10n.customJumpIntervalDescription,
+                placeholder: L10n.duration,
+                text: "\(customSeconds.wrappedValue)",
+                keyboardType: .numberPad,
+                isPresented: isPresented
+            ) { text in
+                let seconds = clamp(Int(text) ?? customSeconds.wrappedValue, min: 1, max: 600)
+                customSeconds.wrappedValue = seconds
+                selection.wrappedValue = .custom(interval: Duration.seconds(seconds))
+            }
+        )
+        #else
+        alert(L10n.jump, isPresented: isPresented) {
+            TextField(L10n.duration, value: customSeconds.clamp(min: 1, max: 600), format: .number)
+                .keyboardType(.numberPad)
+
+            Button(L10n.ok) {
+                selection.wrappedValue = .custom(interval: Duration.seconds(customSeconds.wrappedValue))
+            }
+        } message: {
+            Text(L10n.customJumpIntervalDescription)
+        }
+        #endif
+    }
+}
+
+#if os(iOS)
+struct AlertTextFieldPresenter: UIViewControllerRepresentable {
+
+    let title: String
+    let message: String
+    let placeholder: String
+    let text: String
+    let keyboardType: UIKeyboardType
+    @Binding
+    var isPresented: Bool
+
+    let onCommit: (String) -> Void
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        let viewController = UIViewController()
+        viewController.view.backgroundColor = .clear
+        return viewController
+    }
+
+    func updateUIViewController(_ viewController: UIViewController, context: Context) {
+        context.coordinator.configuration = self
+
+        if isPresented {
+            guard context.coordinator.alert == nil else { return }
+            let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+            alert.addTextField { textField in
+                textField.placeholder = placeholder
+                textField.text = text
+                textField.keyboardType = keyboardType
+                textField.addTarget(
+                    context.coordinator,
+                    action: #selector(Coordinator.textDidChange(_:)),
+                    for: .editingChanged
+                )
+                context.coordinator.currentText = text
+                AlertTextFieldChrome.apply(to: textField)
+            }
+            alert.addAction(UIAlertAction(title: L10n.ok, style: .default) { _ in
+                context.coordinator.commit()
+            })
+
+            context.coordinator.alert = alert
+            DispatchQueue.main.async {
+                guard viewController.presentedViewController == nil else { return }
+                viewController.present(alert, animated: true)
+            }
+        } else if let alert = context.coordinator.alert {
+            context.coordinator.alert = nil
+            alert.dismiss(animated: true)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    final class Coordinator: NSObject {
+
+        var alert: UIAlertController?
+        var configuration: AlertTextFieldPresenter?
+        var currentText = ""
+
+        @objc
+        func textDidChange(_ textField: UITextField) {
+            currentText = textField.text ?? ""
+            AlertTextFieldChrome.apply(to: textField)
+        }
+
+        func commit() {
+            guard let configuration else { return }
+            configuration.onCommit(currentText)
+            self.configuration?.isPresented = false
+            alert = nil
+        }
+
+    }
+}
+
+private enum AlertTextFieldChrome {
+
+    static func apply(to textField: UITextField) {
+        applyOnce(to: textField)
+
+        DispatchQueue.main.async { [weak textField] in
+            guard let textField else { return }
+            applyOnce(to: textField)
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak textField] in
+            guard let textField else { return }
+            applyOnce(to: textField)
+        }
+    }
+
+    private static func applyOnce(to textField: UITextField) {
+        let inputBackgroundColor = UIColor(
+            red: 48 / 255,
+            green: 48 / 255,
+            blue: 55 / 255,
+            alpha: 1
+        )
+        textField.backgroundColor = inputBackgroundColor
+        textField.layer.backgroundColor = inputBackgroundColor.cgColor
+        textField.isOpaque = false
+
+        textField.subviews.forEach { subview in
+            clearRectangularInputBackgrounds(
+                in: subview,
+                root: textField,
+                inputBackgroundColor: inputBackgroundColor
+            )
+        }
+    }
+
+    private static func clearRectangularInputBackgrounds(
+        in view: UIView,
+        root: UIView,
+        inputBackgroundColor: UIColor
+    ) {
+        let frame = view.convert(view.bounds, to: root)
+        let preservesSystemFieldShape =
+            abs(frame.minX) <= 2 &&
+            abs(frame.minY) <= 2 &&
+            abs(frame.width - root.bounds.width) <= 4 &&
+            abs(frame.height - root.bounds.height) <= 4
+
+        if !preservesSystemFieldShape {
+            view.backgroundColor = .clear
+            view.layer.backgroundColor = UIColor.clear.cgColor
+        } else {
+            view.backgroundColor = inputBackgroundColor
+            view.layer.backgroundColor = inputBackgroundColor.cgColor
+        }
+
+        view.isOpaque = false
+        view.subviews.forEach { subview in
+            clearRectangularInputBackgrounds(
+                in: subview,
+                root: root,
+                inputBackgroundColor: inputBackgroundColor
+            )
+        }
+    }
+}
+#endif

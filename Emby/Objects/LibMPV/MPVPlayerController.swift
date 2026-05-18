@@ -637,13 +637,22 @@ final class MPVPlayerController: NSObject {
     }
 
     private func configureAudioSession() throws {
-        let session = AVAudioSession.sharedInstance()
-        do {
-            try session.setCategory(.playback, mode: .moviePlayback)
-        } catch {
-            try session.setCategory(.playback, mode: .default)
+        Task.detached(priority: .userInitiated) {
+            let session = AVAudioSession.sharedInstance()
+            do {
+                do {
+                    try session.setCategory(.playback, mode: .moviePlayback)
+                } catch {
+                    try session.setCategory(.playback, mode: .default)
+                }
+                try session.setActive(true)
+                #if DEBUG
+                NSLog("MPVPlayerAudioSession active=true")
+                #endif
+            } catch {
+                NSLog("MPVPlayerAudioSession active=false error=%@", error.localizedDescription)
+            }
         }
-        try session.setActive(true)
     }
 
     private func releaseScopedURL() {

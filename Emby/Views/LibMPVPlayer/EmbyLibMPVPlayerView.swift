@@ -166,6 +166,8 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private var subtitlePosition = 100.0
     private var subtitleScale = 1.0
     private var subtitleBorderSize = 3.0
+    private var isReadyToStartPlayback = false
+    private var pendingPlaybackItemForPresentation: MediaPlayerItem?
     private var persistSubtitleAdjustmentWorkItem: DispatchWorkItem?
     private var reapplySubtitleAdjustmentWorkItem: DispatchWorkItem?
     private var subtitleVisibleBottomConstraint: NSLayoutConstraint?
@@ -280,6 +282,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         view.backgroundColor = .clear
         installViews()
         bindBufferingIndicator()
+        isBuffering.value = true
         prepareVideoSurfaceForLoading()
         installVolumeView()
         bindPlayer()
@@ -362,6 +365,8 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         attachPlayerIfNeeded()
         scheduleVideoRectRefreshBurst()
         scheduleControlsHide()
+        isReadyToStartPlayback = true
+        playPendingPlaybackItemForPresentationIfNeeded()
         #if DEBUG
         startSubtitleBorderExerciseForSmokeIfNeeded()
         startSubtitleScaleExerciseForSmokeIfNeeded()
@@ -399,21 +404,25 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     }
 
     private func activatePlaybackAudioSession(reason: String) {
-        let audioSession = AVAudioSession.sharedInstance()
-        do {
-            try audioSession.setCategory(.playback, mode: .moviePlayback)
-            try audioSession.setActive(true)
-            UIApplication.shared.beginReceivingRemoteControlEvents()
-            #if DEBUG
-            NSLog(
-                "EmbyPlayerAudioSession active=true reason=%@ category=%@ mode=%@",
-                reason,
-                audioSession.category.rawValue,
-                audioSession.mode.rawValue
-            )
-            #endif
-        } catch {
-            NSLog("EmbyPlayerAudioSession active=false reason=%@ error=%@", reason, error.localizedDescription)
+        Task.detached(priority: .userInitiated) {
+            let audioSession = AVAudioSession.sharedInstance()
+            do {
+                try audioSession.setCategory(.playback, mode: .moviePlayback)
+                try audioSession.setActive(true)
+                await MainActor.run {
+                    UIApplication.shared.beginReceivingRemoteControlEvents()
+                }
+                #if DEBUG
+                NSLog(
+                    "EmbyPlayerAudioSession active=true reason=%@ category=%@ mode=%@",
+                    reason,
+                    audioSession.category.rawValue,
+                    audioSession.mode.rawValue
+                )
+                #endif
+            } catch {
+                NSLog("EmbyPlayerAudioSession active=false reason=%@ error=%@", reason, error.localizedDescription)
+            }
         }
     }
 
@@ -1339,7 +1348,16 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             .sink { [weak self] playbackItem in
                 Task { @MainActor in
                     guard let playbackItem else { return }
-                    self?.playNew(item: playbackItem)
+                    guard let self else { return }
+                    guard self.isReadyToStartPlayback else {
+                        self.pendingPlaybackItemForPresentation = playbackItem
+                        self.isBuffering.value = true
+                        #if DEBUG
+                        NSLog("EmbyPlayerPresentation deferPlaybackUntilVisible")
+                        #endif
+                        return
+                    }
+                    self.playNew(item: playbackItem)
                 }
             }
             .store(in: &cancellables)
@@ -1369,6 +1387,19 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                 }
             }
             .store(in: &cancellables)
+    }
+
+    private func playPendingPlaybackItemForPresentationIfNeeded() {
+        guard let playbackItem = pendingPlaybackItemForPresentation else { return }
+        pendingPlaybackItemForPresentation = nil
+        isBuffering.value = true
+        #if DEBUG
+        NSLog("EmbyPlayerPresentation startDeferredPlayback")
+        #endif
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.isReadyToStartPlayback, !self.didRequestClose else { return }
+            self.playNew(item: playbackItem)
+        }
     }
 
     private func updateTitle(for item: BaseItemDto) {

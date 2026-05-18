@@ -48,12 +48,6 @@ class NowPlayableObserver: ViewModel, MediaPlayerObserver {
     private func setup(with manager: MediaPlayerManager) {
         isStopped = false
 
-        do {
-            try startSession()
-        } catch {
-            logger.critical("Unable to activate audio session: \(error.localizedDescription)")
-        }
-
         cancellables = []
 
         manager.actions
@@ -196,19 +190,14 @@ class NowPlayableObserver: ViewModel, MediaPlayerObserver {
             playbackRequestStateBeforeInterruption = manager?.playbackRequestStatus ?? .playing
             manager?.setPlaybackRequestStatus(status: .paused)
         case .ended:
-            do {
-                try startSession()
+            startSession()
 
-                if playbackRequestStateBeforeInterruption == .playing {
-                    if options.contains(.shouldResume) {
-                        manager?.setPlaybackRequestStatus(status: .playing)
-                    } else {
-                        manager?.setPlaybackRequestStatus(status: .paused)
-                    }
+            if playbackRequestStateBeforeInterruption == .playing {
+                if options.contains(.shouldResume) {
+                    manager?.setPlaybackRequestStatus(status: .playing)
+                } else {
+                    manager?.setPlaybackRequestStatus(status: .paused)
                 }
-            } catch {
-                logger.critical("Unable to reactivate audio session after interruption: \(error.localizedDescription)")
-                manager?.stop()
             }
         @unknown default: ()
         }
@@ -306,17 +295,20 @@ class NowPlayableObserver: ViewModel, MediaPlayerObserver {
         nowPlayingInfoCenter.nowPlayingInfo = nowPlayingInfo
     }
 
-    private func startSession() throws {
+    private func startSession() {
 
         let audioSession = AVAudioSession.sharedInstance()
 
-        do {
-            try audioSession.setCategory(.playback, mode: .default)
-            try audioSession.setActive(true)
-            logger.trace("Started AVAudioSession")
-        } catch {
-            logger.critical("Unable to activate AVAudioSession instance: \(error.localizedDescription)")
-            throw error
+        Task.detached(priority: .userInitiated) {
+            do {
+                try audioSession.setCategory(.playback, mode: .default)
+                try audioSession.setActive(true)
+                #if DEBUG
+                NSLog("NowPlayableAudioSession active=true")
+                #endif
+            } catch {
+                NSLog("NowPlayableAudioSession active=false error=%@", error.localizedDescription)
+            }
         }
     }
 

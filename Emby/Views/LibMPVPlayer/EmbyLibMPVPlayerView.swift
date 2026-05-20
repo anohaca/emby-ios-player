@@ -166,6 +166,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private var subtitlePosition = 100.0
     private var subtitleScale = 1.0
     private var subtitleBorderSize = 3.0
+    private var subtitleAdjustmentSettingsDidChange = false
     private var isReadyToStartPlayback = false
     private var pendingPlaybackItemForPresentation: MediaPlayerItem?
     private var persistSubtitleAdjustmentWorkItem: DispatchWorkItem?
@@ -556,20 +557,12 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         }
 
         orientationOverrideGeneration += 1
-        let generation = orientationOverrideGeneration
 
         #if DEBUG
-        NSLog("EmbyPlayerOrientation begin=portrait-dismiss generation=%d", generation)
+        NSLog("EmbyPlayerOrientation begin=portrait-dismiss generation=%d", orientationOverrideGeneration)
         #endif
 
         preparePortraitOrientationForDismissal(requestSceneImmediately: true, logName: "portrait-dismiss")
-
-        [0.08, 0.18].forEach { delay in
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                guard generation == orientationOverrideGeneration else { return }
-                Self.preparePortraitOrientationForDismissal(requestSceneImmediately: false)
-            }
-        }
     }
 
     private static func preparePortraitOrientationForDismissal(
@@ -719,13 +712,13 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         cancelControlsHide()
         hideSeekPreviewNow()
         hideGestureHUDNow()
-        controlsView.closeSubtitleAdjustmentForPlayerDismissal()
-        view.endEditing(true)
+        if controlsView.needsSubtitleAdjustmentDismissalForPlayerDismissal {
+            controlsView.closeSubtitleAdjustmentForPlayerDismissal()
+        }
         player.setMuted(true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
             guard let self, self.didRequestClose, self.view.window != nil else { return }
             self.onClose?()
-            self.scheduleDismissalFallbackIfNeeded()
         }
     }
 
@@ -757,35 +750,6 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
         Self.beginPortraitOrientationForDismissal()
         refreshSupportedOrientations()
-    }
-
-    private func scheduleDismissalFallbackIfNeeded() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-            guard let self,
-                  self.didRequestClose,
-                  !self.didShutdownForDismissal,
-                  self.view.window != nil
-            else { return }
-
-            #if DEBUG
-            NSLog("EmbyPlayerDismiss fallback=ui-view-controller-dismiss")
-            #endif
-
-            self.presentedAncestorForDismissalFallback()?.dismiss(animated: false)
-        }
-    }
-
-    private func presentedAncestorForDismissalFallback() -> UIViewController? {
-        var controller: UIViewController = self
-        while let parent = controller.parent {
-            controller = parent
-        }
-
-        if controller.presentingViewController != nil {
-            return controller
-        }
-
-        return view.window?.rootViewController?.presentedViewController
     }
 
     @objc private nonisolated func appDidEnterBackgroundNotification() {
@@ -2465,7 +2429,10 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     }
 
     private func setSubtitlePosition(_ position: Double) {
-        subtitlePosition = Self.clampedSubtitlePosition(position)
+        let clampedPosition = Self.clampedSubtitlePosition(position)
+        guard subtitlePosition != clampedPosition else { return }
+        subtitlePosition = clampedPosition
+        subtitleAdjustmentSettingsDidChange = true
         player.setSubtitlePosition(subtitlePosition)
         updateRenderedSubtitleTransform()
         controlsView.updateSubtitleAdjustment(position: subtitlePosition, scale: subtitleScale, borderSize: subtitleBorderSize)
@@ -2477,7 +2444,10 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     }
 
     private func setSubtitleScale(_ scale: Double) {
-        subtitleScale = Self.clampedSubtitleScale(scale)
+        let clampedScale = Self.clampedSubtitleScale(scale)
+        guard subtitleScale != clampedScale else { return }
+        subtitleScale = clampedScale
+        subtitleAdjustmentSettingsDidChange = true
         player.setSubtitleScale(subtitleScale)
         if renderedSubtitleLabel.alpha > 0 {
             updateRenderedSubtitle(renderedSubtitleLabel.attributedText?.string)
@@ -2491,7 +2461,10 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     }
 
     private func setSubtitleBorderSize(_ borderSize: Double) {
-        subtitleBorderSize = Self.clampedSubtitleBorderSize(borderSize)
+        let clampedBorderSize = Self.clampedSubtitleBorderSize(borderSize)
+        guard subtitleBorderSize != clampedBorderSize else { return }
+        subtitleBorderSize = clampedBorderSize
+        subtitleAdjustmentSettingsDidChange = true
         player.setSubtitleBorderSize(subtitleBorderSize)
         updateRenderedSubtitleOutline()
         if renderedSubtitleLabel.alpha > 0 {
@@ -2552,6 +2525,8 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private func persistSubtitleAdjustmentSettingsNow() {
         persistSubtitleAdjustmentWorkItem?.cancel()
         persistSubtitleAdjustmentWorkItem = nil
+        guard subtitleAdjustmentSettingsDidChange else { return }
+        subtitleAdjustmentSettingsDidChange = false
         Defaults[.VideoPlayer.Subtitle.subtitlePosition] = subtitlePosition
         Defaults[.VideoPlayer.Subtitle.subtitleScale] = subtitleScale
         Defaults[.VideoPlayer.Subtitle.subtitleBorderSize] = subtitleBorderSize

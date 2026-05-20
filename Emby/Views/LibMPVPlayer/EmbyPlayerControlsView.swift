@@ -284,9 +284,12 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     }
 
     func closeSubtitleAdjustmentForPlayerDismissal() {
+        guard needsSubtitleAdjustmentDismissalForPlayerDismissal else { return }
         subtitleAdjustmentVisibilityGeneration += 1
-        endEditing(true)
-        subtitleAdjustmentValueField.resignFirstResponder()
+        if subtitleAdjustmentValueField.isFirstResponder {
+            endEditing(true)
+            subtitleAdjustmentValueField.resignFirstResponder()
+        }
         subtitleAdjustmentPanel.layer.removeAllAnimations()
         subtitleAdjustmentPanelVisible = false
         subtitleAdjustmentPanel.alpha = 0
@@ -294,8 +297,6 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         subtitleAdjustmentPanel.isHidden = true
         subtitleAdjustmentPanel.isUserInteractionEnabled = false
         setControlsHidden(true, animated: false)
-        updateSubtitleMenu()
-        updateSettingsMenu()
     }
 
     func updateRenderedSubtitle(_ text: String?) {
@@ -387,6 +388,13 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
 
     var isSubtitleAdjustmentPanelVisible: Bool {
         subtitleAdjustmentPanelVisible
+    }
+
+    var needsSubtitleAdjustmentDismissalForPlayerDismissal: Bool {
+        subtitleAdjustmentPanelVisible ||
+            !subtitleAdjustmentPanel.isHidden ||
+            subtitleAdjustmentPanel.alpha > 0.01 ||
+            subtitleAdjustmentValueField.isFirstResponder
     }
 
     func shouldSuppressPlayerGesture(at point: CGPoint) -> Bool {

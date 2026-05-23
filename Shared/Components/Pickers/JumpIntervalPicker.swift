@@ -257,46 +257,27 @@ private enum AlertTextFieldChrome {
             blue: 55 / 255,
             alpha: 1
         )
+        textField.borderStyle = .none
         textField.backgroundColor = inputBackgroundColor
         textField.layer.backgroundColor = inputBackgroundColor.cgColor
         textField.isOpaque = false
+        textField.textColor = .white
+        textField.tintColor = .white
+        textField.keyboardAppearance = .dark
+        textField.defaultTextAttributes[.foregroundColor] = UIColor.white
 
         textField.subviews.forEach { subview in
-            clearRectangularInputBackgrounds(
-                in: subview,
-                root: textField,
-                inputBackgroundColor: inputBackgroundColor
-            )
-        }
-    }
+            let frame = subview.convert(subview.bounds, to: textField)
+            let fillsTextField =
+                abs(frame.minX) <= 4 &&
+                abs(frame.minY) <= 4 &&
+                abs(frame.width - textField.bounds.width) <= 8 &&
+                abs(frame.height - textField.bounds.height) <= 8
 
-    private static func clearRectangularInputBackgrounds(
-        in view: UIView,
-        root: UIView,
-        inputBackgroundColor: UIColor
-    ) {
-        let frame = view.convert(view.bounds, to: root)
-        let preservesSystemFieldShape =
-            abs(frame.minX) <= 2 &&
-            abs(frame.minY) <= 2 &&
-            abs(frame.width - root.bounds.width) <= 4 &&
-            abs(frame.height - root.bounds.height) <= 4
-
-        if !preservesSystemFieldShape {
-            view.backgroundColor = .clear
-            view.layer.backgroundColor = UIColor.clear.cgColor
-        } else {
-            view.backgroundColor = inputBackgroundColor
-            view.layer.backgroundColor = inputBackgroundColor.cgColor
-        }
-
-        view.isOpaque = false
-        view.subviews.forEach { subview in
-            clearRectangularInputBackgrounds(
-                in: subview,
-                root: root,
-                inputBackgroundColor: inputBackgroundColor
-            )
+            guard fillsTextField else { return }
+            subview.backgroundColor = inputBackgroundColor
+            subview.layer.backgroundColor = inputBackgroundColor.cgColor
+            subview.isOpaque = false
         }
     }
 }

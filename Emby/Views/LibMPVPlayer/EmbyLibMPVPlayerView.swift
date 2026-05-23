@@ -2268,6 +2268,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             return
         }
 
+        controlsView.suppressPausedIndicatorTemporarily()
         manager?.playNewItem(provider: provider)
         showControls()
     }

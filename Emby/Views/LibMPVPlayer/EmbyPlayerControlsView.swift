@@ -118,6 +118,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private var areControlsHidden = false
     private var pausedIndicatorHideWorkItem: DispatchWorkItem?
     private var pausedIndicatorVisibilityGeneration = 0
+    private var pausedIndicatorSuppressedUntil: Date?
     private var subtitleTracks: [MPVSubtitleTrack] = []
     private var selectedSubtitleID: String?
     private var controlsVisibilityGeneration = 0
@@ -150,6 +151,11 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         setButtonImage(playPauseButton, symbol: symbol)
         playPauseButton.accessibilityLabel = paused ? "Play" : "Pause"
         updatePausedIndicator(animated: true)
+    }
+
+    func suppressPausedIndicatorTemporarily(duration: TimeInterval = 1.0) {
+        pausedIndicatorSuppressedUntil = Date().addingTimeInterval(duration)
+        updatePausedIndicator(animated: false, allowsShowing: false)
     }
 
     func update(time: Double, duration: Double) {
@@ -886,7 +892,11 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         pausedIndicatorHideWorkItem = nil
         pausedIndicatorVisibilityGeneration += 1
         let generation = pausedIndicatorVisibilityGeneration
-        let visible = allowsShowing && isPaused && !subtitleAdjustmentPanelVisible
+        let pausedIndicatorSuppressed = pausedIndicatorSuppressedUntil.map { Date() < $0 } ?? false
+        if !pausedIndicatorSuppressed {
+            pausedIndicatorSuppressedUntil = nil
+        }
+        let visible = allowsShowing && isPaused && !subtitleAdjustmentPanelVisible && !pausedIndicatorSuppressed
         setPausedIndicatorVisible(visible, animated: animated, generation: generation)
 
         if visible {

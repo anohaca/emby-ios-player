@@ -48,6 +48,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setSubtitleBorderSize:(double)borderSize;
 - (void)seekToSeconds:(double)seconds;
 - (void)refreshVideoRect;
+- (void)nudgeVideoOutputAfterForeground;
 - (void)stop;
 - (void)cycleAudioTrack;
 - (void)cycleSubtitleTrack;

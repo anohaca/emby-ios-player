@@ -813,6 +813,12 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             shouldResumeAfterForeground = false
             player.setPaused(false)
             UIApplication.shared.isIdleTimerDisabled = true
+        } else if !player.isPaused {
+            player.nudgeVideoOutputAfterForeground()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                guard let self, !self.player.isPaused, !self.didRequestClose else { return }
+                self.player.nudgeVideoOutputAfterForeground()
+            }
         }
 
         #if DEBUG
@@ -1448,6 +1454,9 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         player.onPausedChanged = { [weak self] paused in
             Task { @MainActor in
                 guard let self else { return }
+                if paused {
+                    self.cancelLongPressSpeedIfNeeded()
+                }
                 self.controlsView.setPaused(paused)
                 self.manager?.setPlaybackRequestStatus(status: paused ? .paused : .playing)
             }
@@ -2680,6 +2689,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         switch state {
         case .began:
             guard longPressSpeedRestoreValue == nil else { return }
+            guard !player.isPaused else { return }
             let restoreSpeed = player.playbackSpeed
             longPressSpeedRestoreValue = restoreSpeed
             let fastSpeed = min(restoreSpeed * longPressSpeedMultiplier, 4.0)
@@ -2703,6 +2713,14 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         default:
             break
         }
+    }
+
+    private func cancelLongPressSpeedIfNeeded() {
+        guard let restoreSpeed = longPressSpeedRestoreValue else { return }
+        longPressSpeedRestoreValue = nil
+        player.setPlaybackSpeed(restoreSpeed)
+        controlsView.updatePlaybackSpeed(restoreSpeed)
+        hideGestureHUDNow()
     }
 
     private func handleVerticalAdjustment(side: PlayerGestureController.VerticalAdjustmentSide,

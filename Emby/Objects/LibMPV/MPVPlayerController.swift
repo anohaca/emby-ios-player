@@ -546,6 +546,10 @@ final class MPVPlayerController: NSObject {
         bridge?.refreshVideoRect()
     }
 
+    func nudgeVideoOutputAfterForeground() {
+        bridge?.nudgeVideoOutputAfterForeground()
+    }
+
     func stop() {
         isPaused = true
         subtitleLoadGeneration += 1

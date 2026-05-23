@@ -678,6 +678,16 @@ static NSString *MPVXMLTextEscapedString(NSString *string)
     [self queueVideoRectRefreshAfterDelay:0.25];
 }
 
+- (void)nudgeVideoOutputAfterForeground
+{
+    if (!self.mpv)
+        return;
+
+    const char *cmd[] = {"seek", "0", "relative", "exact", NULL};
+    [self commandAsync:cmd];
+    [self notifyDiagnosticLine:@"mpv-foreground-video-nudge command=seek-relative-zero"];
+}
+
 - (void)queueVideoRectRefreshAfterDelay:(NSTimeInterval)delay
 {
     dispatch_block_t block = ^{

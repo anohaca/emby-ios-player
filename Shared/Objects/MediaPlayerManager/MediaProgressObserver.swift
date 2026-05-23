@@ -176,6 +176,8 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
                 }
                 self.notifyRelatedMetadataShouldRefresh(for: item)
             }
+
+            await self.reconcileCompletedEpisodeAncestorsIfNeeded(for: item, seconds: seconds)
         }
     }
 
@@ -255,5 +257,86 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
     @MainActor
     private func notifyRelatedMetadataShouldRefresh(for item: MediaPlayerItem) {
         HomeRefreshInvalidationStore.markAndPostRelatedMetadataRefresh(for: item.baseItem, userSession: userSession)
+    }
+
+    private func reconcileCompletedEpisodeAncestorsIfNeeded(for item: MediaPlayerItem, seconds: Duration?) async {
+        let baseItem = item.baseItem
+        guard baseItem.type == .episode else { return }
+        guard isPlaybackNearEnd(item: baseItem, seconds: seconds) else { return }
+
+        await MainActor.run {
+            HomeItemUserDataOverrideStore.markPlayed(
+                item: baseItem,
+                isPlayed: true,
+                serverID: userSession.server.id,
+                userID: userSession.user.id
+            )
+        }
+
+        guard let seriesID = baseItem.seriesID ?? baseItem.parentID, seriesID.isNotEmpty else { return }
+
+        var parameters = EmbyPortItemsParameters()
+        parameters.enableUserData = true
+        parameters.fields = .MinimumFields
+        parameters.includeItemTypes = [.episode]
+        parameters.isRecursive = true
+        parameters.parentID = seriesID
+
+        guard let response = try? await userSession.embyClient.items(
+            parameters,
+            as: EmbyPortItemsResponse<BaseItemDto>.self
+        ) else {
+            return
+        }
+
+        let episodes = response.items ?? []
+        guard episodes.isNotEmpty else { return }
+
+        await MainActor.run {
+            let adjustedEpisodes = HomeItemUserDataOverrideStore.applyingItemOnlyOverrides(
+                to: episodes,
+                serverID: userSession.server.id,
+                userID: userSession.user.id
+            )
+
+            let episodesBySeasonID = Dictionary(
+                grouping: adjustedEpisodes,
+                by: { $0.seasonID ?? $0.parentID ?? "" }
+            )
+            let playedSeasonIDs = Set(
+                episodesBySeasonID.compactMap { seasonID, episodes -> String? in
+                    guard seasonID.isNotEmpty else { return nil }
+                    return episodes.allSatisfy { $0.userData?.isPlayed == true } ? seasonID : nil
+                }
+            )
+
+            for seasonID in playedSeasonIDs {
+                HomeItemUserDataOverrideStore.markPlayed(
+                    itemID: seasonID,
+                    isPlayed: true,
+                    serverID: userSession.server.id,
+                    userID: userSession.user.id
+                )
+            }
+
+            guard adjustedEpisodes.allSatisfy({ $0.userData?.isPlayed == true }) else {
+                HomeRefreshInvalidationStore.markAndPostRelatedMetadataRefresh(for: baseItem, userSession: userSession)
+                return
+            }
+
+            HomeItemUserDataOverrideStore.markPlayed(
+                itemID: seriesID,
+                isPlayed: true,
+                serverID: userSession.server.id,
+                userID: userSession.user.id
+            )
+            HomeRefreshInvalidationStore.markAndPostRelatedMetadataRefresh(for: baseItem, userSession: userSession)
+        }
+    }
+
+    private func isPlaybackNearEnd(item: BaseItemDto, seconds: Duration?) -> Bool {
+        guard let runtime = item.runtime, runtime > .zero, let seconds, seconds > .zero else { return false }
+        let remaining = runtime - seconds
+        return remaining <= .seconds(5) || seconds.seconds / runtime.seconds >= 0.9
     }
 }

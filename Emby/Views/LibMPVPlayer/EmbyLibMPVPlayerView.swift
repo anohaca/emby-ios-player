@@ -159,6 +159,8 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private var bufferingIndicatorVisibilityGeneration = 0
     private var isInBackground = false
     private var shouldResumeAfterForeground = false
+    private var foregroundResumeBeganAt: Date?
+    private var didLogForegroundTimeAdvance = false
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     private var pendingResumeObservation: (itemID: String, expectedSeconds: Double)?
     private var currentSubtitleIdentifiers: Set<String> = []
@@ -799,6 +801,13 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private func handleAppWillEnterForeground() {
         isInBackground = false
         endBackgroundPauseTask()
+        foregroundResumeBeganAt = Date()
+        didLogForegroundTimeAdvance = false
+
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+        playerView.refreshRenderingSurfaceForForeground()
+        scheduleVideoRectRefreshBurst()
 
         if shouldResumeAfterForeground {
             shouldResumeAfterForeground = false
@@ -806,14 +815,11 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             UIApplication.shared.isIdleTimerDisabled = true
         }
 
-        view.setNeedsLayout()
-        view.layoutIfNeeded()
-        scheduleVideoRectRefreshBurst()
-
         #if DEBUG
-        NSLog("EmbyPlayerBackground willEnterForeground resumed=%@ time=%.3f",
+        NSLog("EmbyPlayerBackground willEnterForeground resumed=%@ time=%.3f drawable=%@",
               (!player.isPaused).description,
-              player.currentTime)
+              player.currentTime,
+              NSCoder.string(for: playerView.metalLayer.drawableSize))
         #endif
     }
 
@@ -1413,6 +1419,15 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                 self.controlsView.update(time: time, duration: duration)
 
                 #if DEBUG
+                if let beganAt = self.foregroundResumeBeganAt, !self.didLogForegroundTimeAdvance, time > 0 {
+                    self.didLogForegroundTimeAdvance = true
+                    NSLog(
+                        "EmbyPlayerBackground foregroundTimeAdvance elapsed=%.3f time=%.3f duration=%.3f",
+                        Date().timeIntervalSince(beganAt),
+                        time,
+                        duration
+                    )
+                }
                 if let resume = self.pendingResumeObservation, duration > 0, time > 0 {
                     let reachedResumePoint = resume.expectedSeconds < 3 || time >= resume.expectedSeconds - 2
                     if reachedResumePoint {
@@ -1458,6 +1473,15 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         player.onFirstFrameRendered = { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
+                #if DEBUG
+                if let beganAt = self.foregroundResumeBeganAt {
+                    NSLog(
+                        "EmbyPlayerBackground foregroundFirstFrame elapsed=%.3f",
+                        Date().timeIntervalSince(beganAt)
+                    )
+                    self.foregroundResumeBeganAt = nil
+                }
+                #endif
                 self.revealVideoSurfaceForPlayback()
                 self.isBuffering.value = false
             }

@@ -43,6 +43,18 @@ final class MPVPlayerView: UIView {
         notifyIfReadyForRendering()
     }
 
+    func refreshRenderingSurfaceForForeground() {
+        setNeedsLayout()
+        layoutIfNeeded()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        renderLayer.isHidden = false
+        renderLayer.opacity = 1
+        updateDrawableSize()
+        CATransaction.commit()
+        notifyIfReadyForRendering()
+    }
+
     private func configureLayer() {
         backgroundColor = .black
         isOpaque = true

@@ -7,6 +7,7 @@ import PreferencesView
 import SwiftUI
 import Transmission
 import UIKit
+import UniformTypeIdentifiers
 
 struct EmbyLibMPVPlayerView: View {
     @Environment(\.presentationCoordinator)
@@ -92,7 +93,8 @@ private struct EmbyLibMPVPlayerRepresentable: UIViewControllerRepresentable {
 final class EmbyLibMPVPlayerViewController: UIViewController,
     VideoMediaPlayerProxy,
     MediaPlayerOffsetConfigurable,
-    MediaPlayerSubtitleConfigurable
+    MediaPlayerSubtitleConfigurable,
+    UIDocumentPickerDelegate
 {
     private final class PlayerRootView: UIView {
         var onMoveToWindow: ((UIWindow?) -> Void)?
@@ -167,6 +169,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private var subtitleScale = 1.0
     private var subtitleBorderSize = 3.0
     private var subtitleAdjustmentSettingsDidChange = false
+    private var shouldResumeAfterSubtitlePicker = false
     private var isReadyToStartPlayback = false
     private var pendingPlaybackItemForPresentation: MediaPlayerItem?
     private var persistSubtitleAdjustmentWorkItem: DispatchWorkItem?
@@ -1560,8 +1563,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         }
 
         controlsView.onOpenSubtitle = { [weak self] in
-            self?.showControls()
-            self?.scheduleControlsHide()
+            self?.presentSubtitleDocumentPicker()
         }
 
         controlsView.onSubtitlePositionChanged = { [weak self] position in
@@ -2271,6 +2273,68 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         controlsView.suppressPausedIndicatorTemporarily()
         manager?.playNewItem(provider: provider)
         showControls()
+    }
+
+    private func presentSubtitleDocumentPicker() {
+        cancelControlsHide()
+        showControls()
+        shouldResumeAfterSubtitlePicker = !player.isPaused
+        if shouldResumeAfterSubtitlePicker {
+            controlsView.suppressPausedIndicatorTemporarily()
+            player.setPaused(true)
+        }
+
+        let subtitleTypes = Self.subtitleDocumentTypes
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: subtitleTypes, asCopy: false)
+        picker.delegate = self
+        picker.allowsMultipleSelection = false
+        picker.modalPresentationStyle = .formSheet
+        present(picker, animated: true)
+    }
+
+    private static var subtitleDocumentTypes: [UTType] {
+        let extensions = [
+            "ass",
+            "srt",
+            "ssa",
+            "sub",
+            "vtt",
+            "webvtt",
+        ]
+        let types = extensions.compactMap { UTType(filenameExtension: $0) }
+        return types.isEmpty ? [.plainText] : types + [.plainText]
+    }
+
+    nonisolated func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        Task { @MainActor [weak self] in
+            guard let self, let url = urls.first else { return }
+            let shouldResume = self.shouldResumeAfterSubtitlePicker
+            self.shouldResumeAfterSubtitlePicker = false
+            let title = url.deletingPathExtension().lastPathComponent
+            self.pendingDefaultExternalSubtitleTitle = title
+            _ = self.addSubtitleIfNeeded(
+                url: url,
+                title: title,
+                reason: "user-selected"
+            )
+            if shouldResume {
+                self.player.setPaused(false)
+            }
+            self.showControls()
+            self.scheduleControlsHide()
+        }
+    }
+
+    nonisolated func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let shouldResume = self.shouldResumeAfterSubtitlePicker
+            self.shouldResumeAfterSubtitlePicker = false
+            if shouldResume {
+                self.player.setPaused(false)
+            }
+            self.scheduleControlsHide()
+        }
     }
 
     private func updateEpisodeNavigation() {

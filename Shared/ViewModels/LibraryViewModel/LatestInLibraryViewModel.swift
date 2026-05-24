@@ -15,6 +15,8 @@ final class LatestInLibraryViewModel: PagingLibraryViewModel<BaseItemDto>, Ident
     }
 
     override func get(page: Int) async throws -> [BaseItemDto] {
+        guard let userSession else { return [] }
+
         if usesFilteredItemsQuery {
             let parameters = itemParameters(for: page)
             let response: EmbyPortItemsResponse<BaseItemDto> = try await userSession.embyClient.items(
@@ -35,6 +37,8 @@ final class LatestInLibraryViewModel: PagingLibraryViewModel<BaseItemDto>, Ident
     }
 
     private func latestItems(limit: Int) async throws -> [BaseItemDto] {
+        guard let userSession else { return [] }
+
         var unplayedParameters = parameters(limit: limit)
         unplayedParameters.isPlayed = false
 
@@ -58,6 +62,8 @@ final class LatestInLibraryViewModel: PagingLibraryViewModel<BaseItemDto>, Ident
     }
 
     override func getRandomItem() async -> BaseItemDto? {
+        guard let userSession else { return nil }
+
         var parameters = itemParameters(for: nil)
         parameters.limit = 1
         parameters.sortBy = [ItemSortBy.random]

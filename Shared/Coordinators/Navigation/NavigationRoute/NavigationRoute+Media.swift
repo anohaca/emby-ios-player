@@ -117,23 +117,23 @@ struct VideoPlayerViewShim: View {
         Group {
             #if os(iOS)
             EmbyLibMPVPlayerView(manager: manager)
+                .ignoresSafeArea()
+                .persistentSystemOverlays(.hidden)
+                .toolbar(.hidden, for: .navigationBar)
+                .statusBar(hidden: true)
             #else
             if Defaults[.VideoPlayer.videoPlayerType] == .emby {
                 VideoPlayer()
             } else {
                 NativeVideoPlayer()
             }
+                .environment(\.safeAreaInsets, safeAreaInsets)
+                .onSizeChanged { _, safeArea in
+                    self.safeAreaInsets = safeArea.max(EdgeInsets.edgePadding)
+                }
             #endif
         }
         .colorScheme(.dark) // use over `preferredColorScheme(.dark)` to not have destination change
-        .environment(\.safeAreaInsets, safeAreaInsets)
         .supportedOrientations(supportedPlaybackOrientations)
-        .ignoresSafeArea()
-        .persistentSystemOverlays(.hidden)
-        .toolbar(.hidden, for: .navigationBar)
-        .statusBar(hidden: true)
-        .onSizeChanged { _, safeArea in
-            self.safeAreaInsets = safeArea.max(EdgeInsets.edgePadding)
-        }
     }
 }

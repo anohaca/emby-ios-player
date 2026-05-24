@@ -171,11 +171,13 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private var subtitleScale = 1.0
     private var subtitleBorderSize = 3.0
     private var subtitleAdjustmentSettingsDidChange = false
+    private var lastSubtitleAdjustmentLogAt: Date?
     private var shouldResumeAfterSubtitlePicker = false
     private var isReadyToStartPlayback = false
     private var pendingPlaybackItemForPresentation: MediaPlayerItem?
     private var persistSubtitleAdjustmentWorkItem: DispatchWorkItem?
     private var reapplySubtitleAdjustmentWorkItem: DispatchWorkItem?
+    private var pendingLandscapeRequestWorkItem: DispatchWorkItem?
     private var subtitleVisibleBottomConstraint: NSLayoutConstraint?
     private var subtitleControlsBottomConstraint: NSLayoutConstraint?
     private static var orientationOverrideGeneration = 0
@@ -363,6 +365,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        guard !didRequestClose else { return }
         if !didRequestClose,
            view.window?.windowScene?.interfaceOrientation.isLandscape != true
         {
@@ -434,6 +437,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        guard !didRequestClose else { return }
         updateRenderedSubtitleTransform()
         player.refreshVideoRect()
     }
@@ -463,7 +467,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private func requestLandscapeOrientation() {
         guard UIDevice.isPhone else { return }
 
-        Self.prepareLandscapeOrientationForPresentation()
+        let generation = Self.prepareLandscapeOrientationForPresentation(requestSceneImmediately: false)
         refreshSupportedOrientations()
 
         let scenes: [UIWindowScene]
@@ -478,13 +482,39 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             return
         }
 
-        scenes.forEach { scene in
-            requestSceneOrientation(.landscapeRight, on: scene, logName: "landscape")
+        pendingLandscapeRequestWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, !self.didRequestClose else { return }
+            guard generation == Self.orientationOverrideGeneration else { return }
+            self.refreshSupportedOrientations()
+            scenes.forEach { scene in
+                self.requestSceneOrientation(.landscapeRight, on: scene, logName: "landscape")
+            }
         }
+        pendingLandscapeRequestWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: workItem)
     }
 
-    static func prepareLandscapeOrientationForPresentation(requestSceneImmediately: Bool = true) {
-        guard UIDevice.isPhone else { return }
+    @discardableResult
+    static func prepareLandscapeOrientationForPresentation(requestSceneImmediately: Bool = true) -> Int {
+        guard UIDevice.isPhone else { return orientationOverrideGeneration }
+
+        let isAlreadyPrepared = AppDelegate.phoneOrientationLock == .landscape &&
+            UIPreferencesHostingController.globalSupportedOrientationsOverride == .landscape &&
+            UIPreferencesHostingController.globalPreferredInterfaceOrientationOverride == .landscapeRight
+        if isAlreadyPrepared {
+            let generation = orientationOverrideGeneration
+            Self.refreshAllSupportedOrientations()
+            if requestSceneImmediately {
+                DispatchQueue.main.async {
+                    guard generation == orientationOverrideGeneration else { return }
+                    Self.foregroundWindowScenes.forEach { scene in
+                        Self.requestSceneOrientation(.landscapeRight, on: scene, logName: "landscape-prepare")
+                    }
+                }
+            }
+            return generation
+        }
 
         orientationOverrideGeneration += 1
         let generation = orientationOverrideGeneration
@@ -504,6 +534,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             requestSceneImmediately.description
         )
         #endif
+        return generation
     }
 
     static func requestLandscapeOrientationForPresentationTransition() {
@@ -709,9 +740,11 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private func closePlayer() {
         guard !didRequestClose else { return }
         didRequestClose = true
-        reapplySubtitleAdjustmentWorkItem?.cancel()
-        reapplySubtitleAdjustmentWorkItem = nil
+        pendingLandscapeRequestWorkItem?.cancel()
+        pendingLandscapeRequestWorkItem = nil
+        cancelSubtitleAdjustmentReapply()
         persistSubtitleAdjustmentSettingsNow()
+        setBufferingIndicatorVisible(false, animated: false)
         hidePlayerViewForImmediateDismissal()
         prepareForSimultaneousPortraitDismissal()
         cancelControlsHide()
@@ -1267,6 +1300,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     }
 
     private func setBufferingIndicatorVisible(_ visible: Bool, animated: Bool) {
+        guard !didRequestClose || !visible else { return }
         bufferingIndicatorVisibilityGeneration += 1
         let generation = bufferingIndicatorVisibilityGeneration
         guard bufferingIndicatorVisible != visible || bufferingIndicator.isHidden == visible else {
@@ -1499,6 +1533,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         player.onSubtitleTracksChanged = { [weak self] tracks, selectedID in
             Task { @MainActor in
                 guard let self else { return }
+                guard !self.didRequestClose else { return }
                 self.controlsView.updateSubtitleTracks(tracks, selectedID: selectedID)
 
                 #if DEBUG
@@ -1539,11 +1574,12 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         player.onSubtitleTextChanged = { [weak self] text in
             Task { @MainActor in
                 guard let self else { return }
+                guard !self.didRequestClose else { return }
                 if self.usesSubtitleTextFallback {
                     self.updateRenderedSubtitle(text)
                 }
                 if self.controlsView.isSubtitleAdjustmentPanelVisible {
-                    self.scheduleSubtitleAdjustmentReapply(reason: "subtitle-text-changed", after: 0.02)
+                    self.scheduleSubtitleAdjustmentReapply(reason: "subtitle-text-changed", after: 0.12)
                 }
             }
         }
@@ -2535,10 +2571,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         updateRenderedSubtitleTransform()
         controlsView.updateSubtitleAdjustment(position: subtitlePosition, scale: subtitleScale, borderSize: subtitleBorderSize)
         scheduleSubtitleAdjustmentPersistence()
-
-        #if DEBUG
-        NSLog("EmbyPlayerSubtitleAdjustment position=%.2f scale=%.2f border=%.2f", subtitlePosition, subtitleScale, subtitleBorderSize)
-        #endif
+        logSubtitleAdjustmentIfNeeded()
     }
 
     private func setSubtitleScale(_ scale: Double) {
@@ -2552,10 +2585,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         }
         controlsView.updateSubtitleAdjustment(position: subtitlePosition, scale: subtitleScale, borderSize: subtitleBorderSize)
         scheduleSubtitleAdjustmentPersistence()
-
-        #if DEBUG
-        NSLog("EmbyPlayerSubtitleAdjustment position=%.2f scale=%.2f border=%.2f", subtitlePosition, subtitleScale, subtitleBorderSize)
-        #endif
+        logSubtitleAdjustmentIfNeeded()
     }
 
     private func setSubtitleBorderSize(_ borderSize: Double) {
@@ -2570,10 +2600,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         }
         controlsView.updateSubtitleAdjustment(position: subtitlePosition, scale: subtitleScale, borderSize: subtitleBorderSize)
         scheduleSubtitleAdjustmentPersistence()
-
-        #if DEBUG
-        NSLog("EmbyPlayerSubtitleAdjustment position=%.2f scale=%.2f border=%.2f", subtitlePosition, subtitleScale, subtitleBorderSize)
-        #endif
+        logSubtitleAdjustmentIfNeeded()
     }
 
     private func applySubtitleAdjustmentSettings() {
@@ -2603,12 +2630,32 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     }
 
     private func scheduleSubtitleAdjustmentReapply(reason: String, after delay: TimeInterval) {
+        guard !didRequestClose else { return }
         reapplySubtitleAdjustmentWorkItem?.cancel()
         let workItem = DispatchWorkItem { [weak self] in
-            self?.reapplySubtitleAdjustmentSettings(reason: reason)
+            guard let self, !self.didRequestClose else { return }
+            self.reapplySubtitleAdjustmentSettings(reason: reason)
         }
         reapplySubtitleAdjustmentWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+
+    private func cancelSubtitleAdjustmentReapply() {
+        reapplySubtitleAdjustmentWorkItem?.cancel()
+        reapplySubtitleAdjustmentWorkItem = nil
+    }
+
+    private func logSubtitleAdjustmentIfNeeded() {
+        #if DEBUG
+        let now = Date()
+        if let lastSubtitleAdjustmentLogAt,
+           now.timeIntervalSince(lastSubtitleAdjustmentLogAt) < 0.25
+        {
+            return
+        }
+        lastSubtitleAdjustmentLogAt = now
+        NSLog("EmbyPlayerSubtitleAdjustment position=%.2f scale=%.2f border=%.2f", subtitlePosition, subtitleScale, subtitleBorderSize)
+        #endif
     }
 
     private func scheduleSubtitleAdjustmentPersistence() {

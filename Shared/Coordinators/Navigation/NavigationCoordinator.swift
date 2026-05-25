@@ -60,11 +60,18 @@ final class NavigationCoordinator: ObservableObject {
 
             if route.id == NavigationRoute.videoPlayerID {
                 #if os(iOS)
-                EmbyLibMPVPlayerViewController.prepareLandscapeOrientationForPresentation(requestSceneImmediately: false)
-                #endif
+                Notifications[.willPresentVideoPlayer].post()
+                DispatchQueue.main.async {
+                    EmbyLibMPVPlayerViewController.prepareLandscapeOrientationForPresentation(requestSceneImmediately: false)
+                    EmbyPlayerWindowPresenter.shared.present(in: nil) {
+                        route.destination
+                    }
+                }
+                #else
                 withAnimation {
                     presentedFullScreen = route
                 }
+                #endif
             } else {
                 withAnimation {
                     presentedFullScreen = route

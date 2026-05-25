@@ -54,8 +54,43 @@ public class UIPreferencesHostingController: UIHostingController<AnyView> {
 
     public var onDidDisappearAfterDismiss: (@MainActor () -> Void)?
 
+    override public func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+
+        if onDidDisappearAfterDismiss != nil {
+            UIView.performWithoutAnimation {
+                view.layer.removeAllAnimations()
+                view.alpha = 0
+                view.isUserInteractionEnabled = false
+                view.backgroundColor = .clear
+            }
+        }
+
+        #if DEBUG
+        NSLog(
+            "EmbyFullscreenHostTrace viewWillDisappear animated=%@ window=%@ presenting=%@ presented=%@ transitionDuration=%.3f",
+            animated.description,
+            (view.window != nil).description,
+            (presentingViewController != nil).description,
+            (presentedViewController != nil).description,
+            transitionCoordinator?.transitionDuration ?? -1
+        )
+        #endif
+    }
+
     override public func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
+
+        #if DEBUG
+        NSLog(
+            "EmbyFullscreenHostTrace viewDidDisappear animated=%@ window=%@ presenting=%@ presented=%@ hasCompletion=%@",
+            animated.description,
+            (view.window != nil).description,
+            (presentingViewController != nil).description,
+            (presentedViewController != nil).description,
+            (onDidDisappearAfterDismiss != nil).description
+        )
+        #endif
 
         guard onDidDisappearAfterDismiss != nil else { return }
 

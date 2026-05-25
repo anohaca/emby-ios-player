@@ -12,6 +12,7 @@ import Defaults
 import Factory
 import Foundation
 import IdentifiedCollections
+import Nuke
 import OrderedCollections
 
 @MainActor
@@ -25,6 +26,7 @@ final class HomeViewModel: ViewModel, Stateful {
         case error(ErrorMessage)
         case refreshIfPendingInvalidation
         case setIsPlayed(Bool, BaseItemDto)
+        case setRefreshSuspended(Bool)
         case refresh
     }
 
@@ -61,6 +63,9 @@ final class HomeViewModel: ViewModel, Stateful {
     private var backgroundRefreshTask: AnyCancellable?
     private var notificationRefreshTask: AnyCancellable?
     private var refreshTask: AnyCancellable?
+    private var resumeImagePreheatTask: Task<Void, Never>?
+    private var isRefreshSuspended = false
+    private var didHoldSuspendedRefreshNotification = false
     private static let resumeItemLimit = 20
 
     var nextUpViewModel: NextUpLibraryViewModel = .init()
@@ -116,6 +121,16 @@ final class HomeViewModel: ViewModel, Stateful {
                 }
             }
             .store(in: &cancellables)
+
+        Notifications[.willPresentVideoPlayer]
+            .publisher
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.send(.setRefreshSuspended(true))
+                }
+            }
+            .store(in: &cancellables)
     }
 
     func respond(to action: Action) -> State {
@@ -127,6 +142,13 @@ final class HomeViewModel: ViewModel, Stateful {
             }
             return state
         case .backgroundRefresh:
+            guard !isRefreshSuspended else {
+                markPendingHomeRefresh()
+                #if DEBUG
+                NSLog("EmbyHomeExitTrace backgroundRefresh-skipped reason=suspended")
+                #endif
+                return state
+            }
 
             backgroundRefreshTask?.cancel()
             backgroundStates.insert(.refresh)
@@ -167,6 +189,12 @@ final class HomeViewModel: ViewModel, Stateful {
             applyUserDataOverridesToVisibleItems()
 
             guard hasPendingHomeRefresh() else { return state }
+            guard !isRefreshSuspended else {
+                #if DEBUG
+                NSLog("EmbyHomeExitTrace pending-refresh-held reason=suspended")
+                #endif
+                return state
+            }
 
             if state == .content {
                 self.send(.backgroundRefresh)
@@ -184,7 +212,33 @@ final class HomeViewModel: ViewModel, Stateful {
             .store(in: &cancellables)
 
             return state
+        case let .setRefreshSuspended(isSuspended):
+            isRefreshSuspended = isSuspended
+            didHoldSuspendedRefreshNotification = false
+            #if DEBUG
+            NSLog("EmbyHomeExitTrace refresh-suspended=%@", isSuspended.description)
+            #endif
+
+            if isSuspended {
+                if backgroundStates.contains(.refresh) || refreshTask != nil || backgroundRefreshTask != nil {
+                    markPendingHomeRefresh()
+                }
+                backgroundRefreshTask?.cancel()
+                notificationRefreshTask?.cancel()
+                refreshTask?.cancel()
+                backgroundStates.remove(.refresh)
+            }
+
+            return state
         case .refresh:
+            guard !isRefreshSuspended else {
+                markPendingHomeRefresh()
+                #if DEBUG
+                NSLog("EmbyHomeExitTrace refresh-skipped reason=suspended")
+                #endif
+                return state == .content ? state : .refreshing
+            }
+
             backgroundRefreshTask?.cancel()
             refreshTask?.cancel()
 
@@ -230,29 +284,90 @@ final class HomeViewModel: ViewModel, Stateful {
     }
 
     private func refresh() async throws {
+        #if DEBUG
+        let refreshStart = CACurrentMediaTime()
+        NSLog(
+            "EmbyHomeExitTrace refresh-begin state=%@ background=%@ resume=%d libraries=%d",
+            String(describing: state),
+            backgroundStates.contains(.refresh).description,
+            resumeItems.count,
+            libraries.count
+        )
+        #endif
 
         try await refreshLibrary(nextUpViewModel)
+        try Task.checkCancellation()
+        #if DEBUG
+        NSLog("EmbyHomeExitTrace refresh-step nextUp elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, nextUpViewModel.elements.count)
+        #endif
         try await refreshLibrary(recentlyAddedViewModel)
+        try Task.checkCancellation()
+        #if DEBUG
+        NSLog("EmbyHomeExitTrace refresh-step recentlyAdded elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, recentlyAddedViewModel.elements.count)
+        #endif
 
         let libraries = try await getLibraries()
+        try Task.checkCancellation()
+        #if DEBUG
+        NSLog("EmbyHomeExitTrace refresh-step libraries elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, libraries.count)
+        #endif
         let resumeItems = try await getResumeItems(for: libraries)
+        try Task.checkCancellation()
+        #if DEBUG
+        NSLog("EmbyHomeExitTrace refresh-step resume elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, resumeItems.count)
+        #endif
 
-        for library in libraries {
+        for (index, library) in libraries.enumerated() {
             try await refreshLibrary(library)
+            try Task.checkCancellation()
+            #if DEBUG
+            NSLog(
+                "EmbyHomeExitTrace refresh-step library[%d] elapsed=%.3f title=%@ count=%d",
+                index,
+                CACurrentMediaTime() - refreshStart,
+                library.parent?.displayTitle ?? "<nil>",
+                library.elements.count
+            )
+            #endif
         }
 
         await MainActor.run {
+            #if DEBUG
+            let applyStart = CACurrentMediaTime()
+            #endif
             self.resumeItems.elements = resumeItems
             self.libraries = libraries
             self.applyUserDataOverridesToVisibleItems()
             self.cacheCurrentHomeState()
+            self.preheatResumeItemImages()
             _ = self.consumePendingHomeRefresh()
+            #if DEBUG
+            NSLog(
+                "EmbyHomeExitTrace refresh-apply elapsed=%.3f apply=%.3f resume=%d libraries=%d",
+                CACurrentMediaTime() - refreshStart,
+                CACurrentMediaTime() - applyStart,
+                self.resumeItems.count,
+                self.libraries.count
+            )
+            #endif
         }
     }
 
     private func refreshLibrary(_ viewModel: PagingLibraryViewModel<BaseItemDto>) async throws {
+        #if DEBUG
+        let start = CACurrentMediaTime()
+        let title = viewModel.parent?.displayTitle ?? String(describing: type(of: viewModel))
+        #endif
         try await viewModel.refresh()
         viewModel.state = .content
+        #if DEBUG
+        NSLog(
+            "EmbyHomeExitTrace refresh-library title=%@ elapsed=%.3f count=%d",
+            title,
+            CACurrentMediaTime() - start,
+            viewModel.elements.count
+        )
+        #endif
     }
 
     private func markPendingHomeRefresh() {
@@ -281,6 +396,18 @@ final class HomeViewModel: ViewModel, Stateful {
 
     private func scheduleNotificationDrivenRefresh() {
         notificationRefreshTask?.cancel()
+        guard !isRefreshSuspended else {
+            #if DEBUG
+            if !didHoldSuspendedRefreshNotification {
+                NSLog("EmbyHomeExitTrace notification-refresh held reason=suspended pending=%@", hasPendingHomeRefresh().description)
+            }
+            #endif
+            didHoldSuspendedRefreshNotification = true
+            return
+        }
+        #if DEBUG
+        NSLog("EmbyHomeExitTrace notification-refresh scheduled pending=%@", hasPendingHomeRefresh().description)
+        #endif
 
         notificationRefreshTask = Task { [weak self] in
             do {
@@ -291,6 +418,9 @@ final class HomeViewModel: ViewModel, Stateful {
 
             await MainActor.run {
                 guard let self, self.state == .content, self.hasPendingHomeRefresh() else { return }
+                #if DEBUG
+                NSLog("EmbyHomeExitTrace notification-refresh fire")
+                #endif
                 self.send(.backgroundRefresh)
             }
         }
@@ -413,6 +543,7 @@ final class HomeViewModel: ViewModel, Stateful {
         }
 
         resumeItems.elements = payload.resumeItems
+        preheatResumeItemImages()
 
         nextUpViewModel.elements = Self.identifiedItems(payload.nextUpItems)
         nextUpViewModel.state = .content
@@ -455,6 +586,28 @@ final class HomeViewModel: ViewModel, Stateful {
         )
 
         HomeViewModelCacheStore.save(payload)
+    }
+
+    private func preheatResumeItemImages() {
+        let sources = resumeItems
+            .prefix(6)
+            .flatMap { item in
+                item.landscapeImageSources(maxWidth: 300, quality: 90)
+            }
+            .compactMap(\.url)
+
+        guard sources.isNotEmpty else { return }
+
+        resumeImagePreheatTask?.cancel()
+        resumeImagePreheatTask = Task {
+            await withTaskGroup(of: Void.self) { group in
+                for url in sources.prefix(18) {
+                    group.addTask {
+                        _ = try? await ImagePipeline.Emby.posters.image(for: url)
+                    }
+                }
+            }
+        }
     }
 
     private static func identifiedItems(_ items: [BaseItemDto]) -> IdentifiedArray<Int, BaseItemDto> {

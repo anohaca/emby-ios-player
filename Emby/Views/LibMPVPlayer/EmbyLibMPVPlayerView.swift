@@ -16,6 +16,8 @@ struct EmbyLibMPVPlayerView: View {
     private var scenePhase
 
     let manager: MediaPlayerManager
+    var onDismiss: (() -> Void)?
+    var usesManualWindowPresentation = false
 
     @State
     private var isBeingDismissedByTransition = false
@@ -25,6 +27,7 @@ struct EmbyLibMPVPlayerView: View {
     var body: some View {
         EmbyLibMPVPlayerRepresentable(
             manager: manager,
+            usesManualWindowPresentation: usesManualWindowPresentation,
             onClose: {
                 dismissPlayer()
             },
@@ -57,7 +60,17 @@ struct EmbyLibMPVPlayerView: View {
         guard !isBeingDismissedByTransition else { return }
         isBeingDismissedByTransition = true
 
-        EmbyLibMPVPlayerViewController.beginPortraitOrientationForDismissal()
+        if !usesManualWindowPresentation {
+            EmbyLibMPVPlayerViewController.beginPortraitOrientationForDismissal()
+        }
+        if let onDismiss {
+            #if DEBUG
+            NSLog("EmbyPlayerDismiss route=player-window")
+            #endif
+            onDismiss()
+            return
+        }
+
         #if DEBUG
         NSLog("EmbyPlayerDismiss route=presentation-coordinator isPresented=%@", presentationCoordinator.isPresented.description)
         #endif
@@ -69,17 +82,22 @@ struct EmbyLibMPVPlayerView: View {
 
 private struct EmbyLibMPVPlayerRepresentable: UIViewControllerRepresentable {
     let manager: MediaPlayerManager
+    let usesManualWindowPresentation: Bool
     let onClose: () -> Void
     let onDidDisappear: () -> Void
 
     func makeUIViewController(context: Context) -> EmbyLibMPVPlayerViewController {
-        let controller = EmbyLibMPVPlayerViewController(manager: manager)
+        let controller = EmbyLibMPVPlayerViewController(
+            manager: manager,
+            usesManualWindowPresentation: usesManualWindowPresentation
+        )
         controller.onClose = onClose
         controller.onDidDisappear = onDidDisappear
         return controller
     }
 
     func updateUIViewController(_ uiViewController: EmbyLibMPVPlayerViewController, context: Context) {
+        uiViewController.usesManualWindowPresentation = usesManualWindowPresentation
         uiViewController.onClose = onClose
         uiViewController.onDidDisappear = onDidDisappear
     }
@@ -113,6 +131,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
     var onClose: (() -> Void)?
     var onDidDisappear: (() -> Void)?
+    var usesManualWindowPresentation: Bool
 
     weak var manager: MediaPlayerManager? {
         didSet {
@@ -184,6 +203,9 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     #if DEBUG
     private var didStartSubtitleBorderExerciseForSmoke = false
     private var didStartSubtitleScaleExerciseForSmoke = false
+    private var exitTraceStartTime: CFTimeInterval?
+    private var exitTraceLastTickTime: CFTimeInterval?
+    private var exitTraceGeneration = 0
     #endif
 
     private var logsAllMPVDiagnosticsForSmoke: Bool {
@@ -243,6 +265,9 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     }
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        if usesManualWindowPresentation {
+            return .portrait
+        }
         if didRequestClose {
             return .allButUpsideDown
         }
@@ -250,6 +275,9 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     }
 
     override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
+        if usesManualWindowPresentation {
+            return .portrait
+        }
         if didRequestClose {
             return .portrait
         }
@@ -257,11 +285,12 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             super.preferredInterfaceOrientationForPresentation
     }
 
-    init(manager: MediaPlayerManager) {
+    init(manager: MediaPlayerManager, usesManualWindowPresentation: Bool = false) {
         Defaults.Keys.migrateSubtitleAdjustmentSettingsToAppSuiteIfNeeded()
         subtitlePosition = Self.clampedSubtitlePosition(Defaults[.VideoPlayer.Subtitle.subtitlePosition])
         subtitleScale = Self.clampedSubtitleScale(Defaults[.VideoPlayer.Subtitle.subtitleScale])
         subtitleBorderSize = Self.clampedSubtitleBorderSize(Defaults[.VideoPlayer.Subtitle.subtitleBorderSize])
+        self.usesManualWindowPresentation = usesManualWindowPresentation
         super.init(nibName: nil, bundle: nil)
         self.manager = manager
         manager.proxy = self
@@ -280,7 +309,9 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         rootView.backgroundColor = .clear
         rootView.onMoveToWindow = { [weak self] window in
             guard window != nil, self?.didRequestClose == false else { return }
-            self?.requestLandscapeOrientation()
+            if self?.usesManualWindowPresentation != true {
+                self?.requestLandscapeOrientation()
+            }
         }
         view = rootView
     }
@@ -357,7 +388,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        if !didRequestClose {
+        if !didRequestClose, !usesManualWindowPresentation {
             Self.prepareLandscapeOrientationForPresentation(requestSceneImmediately: false)
             refreshSupportedOrientations()
         }
@@ -366,7 +397,8 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         guard !didRequestClose else { return }
-        if !didRequestClose,
+        if !usesManualWindowPresentation,
+           !didRequestClose,
            view.window?.windowScene?.interfaceOrientation.isLandscape != true
         {
             requestLandscapeOrientation()
@@ -444,15 +476,34 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
         super.viewWillTransition(to: size, with: coordinator)
+        tracePlayerExit(
+            "viewWillTransition begin size=\(Int(size.width))x\(Int(size.height)) duration=\(String(format: "%.3f", coordinator.transitionDuration))"
+        )
         coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+            self?.tracePlayerExit("viewWillTransition complete cancelled=\(coordinator.isCancelled)")
             self?.view.setNeedsLayout()
             self?.view.layoutIfNeeded()
             self?.scheduleVideoRectRefreshBurst()
         }
     }
 
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        tracePlayerExit("viewWillDisappear animated=\(animated)")
+        tracePlayerExitLayerState("viewWillDisappear")
+        tracePlayerExitTransitionCoordinator("viewWillDisappear")
+        if didRequestClose,
+           UIApplication.shared.applicationState == .active,
+           !isInBackground
+        {
+            shutdownImmediatelyForPlayerDismissalIfNeeded(reason: "viewWillDisappear")
+        }
+    }
+
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
+        tracePlayerExit("viewDidDisappear animated=\(animated)")
+        tracePlayerExitLayerState("viewDidDisappear")
         persistSubtitleAdjustmentSettingsNow()
         guard UIApplication.shared.applicationState == .active, !isInBackground else {
             isInBackground = true
@@ -460,7 +511,9 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         }
         onDidDisappear?()
         shutdownImmediatelyForPlayerDismissalIfNeeded(reason: "viewDidDisappear")
-        Self.finalizePortraitOrientationAfterDismissal()
+        if !usesManualWindowPresentation {
+            Self.finalizePortraitOrientationAfterDismissal()
+        }
         stopAfterDismissAnimationIfNeeded(reason: "viewDidDisappear")
     }
 
@@ -716,6 +769,15 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         on scene: UIWindowScene,
         logName: String
     ) {
+        #if DEBUG
+        let requestStart = CACurrentMediaTime()
+        NSLog(
+            "EmbyPlayerExitTrace orientation-request-begin name=%@ mask=%@ current=%d",
+            logName,
+            String(describing: mask),
+            scene.interfaceOrientation.rawValue
+        )
+        #endif
         if #available(iOS 16.0, *) {
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { error in
                 NSLog("EmbyPlayerOrientation request=%@ result=fail error=%@", logName, error.localizedDescription)
@@ -727,6 +789,14 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         }
 
         NSLog("EmbyPlayerOrientation request=%@ result=sent sceneOrientation=%d", logName, scene.interfaceOrientation.rawValue)
+        #if DEBUG
+        NSLog(
+            "EmbyPlayerExitTrace orientation-request-sent name=%@ elapsed=%.3f current=%d",
+            logName,
+            CACurrentMediaTime() - requestStart,
+            scene.interfaceOrientation.rawValue
+        )
+        #endif
     }
 
     private func requestSceneOrientation(
@@ -737,30 +807,143 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         Self.requestSceneOrientation(mask, on: scene, logName: logName)
     }
 
+    private func startPlayerExitTrace(reason: String) {
+        #if DEBUG
+        exitTraceGeneration += 1
+        let generation = exitTraceGeneration
+        let now = CACurrentMediaTime()
+        exitTraceStartTime = now
+        exitTraceLastTickTime = now
+        NSLog("EmbyPlayerExitTrace start reason=%@", reason)
+        tracePlayerExitLayerState("start")
+        schedulePlayerExitTraceTick(generation: generation)
+        #endif
+    }
+
+    private func schedulePlayerExitTraceTick(generation: Int) {
+        #if DEBUG
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self else { return }
+            guard self.exitTraceGeneration == generation, self.didRequestClose else { return }
+            guard self.view.window != nil else {
+                self.tracePlayerExit("tick-stop no-window")
+                return
+            }
+
+            let now = CACurrentMediaTime()
+            let previousTick = self.exitTraceLastTickTime ?? now
+            let gap = now - previousTick
+            self.exitTraceLastTickTime = now
+            let elapsed = self.exitTraceStartTime.map { now - $0 } ?? -1
+            if elapsed <= 0.5 || Int((elapsed * 100).rounded()) % 25 == 0 {
+                self.tracePlayerExit("tick gap=\(String(format: "%.3f", gap))")
+            }
+            if gap > 0.12 {
+                self.tracePlayerExit("main-thread-gap gap=\(String(format: "%.3f", gap))")
+            }
+            self.schedulePlayerExitTraceTick(generation: generation)
+        }
+        #endif
+    }
+
+    private func tracePlayerExit(_ message: String) {
+        #if DEBUG
+        let elapsed = exitTraceStartTime.map { CACurrentMediaTime() - $0 } ?? -1
+        let sceneOrientation = view.window?.windowScene?.interfaceOrientation.rawValue ?? 0
+        NSLog(
+            "EmbyPlayerExitTrace t=%.3f %@ window=%@ sceneOrientation=%d appState=%ld",
+            elapsed,
+            message,
+            (view.window != nil).description,
+            sceneOrientation,
+            UIApplication.shared.applicationState.rawValue
+        )
+        #endif
+    }
+
+    private func tracePlayerExitTransitionCoordinator(_ source: String) {
+        #if DEBUG
+        guard let coordinator = transitionCoordinator else {
+            tracePlayerExit("\(source) transitionCoordinator=nil")
+            return
+        }
+
+        tracePlayerExit(
+            "\(source) transitionCoordinator duration=\(String(format: "%.3f", coordinator.transitionDuration)) animated=\(coordinator.isAnimated) interactive=\(coordinator.isInteractive)"
+        )
+        coordinator.animate(alongsideTransition: nil) { [weak self] context in
+            self?.tracePlayerExit(
+                "\(source) transitionCompletion cancelled=\(context.isCancelled) percent=\(String(format: "%.3f", context.percentComplete))"
+            )
+            self?.tracePlayerExitLayerState("\(source)-transitionCompletion")
+        }
+        coordinator.notifyWhenInteractionChanges { [weak self] context in
+            self?.tracePlayerExit(
+                "\(source) interactionChanges cancelled=\(context.isCancelled) percent=\(String(format: "%.3f", context.percentComplete))"
+            )
+        }
+        #endif
+    }
+
+    private func tracePlayerExitLayerState(_ source: String) {
+        #if DEBUG
+        let viewAnimations = view.layer.animationKeys()?.joined(separator: ",") ?? "<none>"
+        let playerAnimations = playerView.layer.animationKeys()?.joined(separator: ",") ?? "<none>"
+        let metalAnimations = playerView.metalLayer.animationKeys()?.joined(separator: ",") ?? "<none>"
+        let root = view.window?.rootViewController
+        NSLog(
+            "EmbyPlayerExitTrace layer source=%@ isBeingDismissed=%@ movingFromParent=%@ presenting=%@ presented=%@ rootPresented=%@ viewAnim=%@ playerAnim=%@ metalAnim=%@",
+            source,
+            isBeingDismissed.description,
+            isMovingFromParent.description,
+            (presentingViewController != nil).description,
+            (presentedViewController != nil).description,
+            (root?.presentedViewController != nil).description,
+            viewAnimations,
+            playerAnimations,
+            metalAnimations
+        )
+        #endif
+    }
+
     private func closePlayer() {
         guard !didRequestClose else { return }
+        startPlayerExitTrace(reason: "closePlayer")
+        tracePlayerExit("closePlayer begin")
         didRequestClose = true
+        Notifications[.willDismissVideoPlayer].post()
         pendingLandscapeRequestWorkItem?.cancel()
         pendingLandscapeRequestWorkItem = nil
         cancelSubtitleAdjustmentReapply()
         persistSubtitleAdjustmentSettingsNow()
         setBufferingIndicatorVisible(false, animated: false)
         hidePlayerViewForImmediateDismissal()
+        tracePlayerExitLayerState("after-hidePlayerView")
         prepareForSimultaneousPortraitDismissal()
         cancelControlsHide()
         hideSeekPreviewNow()
         hideGestureHUDNow()
         if controlsView.needsSubtitleAdjustmentDismissalForPlayerDismissal {
+            tracePlayerExit("closePlayer closeSubtitleAdjustment")
             controlsView.closeSubtitleAdjustmentForPlayerDismissal()
         }
         player.setMuted(true)
+        if usesManualWindowPresentation {
+            tracePlayerExit("closePlayer onClose fire immediate-window")
+            onClose?()
+            return
+        }
+        stopTransportForPlayerDismissalIfNeeded(reason: "closePlayer")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
             guard let self, self.didRequestClose, self.view.window != nil else { return }
+            self.tracePlayerExit("closePlayer onClose fire")
             self.onClose?()
         }
+        tracePlayerExit("closePlayer scheduledOnClose")
     }
 
     private func hidePlayerViewForImmediateDismissal() {
+        tracePlayerExit("hidePlayerView begin")
         UIView.performWithoutAnimation {
             view.isUserInteractionEnabled = false
             view.isOpaque = false
@@ -771,7 +954,10 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             playerView.alpha = 0
             playerView.isHidden = true
             playerView.layer.isHidden = true
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
             playerView.metalLayer.opacity = 0
+            CATransaction.commit()
 
             controlsView.layer.removeAllAnimations()
             controlsView.alpha = 0
@@ -781,13 +967,17 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             renderedSubtitleLabel.alpha = 0
             renderedSubtitleLabel.isHidden = true
         }
+        tracePlayerExit("hidePlayerView end")
     }
 
     private func prepareForSimultaneousPortraitDismissal() {
         guard UIDevice.isPhone else { return }
+        guard !usesManualWindowPresentation else { return }
 
+        tracePlayerExit("preparePortrait begin")
         Self.beginPortraitOrientationForDismissal()
         refreshSupportedOrientations()
+        tracePlayerExit("preparePortrait end")
     }
 
     @objc private nonisolated func appDidEnterBackgroundNotification() {
@@ -1039,6 +1229,21 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         isBuffering.value = false
         UIApplication.shared.isIdleTimerDisabled = false
         UIApplication.shared.endReceivingRemoteControlEvents()
+    }
+
+    private func stopTransportForPlayerDismissalIfNeeded(reason: String) {
+        guard !didStopPlayback else { return }
+        didStopPlayback = true
+
+        updateRenderedSubtitle(nil)
+        player.stop()
+        isBuffering.value = false
+        UIApplication.shared.isIdleTimerDisabled = false
+        UIApplication.shared.endReceivingRemoteControlEvents()
+
+        #if DEBUG
+        NSLog("EmbyPlayerTransportStop reason=%@", reason)
+        #endif
     }
 
     func stopForSwiftUIDismantleIfNeeded() {

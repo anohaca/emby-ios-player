@@ -67,9 +67,14 @@ enum PlaybackBitrate: Int, CaseIterable, Displayable, Storable {
         }
     }
 
-    func getMaxBitrate() async throws -> Int {
+    func getMaxBitrate(skipAutoTest: Bool = false) async throws -> Int {
 
         guard self == .auto else { return rawValue }
+
+        if skipAutoTest {
+            NSLog("EmbyPlaybackBitrateTest skipped reason=direct-play-auto")
+            return Self.max.rawValue
+        }
 
         let bitrateTestSize = Defaults[.VideoPlayer.appMaximumBitrateTest]
         do {

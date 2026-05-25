@@ -68,7 +68,12 @@ extension MediaPlayerItem {
             throw ErrorMessage(L10n.unknownError)
         }
 
-        let maxBitrate = try await requestedBitrate.getMaxBitrate()
+        #if os(iOS)
+        let skipAutoBitrateTest = requestedBitrate == .auto && resolvedVideoPlayerType == .emby
+        #else
+        let skipAutoBitrateTest = false
+        #endif
+        let maxBitrate = try await requestedBitrate.getMaxBitrate(skipAutoTest: skipAutoBitrateTest)
 
         let deviceProfile = DeviceProfile.build(
             for: resolvedVideoPlayerType,

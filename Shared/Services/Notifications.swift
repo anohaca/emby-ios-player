@@ -142,6 +142,14 @@ extension Notifications.Key {
         Key("didRequestGlobalRefresh")
     }
 
+    static var willPresentVideoPlayer: Key<Void> {
+        Key("willPresentVideoPlayer")
+    }
+
+    static var willDismissVideoPlayer: Key<Void> {
+        Key("willDismissVideoPlayer")
+    }
+
     static var didFailMigration: Key<Void> {
         Key("didFailMigration")
     }

@@ -89,7 +89,11 @@ extension NavigationRoute {
             id: Self.videoPlayerID,
             style: .fullscreen
         ) {
-            VideoPlayerViewShim(manager: manager)
+            VideoPlayerViewShim(manager: manager, onDismiss: {
+                #if os(iOS)
+                EmbyPlayerWindowPresenter.shared.dismiss()
+                #endif
+            }, usesWindowPresentation: false)
         }
     }
 }
@@ -104,6 +108,8 @@ struct VideoPlayerViewShim: View {
     private var safeAreaInsets: EdgeInsets = .init()
 
     let manager: MediaPlayerManager
+    var onDismiss: (() -> Void)?
+    var usesWindowPresentation = false
 
     private var supportedPlaybackOrientations: UIInterfaceOrientationMask {
         #if os(iOS)
@@ -116,7 +122,11 @@ struct VideoPlayerViewShim: View {
     var body: some View {
         Group {
             #if os(iOS)
-            EmbyLibMPVPlayerView(manager: manager)
+            EmbyLibMPVPlayerView(
+                manager: manager,
+                onDismiss: onDismiss,
+                usesManualWindowPresentation: usesWindowPresentation
+            )
                 .ignoresSafeArea()
                 .persistentSystemOverlays(.hidden)
                 .toolbar(.hidden, for: .navigationBar)
@@ -134,6 +144,6 @@ struct VideoPlayerViewShim: View {
             #endif
         }
         .colorScheme(.dark) // use over `preferredColorScheme(.dark)` to not have destination change
-        .supportedOrientations(supportedPlaybackOrientations)
+        .supportedOrientations(usesWindowPresentation ? .portrait : supportedPlaybackOrientations)
     }
 }

@@ -69,7 +69,7 @@ final class HomeViewModel: ViewModel, Stateful {
     private static let resumeItemLimit = 20
 
     var nextUpViewModel: NextUpLibraryViewModel = .init()
-    var recentlyAddedViewModel: RecentlyAddedLibraryViewModel = .init()
+    var recentlyAddedViewModel: RecentlyAddedLibraryViewModel = .init(homeRecentlyUpdated: true)
 
     override init() {
         super.init()

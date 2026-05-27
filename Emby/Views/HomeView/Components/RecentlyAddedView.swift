@@ -27,7 +27,7 @@ extension HomeView {
                 PosterHStack(
                     title: L10n.recentlyAdded.localizedCapitalized,
                     type: recentlyAddedPosterType,
-                    items: viewModel.elements
+                    items: homeSortedItems
                 ) { item, namespace in
                     router.route(to: .item(item: item), in: namespace)
                 }
@@ -41,6 +41,24 @@ extension HomeView {
                         }
                 }
             }
+        }
+
+        private var homeSortedItems: [BaseItemDto] {
+            viewModel.elements.enumerated().sorted { lhs, rhs in
+                let lhsDate = latestContentDate(for: lhs.element)
+                let rhsDate = latestContentDate(for: rhs.element)
+
+                if lhsDate != rhsDate {
+                    return lhsDate > rhsDate
+                }
+
+                return lhs.offset < rhs.offset
+            }
+            .map(\.element)
+        }
+
+        private func latestContentDate(for item: BaseItemDto) -> Date {
+            item.dateLastMediaAdded ?? item.dateCreated ?? .distantPast
         }
     }
 }

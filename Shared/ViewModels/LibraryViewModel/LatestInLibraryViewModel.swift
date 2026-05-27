@@ -39,26 +39,12 @@ final class LatestInLibraryViewModel: PagingLibraryViewModel<BaseItemDto>, Ident
     private func latestItems(limit: Int) async throws -> [BaseItemDto] {
         guard let userSession else { return [] }
 
-        var unplayedParameters = parameters(limit: limit)
-        unplayedParameters.isPlayed = false
-
-        var playedParameters = parameters(limit: limit)
-        playedParameters.isPlayed = true
-
-        async let unplayedResponse: [BaseItemDto] = userSession.embyClient.latestItems(
-            unplayedParameters,
-            as: [BaseItemDto].self
-        )
-        async let playedResponse: [BaseItemDto] = userSession.embyClient.latestItems(
-            playedParameters,
+        let response: [BaseItemDto] = try await userSession.embyClient.latestItems(
+            parameters(limit: limit * 3),
             as: [BaseItemDto].self
         )
 
-        return mergedLatestItems(
-            unplayed: try await unplayedResponse,
-            played: try await playedResponse,
-            limit: limit
-        )
+        return mergedLatestItems(items: response, limit: limit)
     }
 
     override func getRandomItem() async -> BaseItemDto? {
@@ -140,22 +126,15 @@ final class LatestInLibraryViewModel: PagingLibraryViewModel<BaseItemDto>, Ident
         return parameters
     }
 
-    private func mergedLatestItems(
-        unplayed: [BaseItemDto],
-        played: [BaseItemDto],
-        limit: Int
-    ) -> [BaseItemDto] {
+    private func mergedLatestItems(items: [BaseItemDto], limit: Int) -> [BaseItemDto] {
         var elements: [BaseItemDto] = []
         var seenIDs: Set<String> = []
 
-        for item in unplayed + played {
+        for item in items {
             guard append(item, to: &elements, seenIDs: &seenIDs) else { continue }
         }
 
-        return elements
-            .sorted(by: latestSortPrecedes(_:_:))
-            .prefix(limit)
-            .map { $0 }
+        return elements.prefix(limit).map { $0 }
     }
 
     private func append(
@@ -163,7 +142,7 @@ final class LatestInLibraryViewModel: PagingLibraryViewModel<BaseItemDto>, Ident
         to elements: inout [BaseItemDto],
         seenIDs: inout Set<String>
     ) -> Bool {
-        guard let id = item.id else {
+        guard let id = latestDedupeID(for: item) else {
             elements.append(item)
             return true
         }
@@ -173,19 +152,16 @@ final class LatestInLibraryViewModel: PagingLibraryViewModel<BaseItemDto>, Ident
         return true
     }
 
-    private func latestSortPrecedes(_ lhs: BaseItemDto, _ rhs: BaseItemDto) -> Bool {
-        let lhsDate = latestSortDate(for: lhs)
-        let rhsDate = latestSortDate(for: rhs)
+    private func latestDedupeID(for item: BaseItemDto) -> String? {
+        let identity = latestSortIdentity(for: item)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
 
-        if lhsDate != rhsDate {
-            return lhsDate > rhsDate
+        if item.type == .series, identity.isNotEmpty {
+            return "series:\(identity)"
         }
 
-        return latestSortIdentity(for: lhs).localizedStandardCompare(latestSortIdentity(for: rhs)) == .orderedAscending
-    }
-
-    private func latestSortDate(for item: BaseItemDto) -> Date {
-        item.dateLastMediaAdded ?? item.dateCreated ?? .distantPast
+        return item.id ?? (identity.isEmpty ? nil : identity)
     }
 
     private func latestSortIdentity(for item: BaseItemDto) -> String {

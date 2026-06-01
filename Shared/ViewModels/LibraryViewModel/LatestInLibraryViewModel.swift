@@ -39,12 +39,12 @@ final class LatestInLibraryViewModel: PagingLibraryViewModel<BaseItemDto>, Ident
     private func latestItems(limit: Int) async throws -> [BaseItemDto] {
         guard let userSession else { return [] }
 
-        let response: [BaseItemDto] = try await userSession.embyClient.latestItems(
-            parameters(limit: limit * 3),
-            as: [BaseItemDto].self
+        let response: EmbyPortItemsResponse<BaseItemDto> = try await userSession.embyClient.items(
+            latestItemParameters(limit: limit * 3),
+            as: EmbyPortItemsResponse<BaseItemDto>.self
         )
 
-        return mergedLatestItems(items: response, limit: limit)
+        return mergedLatestItems(items: response.items ?? [], limit: limit)
     }
 
     override func getRandomItem() async -> BaseItemDto? {
@@ -62,12 +62,13 @@ final class LatestInLibraryViewModel: PagingLibraryViewModel<BaseItemDto>, Ident
         return response?.items?.first
     }
 
-    private func parameters(limit: Int) -> EmbyPortLatestMediaParameters {
-        var parameters = EmbyPortLatestMediaParameters()
-        parameters.parentID = parent?.id
+    private func latestItemParameters(limit: Int) -> EmbyPortItemsParameters {
+        var parameters = itemParameters(for: nil)
         parameters.fields = .MinimumFields + [.dateCreated, .dateLastMediaAdded]
-        parameters.enableUserData = true
+        parameters.sortBy = [.dateLastContentAdded, .dateCreated]
+        parameters.sortOrder = [.descending]
         parameters.limit = limit
+        parameters.startIndex = 0
 
         return parameters
     }

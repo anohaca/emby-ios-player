@@ -295,18 +295,22 @@ final class HomeViewModel: ViewModel, Stateful {
         )
         #endif
 
-        try await refreshLibrary(nextUpViewModel)
+        async let nextUpRefresh: Void = refreshLibrary(nextUpViewModel)
+        async let recentlyAddedRefresh: Void = refreshLibrary(recentlyAddedViewModel)
+        async let fetchedLibraries: [LatestInLibraryViewModel] = getLibraries()
+
+        try await nextUpRefresh
         try Task.checkCancellation()
         #if DEBUG
         NSLog("EmbyHomeExitTrace refresh-step nextUp elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, nextUpViewModel.elements.count)
         #endif
-        try await refreshLibrary(recentlyAddedViewModel)
+        try await recentlyAddedRefresh
         try Task.checkCancellation()
         #if DEBUG
         NSLog("EmbyHomeExitTrace refresh-step recentlyAdded elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, recentlyAddedViewModel.elements.count)
         #endif
 
-        let libraries = try await getLibraries()
+        let libraries = try await fetchedLibraries
         try Task.checkCancellation()
         #if DEBUG
         NSLog("EmbyHomeExitTrace refresh-step libraries elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, libraries.count)
@@ -317,19 +321,7 @@ final class HomeViewModel: ViewModel, Stateful {
         NSLog("EmbyHomeExitTrace refresh-step resume elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, resumeItems.count)
         #endif
 
-        for (index, library) in libraries.enumerated() {
-            try await refreshLibrary(library)
-            try Task.checkCancellation()
-            #if DEBUG
-            NSLog(
-                "EmbyHomeExitTrace refresh-step library[%d] elapsed=%.3f title=%@ count=%d",
-                index,
-                CACurrentMediaTime() - refreshStart,
-                library.parent?.displayTitle ?? "<nil>",
-                library.elements.count
-            )
-            #endif
-        }
+        try await refreshLibraries(libraries, refreshStart: refreshStart)
 
         await MainActor.run {
             #if DEBUG
@@ -368,6 +360,33 @@ final class HomeViewModel: ViewModel, Stateful {
             viewModel.elements.count
         )
         #endif
+    }
+
+    private func refreshLibraries(_ libraries: [LatestInLibraryViewModel], refreshStart: CFTimeInterval) async throws {
+        try await withThrowingTaskGroup(of: (Int, String, Int).self) { group in
+            for (index, library) in libraries.enumerated() {
+                group.addTask { [weak self, library] in
+                    try Task.checkCancellation()
+                    try await self?.refreshLibrary(library)
+                    let title = await library.parent?.displayTitle ?? "<nil>"
+                    let count = await library.elements.count
+                    return (index, title, count)
+                }
+            }
+
+            for try await (index, title, count) in group {
+                try Task.checkCancellation()
+                #if DEBUG
+                NSLog(
+                    "EmbyHomeExitTrace refresh-step library[%d] elapsed=%.3f title=%@ count=%d",
+                    index,
+                    CACurrentMediaTime() - refreshStart,
+                    title,
+                    count
+                )
+                #endif
+            }
+        }
     }
 
     private func markPendingHomeRefresh() {

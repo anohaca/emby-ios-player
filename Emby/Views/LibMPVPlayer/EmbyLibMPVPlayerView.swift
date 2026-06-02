@@ -911,7 +911,6 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         startPlayerExitTrace(reason: "closePlayer")
         tracePlayerExit("closePlayer begin")
         didRequestClose = true
-        Notifications[.willDismissVideoPlayer].post()
         pendingLandscapeRequestWorkItem?.cancel()
         pendingLandscapeRequestWorkItem = nil
         cancelSubtitleAdjustmentReapply()
@@ -931,13 +930,15 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         if usesManualWindowPresentation {
             tracePlayerExit("closePlayer onClose fire immediate-window")
             onClose?()
+            Notifications[.willDismissVideoPlayer].post()
             return
         }
         stopTransportForPlayerDismissalIfNeeded(reason: "closePlayer")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+        DispatchQueue.main.async { [weak self] in
             guard let self, self.didRequestClose, self.view.window != nil else { return }
             self.tracePlayerExit("closePlayer onClose fire")
             self.onClose?()
+            Notifications[.willDismissVideoPlayer].post()
         }
         tracePlayerExit("closePlayer scheduledOnClose")
     }

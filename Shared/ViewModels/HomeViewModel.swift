@@ -66,6 +66,8 @@ final class HomeViewModel: ViewModel, Stateful {
     private var resumeImagePreheatTask: Task<Void, Never>?
     private var isRefreshSuspended = false
     private var didHoldSuspendedRefreshNotification = false
+    private var isRefreshInFlight = false
+    private var shouldRefreshAgainAfterCurrentRefresh = false
     private static let resumeItemLimit = 20
 
     var nextUpViewModel: NextUpLibraryViewModel = .init()
@@ -150,37 +152,7 @@ final class HomeViewModel: ViewModel, Stateful {
                 return state
             }
 
-            backgroundRefreshTask?.cancel()
-            backgroundStates.insert(.refresh)
-
-            backgroundRefreshTask = Task { [weak self] in
-                do {
-                    try await self?.refresh()
-
-                    guard !Task.isCancelled else { return }
-
-                    await MainActor.run {
-                        guard let self else { return }
-                        self.backgroundStates.remove(.refresh)
-                    }
-                } catch is CancellationError {
-                    await MainActor.run {
-                        self?.backgroundStates.remove(.refresh)
-                    }
-                } catch {
-                    guard !Task.isCancelled else { return }
-
-                    await MainActor.run {
-                        guard let self else { return }
-                        self.backgroundStates.remove(.refresh)
-                        self.logger.error("Home background refresh failed: \(error.embyDiagnosticDescription)")
-                        if self.state != .content {
-                            self.send(.error(.init(error.embyDisplayDescription)))
-                        }
-                    }
-                }
-            }
-            .asAnyCancellable()
+            startRefresh(isBackground: true)
 
             return state
         case let .error(error):
@@ -226,6 +198,8 @@ final class HomeViewModel: ViewModel, Stateful {
                 backgroundRefreshTask?.cancel()
                 notificationRefreshTask?.cancel()
                 refreshTask?.cancel()
+                isRefreshInFlight = false
+                shouldRefreshAgainAfterCurrentRefresh = false
                 backgroundStates.remove(.refresh)
             }
 
@@ -239,48 +213,88 @@ final class HomeViewModel: ViewModel, Stateful {
                 return state == .content ? state : .refreshing
             }
 
-            backgroundRefreshTask?.cancel()
-            refreshTask?.cancel()
-
             if state != .content {
                 applyCachedHomeStateIfAvailable()
             }
 
             let nextState = state == .content ? state : State.refreshing
-            if state == .content {
-                backgroundStates.insert(.refresh)
-            }
-
-            refreshTask = Task { [weak self] in
-                do {
-                    try await self?.refresh()
-
-                    guard !Task.isCancelled else { return }
-
-                    await MainActor.run {
-                        guard let self else { return }
-                        self.backgroundStates.remove(.refresh)
-                        self.state = .content
-                    }
-                } catch is CancellationError {
-                    // cancelled
-                } catch {
-                    guard !Task.isCancelled else { return }
-
-                    await MainActor.run {
-                        guard let self else { return }
-                        self.backgroundStates.remove(.refresh)
-                        self.logger.error("Home refresh failed: \(error.embyDiagnosticDescription)")
-                        if self.state != .content {
-                            self.send(.error(.init(error.embyDisplayDescription)))
-                        }
-                    }
-                }
-            }
-            .asAnyCancellable()
+            startRefresh(isBackground: state == .content)
 
             return nextState
         }
+    }
+
+    private func startRefresh(isBackground: Bool) {
+        guard !isRefreshInFlight else {
+            if !isBackground {
+                shouldRefreshAgainAfterCurrentRefresh = true
+                markPendingHomeRefresh()
+            }
+            #if DEBUG
+            NSLog("EmbyHomeExitTrace refresh-coalesced background=%@", isBackground.description)
+            #endif
+            return
+        }
+
+        isRefreshInFlight = true
+        if isBackground {
+            backgroundStates.insert(.refresh)
+        }
+
+        let task = Task { [weak self] in
+            guard let self else { return }
+
+            do {
+                try await self.refresh()
+                guard !Task.isCancelled else { return }
+
+                await MainActor.run {
+                    self.finishRefresh()
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    self.finishRefresh(runPendingRefresh: false)
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+
+                await MainActor.run {
+                    self.finishRefresh()
+                    self.logger.error("Home refresh failed: \(error.embyDiagnosticDescription)")
+                    if self.state != .content {
+                        self.send(.error(.init(error.embyDisplayDescription)))
+                    }
+                }
+            }
+        }
+        .asAnyCancellable()
+
+        if isBackground {
+            backgroundRefreshTask = task
+        } else {
+            refreshTask = task
+        }
+    }
+
+    private func finishRefresh(runPendingRefresh: Bool = true) {
+        isRefreshInFlight = false
+        backgroundStates.remove(.refresh)
+        state = .content
+        backgroundRefreshTask = nil
+        refreshTask = nil
+
+        guard runPendingRefresh, shouldRefreshAgainAfterCurrentRefresh else {
+            shouldRefreshAgainAfterCurrentRefresh = false
+            return
+        }
+
+        shouldRefreshAgainAfterCurrentRefresh = false
+        guard !isRefreshSuspended else {
+            markPendingHomeRefresh()
+            return
+        }
+
+        startRefresh(isBackground: true)
     }
 
     private func refresh() async throws {

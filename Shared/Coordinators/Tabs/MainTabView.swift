@@ -92,18 +92,13 @@ struct MainTabView: View {
         }
         .onReceive(Notifications[.willDismissVideoPlayer].publisher) {
             videoPlayerTransitionCoverTask?.cancel()
-            videoPlayerTransitionCoverTask = Task {
-                try? await Task.sleep(for: .milliseconds(550))
-                guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    withDisabledAnimation {
-                        isVideoPlayerTransitionCoverVisible = false
-                    }
-                    #if DEBUG
-                    NSLog("EmbyMainTabTransitionCover visible=false")
-                    #endif
-                }
+            videoPlayerTransitionCoverTask = nil
+            withDisabledAnimation {
+                isVideoPlayerTransitionCoverVisible = false
             }
+            #if DEBUG
+            NSLog("EmbyMainTabTransitionCover visible=false immediate")
+            #endif
         }
         .onDisappear {
             videoPlayerTransitionCoverTask?.cancel()

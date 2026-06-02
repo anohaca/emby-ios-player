@@ -31,6 +31,13 @@ struct ItemView: View {
     @StateObject
     private var viewModel: ItemViewModel
 
+    @State
+    private var viewportSize: CGSize = .zero
+    @State
+    private var isPlayerDismissTransitioning = false
+    @State
+    private var playerDismissTransitionTask: Task<Void, Never>?
+
     private let shouldReturnHomeFromEpisodeBack: Bool
 
     private static func typeViewModel(for item: BaseItemDto) -> ItemViewModel {
@@ -126,6 +133,12 @@ struct ItemView: View {
             .mediaDetailBackgroundColor
     }
 
+    private var isPortraitViewportStable: Bool {
+        viewportSize.width > 0 &&
+            viewportSize.height > 0 &&
+            viewportSize.height >= viewportSize.width
+    }
+
     var body: some View {
         ZStack {
             transitionBackgroundColor
@@ -133,13 +146,18 @@ struct ItemView: View {
 
             switch viewModel.state {
             case .content:
-                innerBody
-                    .navigationTitle(viewModel.item.displayTitle)
+                if !isPlayerDismissTransitioning {
+                    innerBody
+                        .navigationTitle(viewModel.item.displayTitle)
+                }
             case let .error(error):
                 ErrorView(error: error)
             case .initial, .refreshing:
                 ProgressView()
             }
+        }
+        .onSizeChanged { size, _ in
+            viewportSize = size
         }
         .background(transitionBackgroundColor.ignoresSafeArea())
         .animation(.linear(duration: 0.1), value: viewModel.state)
@@ -170,11 +188,44 @@ struct ItemView: View {
         .onChange(of: defaultSubtitleLanguage) { _ in
             viewModel.send(.applyDefaultTrackSelection)
         }
+        .onReceive(Notifications[.willPresentVideoPlayer].publisher) {
+            playerDismissTransitionTask?.cancel()
+            playerDismissTransitionTask = nil
+            isPlayerDismissTransitioning = false
+        }
+        .onReceive(Notifications[.willDismissVideoPlayer].publisher) {
+            playerDismissTransitionTask?.cancel()
+            isPlayerDismissTransitioning = true
+            playerDismissTransitionTask = Task {
+                await waitForStablePortraitViewport()
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    isPlayerDismissTransitioning = false
+                }
+            }
+        }
+        .onDisappear {
+            playerDismissTransitionTask?.cancel()
+            playerDismissTransitionTask = nil
+        }
         .navigationBarMenuButton(
             isLoading: viewModel.backgroundStates.contains(.refresh),
             isHidden: !viewModel.item.showEditorMenu
         ) {
             ItemEditorMenu(item: viewModel.item)
+        }
+    }
+
+    @MainActor
+    private func waitForStablePortraitViewport() async {
+        for _ in 0..<24 {
+            if isPortraitViewportStable {
+                try? await Task.sleep(for: .milliseconds(80))
+                if isPortraitViewportStable {
+                    return
+                }
+            }
+            try? await Task.sleep(for: .milliseconds(25))
         }
     }
 }

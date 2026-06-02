@@ -165,7 +165,7 @@ struct HomeView: View {
     @ViewBuilder
     private var contentView: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
+            LazyVStack(alignment: .leading, spacing: 10) {
                 ForEach(visibleSections) { section in
                     sectionView(section)
                         #if DEBUG
@@ -204,7 +204,6 @@ struct HomeView: View {
             .background(HomeLayoutTraceView(name: "sections-stack", playerDismissTraceStart: playerDismissTraceStart))
             #endif
         }
-        .background(homeBackground)
         #if DEBUG
         .background(HomeLayoutTraceView(name: "scroll-content", playerDismissTraceStart: playerDismissTraceStart))
         #endif
@@ -214,6 +213,28 @@ struct HomeView: View {
             isPullRefreshControlActive = true
             viewModel.send(.refresh)
         }
+    }
+
+    @ViewBuilder
+    private var lockedTransitionContentView: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(visibleSections.prefix(4))) { section in
+                    sectionView(section)
+                        #if DEBUG
+                        .background(HomeLayoutTraceView(name: "locked-section-\(section.id)", playerDismissTraceStart: playerDismissTraceStart))
+                        #endif
+                }
+            }
+            .edgePadding(.vertical)
+            #if DEBUG
+            .background(HomeLayoutTraceView(name: "locked-sections-stack", playerDismissTraceStart: playerDismissTraceStart))
+            #endif
+        }
+        #if DEBUG
+        .background(HomeLayoutTraceView(name: "locked-scroll-content", playerDismissTraceStart: playerDismissTraceStart))
+        #endif
+        .disabled(true)
     }
 
     var body: some View {
@@ -240,12 +261,14 @@ struct HomeView: View {
                 if isHomeLayoutLockedForPlayer,
                    !isHomeSnapshotOverlayVisible
                 {
-                    contentView
+                    lockedTransitionContentView
                         .frame(
                             width: lockedHomeViewportSize?.width,
                             height: lockedHomeViewportSize?.height,
                             alignment: .center
                         )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .clipped()
                 }
             case let .error(error):
                 ErrorView(error: error)
@@ -376,35 +399,31 @@ struct HomeView: View {
         }
         .onReceive(Notifications[.willDismissVideoPlayer].publisher) {
             homeLayoutUnlockTask?.cancel()
+            withDisabledHomeLayoutAnimation {
+                isVideoPlayerPresented = false
+                isHomeSnapshotOverlayVisible = false
+            }
+            #if DEBUG
+            NSLog(
+                "EmbyHomeExitTrace layout-lock cover-hidden-immediate stableSize=%.1fx%.1f orientation=%d",
+                homeViewportSize.width,
+                homeViewportSize.height,
+                currentSceneOrientationRawValue
+            )
+            #endif
             homeLayoutUnlockTask = Task {
                 await waitForStablePortraitHomeLayout()
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
                     withDisabledHomeLayoutAnimation {
                         isHomeLayoutLockedForPlayer = false
-                        isVideoPlayerPresented = false
                     }
                     #if DEBUG
                     NSLog(
-                        "EmbyHomeExitTrace layout-lock disabled stableSize=%.1fx%.1f orientation=%d",
+                        "EmbyHomeExitTrace layout-lock disabled-after-portrait stableSize=%.1fx%.1f orientation=%d",
                         homeViewportSize.width,
                         homeViewportSize.height,
                         currentSceneOrientationRawValue
-                    )
-                    #endif
-                }
-                await waitForRestoredHomeContentLayout()
-                guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    guard isHomeSnapshotOverlayVisible else { return }
-                    withDisabledHomeLayoutAnimation {
-                        isHomeSnapshotOverlayVisible = false
-                    }
-                    #if DEBUG
-                    NSLog(
-                        "EmbyHomeExitTrace transition-cover hidden sectionsHeight=%.1f expected=%.1f",
-                        homeSectionsStackSize.height,
-                        expectedHomeSectionsStackHeightAfterPlayerDismiss
                     )
                     #endif
                 }

@@ -149,6 +149,7 @@ struct ItemView: View {
                 if !isPlayerDismissTransitioning {
                     innerBody
                         .navigationTitle(viewModel.item.displayTitle)
+                        .transition(.opacity)
                 }
             case let .error(error):
                 ErrorView(error: error)
@@ -200,7 +201,9 @@ struct ItemView: View {
                 await waitForStablePortraitViewport()
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    isPlayerDismissTransitioning = false
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isPlayerDismissTransitioning = false
+                    }
                 }
             }
         }

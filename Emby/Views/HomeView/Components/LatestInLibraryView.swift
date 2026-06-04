@@ -34,6 +34,7 @@ extension HomeView {
                 .trailing {
                     SeeAllButton()
                         .onSelect {
+                            let viewModel = LatestInLibraryViewModel(parent: viewModel.parent)
                             router.route(to: .library(viewModel: viewModel))
                         }
                 }

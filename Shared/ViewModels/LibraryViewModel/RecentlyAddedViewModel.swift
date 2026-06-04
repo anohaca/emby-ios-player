@@ -16,15 +16,19 @@ final class RecentlyAddedLibraryViewModel: PagingLibraryViewModel<BaseItemDto> {
     private let homeRecentlyUpdated: Bool
 
     // Necessary because this is paginated and also used on home view
-    init(customPageSize: Int? = nil, homeRecentlyUpdated: Bool = false) {
+    init(
+        customPageSize: Int? = nil,
+        homeRecentlyUpdated: Bool = false,
+        usesRememberedSort: Bool = true
+    ) {
         self.homeRecentlyUpdated = homeRecentlyUpdated
 
         // Why doesn't `super.init(title:id:pageSize)` init work?
         let parent = TitledLibraryParent(displayTitle: L10n.recentlyAdded, id: "recentlyAdded")
         if let customPageSize {
-            super.init(parent: parent, filters: .recent, pageSize: customPageSize)
+            super.init(parent: parent, filters: .recent, pageSize: customPageSize, usesRememberedSort: usesRememberedSort)
         } else {
-            super.init(parent: parent, filters: .recent)
+            super.init(parent: parent, filters: .recent, usesRememberedSort: usesRememberedSort)
         }
     }
 

@@ -10,8 +10,12 @@ import Foundation
 
 final class LatestInLibraryViewModel: PagingLibraryViewModel<BaseItemDto>, Identifiable {
 
-    init(parent: (any LibraryParent)? = nil, pageSize: Int = 50) {
-        super.init(parent: parent, filters: .recent, pageSize: pageSize)
+    init(
+        parent: (any LibraryParent)? = nil,
+        pageSize: Int = 50,
+        usesRememberedSort: Bool = true
+    ) {
+        super.init(parent: parent, filters: .recent, pageSize: pageSize, usesRememberedSort: usesRememberedSort)
     }
 
     override func get(page: Int) async throws -> [BaseItemDto] {

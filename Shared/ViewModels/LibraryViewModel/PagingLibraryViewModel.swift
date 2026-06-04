@@ -165,7 +165,8 @@ class PagingLibraryViewModel<Element: Poster>: ViewModel, Eventful, Stateful {
     init(
         parent: (any LibraryParent)? = nil,
         filters: ItemFilterCollection? = nil,
-        pageSize: Int = DefaultPageSize
+        pageSize: Int = DefaultPageSize,
+        usesRememberedSort: Bool = true
     ) {
         self.elements = IdentifiedArray([], id: \.unwrappedIDHashOrZero, uniquingIDsWith: { x, _ in x })
         self.isStatic = false
@@ -173,7 +174,10 @@ class PagingLibraryViewModel<Element: Poster>: ViewModel, Eventful, Stateful {
         self.parent = parent
 
         if var filters {
-            if let id = parent?.id, Defaults[.Customization.Library.rememberSort] {
+            if usesRememberedSort,
+               let id = parent?.id,
+               Defaults[.Customization.Library.rememberSort]
+            {
                 // TODO: see `StoredValues.User.libraryFilters` for TODO
                 //       on remembering other filters
 
@@ -220,7 +224,8 @@ class PagingLibraryViewModel<Element: Poster>: ViewModel, Eventful, Stateful {
         title: String,
         id: String?,
         filters: ItemFilterCollection? = nil,
-        pageSize: Int = DefaultPageSize
+        pageSize: Int = DefaultPageSize,
+        usesRememberedSort: Bool = true
     ) {
         self.init(
             parent: TitledLibraryParent(
@@ -228,7 +233,8 @@ class PagingLibraryViewModel<Element: Poster>: ViewModel, Eventful, Stateful {
                 id: id
             ),
             filters: filters,
-            pageSize: pageSize
+            pageSize: pageSize,
+            usesRememberedSort: usesRememberedSort
         )
     }
 

@@ -71,7 +71,7 @@ final class HomeViewModel: ViewModel, Stateful {
     private static let resumeItemLimit = 20
 
     var nextUpViewModel: NextUpLibraryViewModel = .init()
-    var recentlyAddedViewModel: RecentlyAddedLibraryViewModel = .init(homeRecentlyUpdated: true)
+    var recentlyAddedViewModel: RecentlyAddedLibraryViewModel = .init(homeRecentlyUpdated: true, usesRememberedSort: false)
 
     override init() {
         super.init()
@@ -638,7 +638,7 @@ final class HomeViewModel: ViewModel, Stateful {
         recentlyAddedViewModel.state = .content
 
         libraries = payload.libraries.map { cachedLibrary in
-            let viewModel = LatestInLibraryViewModel(parent: cachedLibrary.parent)
+            let viewModel = LatestInLibraryViewModel(parent: cachedLibrary.parent, usesRememberedSort: false)
             viewModel.elements = Self.identifiedItems(cachedLibrary.items)
             viewModel.state = .content
             return viewModel
@@ -1281,7 +1281,7 @@ extension HomeViewModel {
                 using: \.collectionType
             )
             .subtracting(excludedLibraryIDs, using: \.id)
-            .map { LatestInLibraryViewModel(parent: $0) }
+            .map { LatestInLibraryViewModel(parent: $0, usesRememberedSort: false) }
     }
 
     // TODO: use the more updated server/user data when implemented

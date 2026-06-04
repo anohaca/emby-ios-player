@@ -55,6 +55,10 @@ struct HomeView: View {
     private var isHomeSnapshotOverlayVisible = false
     @State
     private var homeLayoutUnlockTask: Task<Void, Never>?
+    /// Suppresses data refreshes during navigation zoom transition
+    /// so the matched-geometry source views stay stable.
+    @State
+    private var isInNavigationTransition = false
     #if DEBUG
     @State
     private var playerDismissTraceStart: CFTimeInterval?
@@ -215,61 +219,13 @@ struct HomeView: View {
         }
     }
 
-    @ViewBuilder
-    private var lockedTransitionContentView: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 10) {
-                ForEach(Array(visibleSections.prefix(4))) { section in
-                    sectionView(section)
-                        #if DEBUG
-                        .background(HomeLayoutTraceView(name: "locked-section-\(section.id)", playerDismissTraceStart: playerDismissTraceStart))
-                        #endif
-                }
-            }
-            .edgePadding(.vertical)
-            #if DEBUG
-            .background(HomeLayoutTraceView(name: "locked-sections-stack", playerDismissTraceStart: playerDismissTraceStart))
-            #endif
-        }
-        #if DEBUG
-        .background(HomeLayoutTraceView(name: "locked-scroll-content", playerDismissTraceStart: playerDismissTraceStart))
-        #endif
-        .disabled(true)
-    }
-
     var body: some View {
         ZStack {
             homeBackground
 
             switch viewModel.state {
             case .content:
-                ZStack {
-                    if !isHomeLayoutLockedForPlayer {
-                        contentView
-                            .frame(
-                                width: nil,
-                                height: nil,
-                                alignment: .center
-                            )
-                            .opacity(isHomeSnapshotOverlayVisible ? 0 : 1)
-                    }
-
-                    if isHomeSnapshotOverlayVisible {
-                        homeBackground
-                    }
-                }
-                if isHomeLayoutLockedForPlayer,
-                   !isHomeSnapshotOverlayVisible
-                {
-                    lockedTransitionContentView
-                        .frame(
-                            width: lockedHomeViewportSize?.width,
-                            height: lockedHomeViewportSize?.height,
-                            alignment: .center
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .clipped()
-                }
+                contentView
             case let .error(error):
                 ErrorView(error: error)
             case .initial, .refreshing:
@@ -306,12 +262,16 @@ struct HomeView: View {
             )
             #endif
             resumeRefreshTask?.cancel()
-            viewModel.send(.applyUserDataOverrides)
+            // Defer all data mutations until the zoom transition animation completes,
+            // so the matched-geometry source views stay stable and don't jump.
+            isInNavigationTransition = true
             resumeRefreshTask = Task {
-                try? await Task.sleep(for: .milliseconds(700))
+                try? await Task.sleep(for: .milliseconds(500))
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
                     guard !isVideoPlayerPresented else { return }
+                    isInNavigationTransition = false
+                    viewModel.send(.applyUserDataOverrides)
                     viewModel.send(.setRefreshSuspended(false))
                     viewModel.send(.refreshIfPendingInvalidation)
                 }
@@ -341,6 +301,7 @@ struct HomeView: View {
             }
         }
         .sinceLastDisappear { interval in
+            guard !isInNavigationTransition else { return }
             if interval > 60 ||
                 viewModel.notificationsReceived.contains(.itemMetadataDidChange) ||
                 viewModel.notificationsReceived.contains(.itemShouldRefreshMetadata) ||
@@ -385,11 +346,11 @@ struct HomeView: View {
                 lockedHomeViewportSize = validHomeViewportSizeForPlayer
                 expectedHomeSectionsStackHeightAfterPlayerDismiss = lastStableHomeSectionsStackHeight
                 isHomeLayoutLockedForPlayer = true
-                isHomeSnapshotOverlayVisible = true
+                isHomeSnapshotOverlayVisible = false
             }
             #if DEBUG
             NSLog(
-                "EmbyHomeExitTrace layout-lock enabled width=%.1f height=%.1f current=%.1fx%.1f cover=true",
+                "EmbyHomeExitTrace layout-lock enabled width=%.1f height=%.1f current=%.1fx%.1f cover=false",
                 lockedHomeViewportSize?.width ?? 0,
                 lockedHomeViewportSize?.height ?? 0,
                 homeViewportSize.width,
@@ -659,6 +620,7 @@ private final class HomeRefreshControlCoordinator: NSObject, ObservableObject {
     private let refreshControl = UIRefreshControl()
     private var isRefreshing = false
     private var onRefresh: (() -> Void)?
+    private weak var scrollView: UIScrollView?
 
     override init() {
         super.init()
@@ -672,6 +634,7 @@ private final class HomeRefreshControlCoordinator: NSObject, ObservableObject {
 
     func attach(to scrollView: UIScrollView, onRefresh: @escaping () -> Void) {
         self.onRefresh = onRefresh
+        self.scrollView = scrollView
 
         scrollView.alwaysBounceVertical = true
 
@@ -688,11 +651,33 @@ private final class HomeRefreshControlCoordinator: NSObject, ObservableObject {
         DispatchQueue.main.async { [weak self] in
             guard let self, !self.isRefreshing, self.refreshControl.isRefreshing else { return }
             self.refreshControl.endRefreshing()
+            self.restoreScrollPositionAfterRefreshIfNeeded()
         }
     }
 
     @objc
     private func refreshControlValueChanged() {
         onRefresh?()
+    }
+
+    private func restoreScrollPositionAfterRefreshIfNeeded() {
+        guard let scrollView,
+              !scrollView.isDragging,
+              !scrollView.isDecelerating
+        else { return }
+
+        let topOffset = -scrollView.adjustedContentInset.top
+        guard scrollView.contentOffset.y < topOffset else { return }
+
+        UIView.animate(
+            withDuration: 0.25,
+            delay: 0,
+            options: [.beginFromCurrentState, .allowUserInteraction]
+        ) {
+            scrollView.setContentOffset(
+                CGPoint(x: scrollView.contentOffset.x, y: topOffset),
+                animated: false
+            )
+        }
     }
 }

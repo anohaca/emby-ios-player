@@ -73,7 +73,7 @@ struct MainTabView: View {
                     .tag(tab.item.id)
                 }
             }
-            .opacity(isVideoPlayerTransitionCoverVisible ? 0 : 1)
+            .allowsHitTesting(!isVideoPlayerTransitionCoverVisible)
 
             if isVideoPlayerTransitionCoverVisible {
                 videoPlayerTransitionBackground

@@ -138,9 +138,14 @@ final class HomeViewModel: ViewModel, Stateful {
     func respond(to action: Action) -> State {
         switch action {
         case .applyUserDataOverrides:
-            applyUserDataOverridesToVisibleItems()
-            if state == .content {
-                cacheCurrentHomeState()
+            // Defer heavy I/O to avoid blocking the main actor during
+            // navigation transitions (e.g. popping back to home).
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.applyUserDataOverridesToVisibleItems()
+                if self.state == .content {
+                    self.cacheCurrentHomeState()
+                }
             }
             return state
         case .backgroundRefresh:
@@ -341,11 +346,12 @@ final class HomeViewModel: ViewModel, Stateful {
             #if DEBUG
             let applyStart = CACurrentMediaTime()
             #endif
-            self.resumeItems.elements = resumeItems
-            self.libraries = libraries
-            self.applyUserDataOverridesToVisibleItems()
-            self.cacheCurrentHomeState()
-            self.preheatResumeItemImages()
+            if Array(self.resumeItems.elements) != resumeItems {
+                self.resumeItems.elements = resumeItems
+            }
+            if !Self.homeLibrariesContentEqual(self.libraries, libraries) {
+                self.libraries = libraries
+            }
             _ = self.consumePendingHomeRefresh()
             #if DEBUG
             NSLog(
@@ -356,6 +362,16 @@ final class HomeViewModel: ViewModel, Stateful {
                 self.libraries.count
             )
             #endif
+        }
+
+        // Defer heavy I/O to avoid blocking the main actor during scroll animations.
+        // UserData override application and cache write involve synchronous
+        // UserDefaults reads + JSON decoding that should not compete with UI.
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.applyUserDataOverridesToVisibleItems()
+            self.cacheCurrentHomeState()
+            self.preheatResumeItemImages()
         }
     }
 
@@ -374,6 +390,23 @@ final class HomeViewModel: ViewModel, Stateful {
             viewModel.elements.count
         )
         #endif
+    }
+
+    private static func homeLibrariesContentEqual(
+        _ lhs: [LatestInLibraryViewModel],
+        _ rhs: [LatestInLibraryViewModel]
+    ) -> Bool {
+        guard lhs.count == rhs.count else { return false }
+
+        for (lhsLibrary, rhsLibrary) in zip(lhs, rhs) {
+            guard lhsLibrary.parent?.id == rhsLibrary.parent?.id,
+                  Array(lhsLibrary.elements) == Array(rhsLibrary.elements)
+            else {
+                return false
+            }
+        }
+
+        return true
     }
 
     private func refreshLibraries(_ libraries: [LatestInLibraryViewModel], refreshStart: CFTimeInterval) async throws {
@@ -508,11 +541,13 @@ final class HomeViewModel: ViewModel, Stateful {
     }
 
     private func reorderResumeItemsFromLocalRecency() {
-        resumeItems.elements = ResumeItemRecencyStore.sorted(
+        let sortedItems = ResumeItemRecencyStore.sorted(
             resumeItems.elements,
             serverID: userSession.server.id,
             userID: userSession.user.id
         )
+        guard resumeItems.elements != sortedItems else { return }
+        resumeItems.elements = sortedItems
     }
 
     private func applyUserDataOverridesToVisibleItems() {
@@ -521,48 +556,66 @@ final class HomeViewModel: ViewModel, Stateful {
         let serverID = userSession.server.id
         let userID = userSession.user.id
 
+        // Load override entries once to avoid repeated UserDefaults I/O + JSON decode.
+        let entries = HomeItemUserDataOverrideStore.load(serverID: serverID, userID: userID)
+
         let recentlyAddedItems = HomeItemUserDataOverrideStore.applyingOverrides(
             to: Array(recentlyAddedViewModel.elements),
-            serverID: serverID,
-            userID: userID
+            entries: entries
         )
         let libraryItems = libraries.map { library in
             (
                 library,
                 HomeItemUserDataOverrideStore.applyingOverrides(
                     to: Array(library.elements),
-                    serverID: serverID,
-                    userID: userID
+                    entries: entries
                 )
             )
         }
         let visiblePlayedItemIDs = HomeItemUserDataOverrideStore.playedItemIDs(
             in: recentlyAddedItems + libraryItems.flatMap { $0.1 },
-            serverID: serverID,
-            userID: userID
+            entries: entries
         )
 
-        resumeItems.elements = HomeItemUserDataOverrideStore.filteredResumeItems(
+        updateItemsIfChanged(
+            &resumeItems.elements,
+            HomeItemUserDataOverrideStore.filteredResumeItems(
             resumeItems.elements,
-            serverID: serverID,
-            userID: userID,
+            entries: entries,
             playedAncestorIDs: visiblePlayedItemIDs
+            )
         )
 
-        nextUpViewModel.elements = Self.identifiedItems(
+        updateItemsIfChanged(
+            &nextUpViewModel.elements,
             HomeItemUserDataOverrideStore.filteredNextUpItems(
                 Array(nextUpViewModel.elements),
-                serverID: serverID,
-                userID: userID,
+                entries: entries,
                 playedAncestorIDs: visiblePlayedItemIDs
             )
         )
 
-        recentlyAddedViewModel.elements = Self.identifiedItems(recentlyAddedItems)
+        updateItemsIfChanged(&recentlyAddedViewModel.elements, recentlyAddedItems)
 
         for (library, items) in libraryItems {
-            library.elements = Self.identifiedItems(items)
+            updateItemsIfChanged(&library.elements, items)
         }
+    }
+
+    private func updateItemsIfChanged(
+        _ current: inout IdentifiedArray<Int, BaseItemDto>,
+        _ items: [BaseItemDto]
+    ) {
+        guard Array(current) != items else { return }
+        current = Self.identifiedItems(items)
+    }
+
+    private func updateItemsIfChanged(
+        _ current: inout [BaseItemDto],
+        _ items: [BaseItemDto]
+    ) {
+        guard current != items else { return }
+        current = items
     }
 
     @discardableResult
@@ -625,7 +678,8 @@ final class HomeViewModel: ViewModel, Stateful {
         let sources = resumeItems
             .prefix(6)
             .flatMap { item in
-                item.landscapeImageSources(maxWidth: 300, quality: 90)
+                item.landscapeImageSources(maxWidth: 300, quality: 90) +
+                    item.portraitImageSources(maxWidth: 300, quality: 90)
             }
             .compactMap(\.url)
 
@@ -806,7 +860,7 @@ enum HomeRefreshInvalidationStore {
 
 enum HomeItemUserDataOverrideStore {
 
-    private struct Entry: Codable {
+    struct Entry: Codable {
         let itemID: String
         let isPlayed: Bool
         let changedAt: TimeInterval
@@ -899,8 +953,16 @@ enum HomeItemUserDataOverrideStore {
         playedAncestorIDs: Set<String> = []
     ) -> [BaseItemDto] {
         let entries = load(serverID: serverID, userID: userID)
+        return filteredResumeItems(items, entries: entries, playedAncestorIDs: playedAncestorIDs)
+    }
 
-        return items
+    /// Pre-loaded entries variant to avoid repeated UserDefaults I/O.
+    static func filteredResumeItems(
+        _ items: [BaseItemDto],
+        entries: [String: Entry],
+        playedAncestorIDs: Set<String> = []
+    ) -> [BaseItemDto] {
+        items
             .filter { item in
                 entry(for: item, in: entries)?.isPlayed != true && !hasPlayedAncestor(item, in: playedAncestorIDs)
             }
@@ -914,8 +976,16 @@ enum HomeItemUserDataOverrideStore {
         playedAncestorIDs: Set<String> = []
     ) -> [BaseItemDto] {
         let entries = load(serverID: serverID, userID: userID)
+        return filteredNextUpItems(items, entries: entries, playedAncestorIDs: playedAncestorIDs)
+    }
 
-        return items
+    /// Pre-loaded entries variant to avoid repeated UserDefaults I/O.
+    static func filteredNextUpItems(
+        _ items: [BaseItemDto],
+        entries: [String: Entry],
+        playedAncestorIDs: Set<String> = []
+    ) -> [BaseItemDto] {
+        items
             .filter { item in
                 entry(for: item, in: entries)?.isPlayed != true && !hasPlayedAncestor(item, in: playedAncestorIDs)
             }
@@ -928,7 +998,15 @@ enum HomeItemUserDataOverrideStore {
         userID: String
     ) -> [BaseItemDto] {
         let entries = load(serverID: serverID, userID: userID)
-        return items.map { applying(entries: entries, to: $0) }
+        return applyingOverrides(to: items, entries: entries)
+    }
+
+    /// Pre-loaded entries variant to avoid repeated UserDefaults I/O.
+    static func applyingOverrides(
+        to items: [BaseItemDto],
+        entries: [String: Entry]
+    ) -> [BaseItemDto] {
+        items.map { applying(entries: entries, to: $0) }
     }
 
     static func applyingOverrides(
@@ -982,8 +1060,15 @@ enum HomeItemUserDataOverrideStore {
         userID: String
     ) -> Set<String> {
         let entries = load(serverID: serverID, userID: userID)
+        return playedItemIDs(in: items, entries: entries)
+    }
 
-        return Set(
+    /// Pre-loaded entries variant to avoid repeated UserDefaults I/O.
+    static func playedItemIDs(
+        in items: [BaseItemDto],
+        entries: [String: Entry]
+    ) -> Set<String> {
+        Set(
             items.compactMap { item in
                 guard applying(entries: entries, to: item).userData?.isPlayed == true else { return nil }
                 return item.id
@@ -1067,7 +1152,7 @@ enum HomeItemUserDataOverrideStore {
         }
     }
 
-    private static func load(serverID: String, userID: String) -> [String: Entry] {
+    static func load(serverID: String, userID: String) -> [String: Entry] {
         let storageKey = key(serverID: serverID, userID: userID)
         let now = Date().timeIntervalSince1970
         let data = UserDefaults.standard.data(forKey: storageKey)

@@ -89,6 +89,11 @@ extension HomeView {
                     progress: (item.userData?.playedPercentage ?? 0) / 100
                 )
             }
+            .frame(minHeight: viewModel.resumeItems.isEmpty ? nil : stableMinimumHeight)
+        }
+
+        private var stableMinimumHeight: CGFloat {
+            UIDevice.isPhone ? 184 : 220
         }
     }
 }

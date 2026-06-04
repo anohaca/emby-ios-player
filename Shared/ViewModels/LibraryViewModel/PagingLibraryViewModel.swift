@@ -350,6 +350,7 @@ class PagingLibraryViewModel<Element: Poster>: ViewModel, Eventful, Stateful {
         hasNextPage = !(pageItems.count < pageSize)
 
         await MainActor.run {
+            guard Array(elements) != pageItems else { return }
             elements = refreshedElements
         }
     }

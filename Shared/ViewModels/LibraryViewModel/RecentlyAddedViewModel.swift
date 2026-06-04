@@ -39,7 +39,9 @@ final class RecentlyAddedLibraryViewModel: PagingLibraryViewModel<BaseItemDto> {
             as: EmbyPortItemsResponse<BaseItemDto>.self
         )
 
-        return await addingChildImageFallbacks(to: response.items ?? [])
+        let sortedItems = (response.items ?? []).sortedByVideoBitRateIfNeeded(filters: filterViewModel?.currentFilters)
+
+        return await addingChildImageFallbacks(to: sortedItems)
     }
 
     private func getRecentlyUpdated(page: Int) async throws -> [BaseItemDto] {
@@ -95,7 +97,7 @@ final class RecentlyAddedLibraryViewModel: PagingLibraryViewModel<BaseItemDto> {
             let filters = filterViewModel.currentFilters
             parameters.filters = filters.traits
             parameters.genres = filters.genres.map(\.value)
-            parameters.sortBy = filters.sortBy
+            parameters.sortBy = filters.embyServerSortBy
             parameters.sortOrder = filters.sortOrder
             parameters.studioIDs = filters.studios.map(\.value)
             parameters.tags = filters.tags.map(\.value)

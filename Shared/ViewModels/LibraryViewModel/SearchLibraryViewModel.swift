@@ -45,6 +45,7 @@ final class SearchLibraryViewModel: PagingLibraryViewModel<BaseItemDto> {
 
         if itemType == .series, query.trimmingCharacters(in: .whitespacesAndNewlines).isNotEmpty {
             let items = try await expandedSeriesResults()
+                .sortedByVideoBitRateIfNeeded(filters: filterViewModel?.currentFilters)
             let startIndex = page * pageSize
             guard startIndex < items.count else { return [] }
             return Array(items.dropFirst(startIndex).prefix(pageSize))
@@ -70,7 +71,9 @@ final class SearchLibraryViewModel: PagingLibraryViewModel<BaseItemDto> {
             as: EmbyPortItemsResponse<BaseItemDto>.self
         )
 
-        return await addingChildImageFallbacks(to: response.items ?? [])
+        let sortedItems = (response.items ?? []).sortedByVideoBitRateIfNeeded(filters: filterViewModel?.currentFilters)
+
+        return await addingChildImageFallbacks(to: sortedItems)
     }
 
     private func getPeople(page: Int) async throws -> [BaseItemDto] {
@@ -182,7 +185,7 @@ extension EmbyPortItemsParameters {
     mutating func apply(filters: ItemFilterCollection) {
         self.filters = filters.traits
         genres = filters.genres.map(\.value)
-        sortBy = filters.sortBy
+        sortBy = filters.embyServerSortBy
         sortOrder = filters.sortOrder
         studioIDs = filters.studios.map(\.value)
         tags = filters.tags.map(\.value)

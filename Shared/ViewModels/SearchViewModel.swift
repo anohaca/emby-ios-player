@@ -173,7 +173,7 @@ final class SearchViewModel: ViewModel {
         // Filters
         parameters.filters = filters.traits
         parameters.genres = filters.genres.map(\.value)
-        parameters.sortBy = filters.sortBy
+        parameters.sortBy = filters.embyServerSortBy
         parameters.sortOrder = filters.sortOrder
         parameters.studioIDs = filters.studios.map(\.value)
         parameters.tags = filters.tags.map(\.value)
@@ -205,11 +205,13 @@ final class SearchViewModel: ViewModel {
 
     private func _getItems(query: String, itemType: BaseItemKind, filters: ItemFilterCollection) async throws -> [BaseItemDto] {
         if itemType == .series, query.trimmingCharacters(in: .whitespacesAndNewlines).isNotEmpty {
-            return try await SearchSeriesResolver(
+            let results = try await SearchSeriesResolver(
                 userSession: userSession,
                 filters: filters
             )
             .search(query: query, limit: 50)
+
+            return results.sortedByVideoBitRateIfNeeded(filters: filters)
         }
 
         var parameters = EmbyPortItemsParameters()
@@ -228,7 +230,7 @@ final class SearchViewModel: ViewModel {
             as: EmbyPortItemsResponse<BaseItemDto>.self
         )
 
-        return response.items ?? []
+        return (response.items ?? []).sortedByVideoBitRateIfNeeded(filters: filters)
     }
 
     private func _getPeople(query: String) async throws -> [BaseItemDto] {

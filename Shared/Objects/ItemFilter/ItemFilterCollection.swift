@@ -67,6 +67,15 @@ struct ItemFilterCollection: Hashable, Storable {
         years = try container.decodeIfPresent([ItemYear].self, forKey: .years) ?? []
     }
 
+    var embyServerSortBy: [ItemSortBy] {
+        let supportedSortBy = sortBy.filter { $0 != .videoBitRate }
+        return supportedSortBy.isEmpty ? Self.default.sortBy : supportedSortBy
+    }
+
+    var isVideoBitRateSort: Bool {
+        sortBy.first == .videoBitRate
+    }
+
     /// The default collection of filters
     static let `default`: ItemFilterCollection = .init()
 

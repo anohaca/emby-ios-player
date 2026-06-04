@@ -44,7 +44,9 @@ final class ItemLibraryViewModel: PagingLibraryViewModel<BaseItemDto> {
                 return item
             }
 
-        return await addingChildImageFallbacks(to: resolvedItems)
+        let sortedItems = resolvedItems.sortedByVideoBitRateIfNeeded(filters: filterViewModel?.currentFilters)
+
+        return await addingChildImageFallbacks(to: sortedItems)
     }
 
     // MARK: item parameters
@@ -81,7 +83,7 @@ final class ItemLibraryViewModel: PagingLibraryViewModel<BaseItemDto> {
             let filters = filterViewModel.currentFilters
             parameters.filters = filters.traits
             parameters.genres = filters.genres.map(\.value)
-            parameters.sortBy = filters.sortBy
+            parameters.sortBy = filters.embyServerSortBy
             parameters.sortOrder = filters.sortOrder
             parameters.studioIDs = filters.studios.map(\.value)
             parameters.tags = filters.tags.map(\.value)

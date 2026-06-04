@@ -24,7 +24,9 @@ final class LatestInLibraryViewModel: PagingLibraryViewModel<BaseItemDto>, Ident
                 as: EmbyPortItemsResponse<BaseItemDto>.self
             )
 
-            return await addingChildImageFallbacks(to: response.items ?? [])
+            let sortedItems = (response.items ?? []).sortedByVideoBitRateIfNeeded(filters: filterViewModel?.currentFilters)
+
+            return await addingChildImageFallbacks(to: sortedItems)
         }
 
         let cumulativeLimit = (page + 1) * pageSize
@@ -33,7 +35,9 @@ final class LatestInLibraryViewModel: PagingLibraryViewModel<BaseItemDto>, Ident
 
         guard pageStart < response.count else { return [] }
 
-        return await addingChildImageFallbacks(to: Array(response.dropFirst(pageStart).prefix(pageSize)))
+        let sortedItems = response.sortedByVideoBitRateIfNeeded(filters: filterViewModel?.currentFilters)
+
+        return await addingChildImageFallbacks(to: Array(sortedItems.dropFirst(pageStart).prefix(pageSize)))
     }
 
     private func latestItems(limit: Int) async throws -> [BaseItemDto] {
@@ -100,7 +104,7 @@ final class LatestInLibraryViewModel: PagingLibraryViewModel<BaseItemDto>, Ident
             let filters = filterViewModel.currentFilters
             parameters.filters = filters.traits
             parameters.genres = filters.genres.map(\.value)
-            parameters.sortBy = filters.sortBy
+            parameters.sortBy = filters.embyServerSortBy
             parameters.sortOrder = filters.sortOrder
             parameters.studioIDs = filters.studios.map(\.value)
             parameters.tags = filters.tags.map(\.value)

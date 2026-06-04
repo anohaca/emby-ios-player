@@ -68,8 +68,9 @@ extension ItemView {
 
             GeometryReader { proxy in
                 ImageView(headerImageSources)
-                    .aspectRatio(1.77, contentMode: .fill)
+                    .image { $0.resizable().aspectRatio(contentMode: .fill) }
                     .frame(width: proxy.size.width, height: proxy.size.height * 0.70, alignment: .top)
+                    .clipped()
                     .bottomEdgeGradient(bottomColor: bottomColor)
             }
         }

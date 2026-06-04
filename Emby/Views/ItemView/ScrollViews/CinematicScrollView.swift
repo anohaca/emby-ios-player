@@ -81,8 +81,9 @@ extension ItemView {
                 if proxy.size.height.isZero { EmptyView() }
                 else {
                     ImageView(fallbackImageSources(maxWidth: proxy.size.width))
-                    .aspectRatio(usePrimaryImage ? (2 / 3) : 1.77, contentMode: .fill)
+                    .image { $0.resizable().aspectRatio(contentMode: .fill) }
                     .frame(width: proxy.size.width, height: proxy.size.height * 0.6)
+                    .clipped()
                     .bottomEdgeGradient(bottomColor: detailBackgroundColor)
                 }
             }

@@ -31,6 +31,13 @@ struct ItemView: View {
     @StateObject
     private var viewModel: ItemViewModel
 
+    @State
+    private var collectionLayoutRevision = 0
+    @State
+    private var playerDismissLayoutTask: Task<Void, Never>?
+    @State
+    private var viewportSize: CGSize = .zero
+
     private let shouldReturnHomeFromEpisodeBack: Bool
 
     private static func typeViewModel(for item: BaseItemDto) -> ItemViewModel {
@@ -141,6 +148,10 @@ struct ItemView: View {
                 ProgressView()
             }
         }
+        .background(CollectionLayoutInvalidator(revision: collectionLayoutRevision))
+        .onSizeChanged { size, _ in
+            viewportSize = size
+        }
         .background(transitionBackgroundColor.ignoresSafeArea())
         .animation(.linear(duration: 0.1), value: viewModel.state)
         .navigationBarTitleDisplayMode(.inline)
@@ -170,6 +181,20 @@ struct ItemView: View {
         .onChange(of: defaultSubtitleLanguage) { _ in
             viewModel.send(.applyDefaultTrackSelection)
         }
+        .onReceive(Notifications[.willPresentVideoPlayer].publisher) {
+            playerDismissLayoutTask?.cancel()
+            playerDismissLayoutTask = nil
+        }
+        .onReceive(Notifications[.willDismissVideoPlayer].publisher) {
+            playerDismissLayoutTask?.cancel()
+            playerDismissLayoutTask = Task {
+                await rebuildContentAfterStablePortraitLayout()
+            }
+        }
+        .onDisappear {
+            playerDismissLayoutTask?.cancel()
+            playerDismissLayoutTask = nil
+        }
         .navigationBarMenuButton(
             isLoading: viewModel.backgroundStates.contains(.refresh),
             isHidden: !viewModel.item.showEditorMenu
@@ -178,4 +203,63 @@ struct ItemView: View {
         }
     }
 
+    @MainActor
+    private func rebuildContentAfterStablePortraitLayout() async {
+        for _ in 0..<40 {
+            if viewportSize.width > 0, viewportSize.height >= viewportSize.width {
+                try? await Task.sleep(for: .milliseconds(80))
+                guard !Task.isCancelled else { return }
+
+                if viewportSize.height >= viewportSize.width {
+                    collectionLayoutRevision += 1
+                    playerDismissLayoutTask = nil
+                    return
+                }
+            }
+
+            try? await Task.sleep(for: .milliseconds(25))
+            guard !Task.isCancelled else { return }
+        }
+    }
+
+}
+
+private struct CollectionLayoutInvalidator: UIViewRepresentable {
+
+    let revision: Int
+
+    func makeUIView(context: Context) -> UIView {
+        UIView(frame: .zero)
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        guard context.coordinator.revision != revision else { return }
+        context.coordinator.revision = revision
+
+        DispatchQueue.main.async {
+            guard let rootView = view.window?.rootViewController?.view else { return }
+            invalidateCollectionLayouts(in: rootView)
+            rootView.setNeedsLayout()
+            rootView.layoutIfNeeded()
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    final class Coordinator {
+        var revision = 0
+    }
+
+    private func invalidateCollectionLayouts(in view: UIView) {
+        if let collectionView = view as? UICollectionView {
+            collectionView.collectionViewLayout.invalidateLayout()
+            collectionView.setNeedsLayout()
+        }
+
+        for subview in view.subviews {
+            invalidateCollectionLayouts(in: subview)
+        }
+    }
 }

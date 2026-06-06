@@ -220,6 +220,7 @@ struct UserSignInView: View {
                 EmptyView()
             }
         }
+        .listRowBackground(Color.secondarySystemFill)
 
         if case .signingIn = viewModel.state {
             Button(L10n.cancel, role: .cancel) {
@@ -249,6 +250,7 @@ struct UserSignInView: View {
                 Text(disclaimer)
                     .font(.callout)
             }
+            .listRowBackground(Color.secondarySystemFill)
         }
     }
 
@@ -311,6 +313,7 @@ struct UserSignInView: View {
             }
         }
         .disabled(viewModel.state == .signingIn)
+        .listRowBackground(Color.secondarySystemFill)
     }
 
     @ViewBuilder

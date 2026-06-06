@@ -37,6 +37,8 @@ struct ItemView: View {
     private var playerDismissLayoutTask: Task<Void, Never>?
     @State
     private var viewportSize: CGSize = .zero
+    @State
+    private var isLeavingItemView = false
 
     private let shouldReturnHomeFromEpisodeBack: Bool
 
@@ -149,6 +151,8 @@ struct ItemView: View {
             }
         }
         .background(CollectionLayoutInvalidator(revision: collectionLayoutRevision))
+        .background(ItemViewLifecycleObserver(isLeaving: $isLeavingItemView))
+        .allowsHitTesting(!isLeavingItemView)
         .onSizeChanged { size, _ in
             viewportSize = size
         }
@@ -260,6 +264,50 @@ private struct CollectionLayoutInvalidator: UIViewRepresentable {
 
         for subview in view.subviews {
             invalidateCollectionLayouts(in: subview)
+        }
+    }
+}
+
+private struct ItemViewLifecycleObserver: UIViewControllerRepresentable {
+
+    @Binding
+    var isLeaving: Bool
+
+    func makeUIViewController(context: Context) -> ObserverViewController {
+        ObserverViewController(isLeaving: $isLeaving)
+    }
+
+    func updateUIViewController(_ controller: ObserverViewController, context: Context) {
+        controller.isLeaving = $isLeaving
+    }
+
+    final class ObserverViewController: UIViewController {
+
+        var isLeaving: Binding<Bool>
+
+        init(isLeaving: Binding<Bool>) {
+            self.isLeaving = isLeaving
+            super.init(nibName: nil, bundle: nil)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func loadView() {
+            view = UIView(frame: .zero)
+            view.isUserInteractionEnabled = false
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            isLeaving.wrappedValue = false
+        }
+
+        override func viewWillDisappear(_ animated: Bool) {
+            super.viewWillDisappear(animated)
+            isLeaving.wrappedValue = true
         }
     }
 }

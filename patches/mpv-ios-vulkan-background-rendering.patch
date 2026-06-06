@@ -1,0 +1,39 @@
+diff --git a/video/out/vulkan/context_ios.m b/video/out/vulkan/context_ios.m
+--- a/video/out/vulkan/context_ios.m
++++ b/video/out/vulkan/context_ios.m
+@@
+ struct priv {
+     struct mpvk_ctx vk;
+     UIView *view;
+     CAMetalLayer *layer;
+     CGSize last_size;
+ };
+ 
++static bool ios_vk_is_visible(struct ra_ctx *ctx)
++{
++    return UIApplication.sharedApplication.applicationState !=
++           UIApplicationStateBackground;
++}
++
+ static CGSize ios_vk_layer_size(struct ra_ctx *ctx)
+@@
+ static bool ios_vk_resize(struct ra_ctx *ctx)
+ {
+     struct priv *p = ctx->priv;
+     CGSize size = ios_vk_layer_size(ctx);
+     p->last_size = size;
++
++    // iOS rejects all Metal command submission while the app is in the
++    // background. Keep decoding/audio alive, but leave the Vulkan swapchain
++    // untouched until the app returns to the foreground.
++    if (!ios_vk_is_visible(ctx))
++        return true;
++
+     return ra_vk_ctx_resize(ctx, (int)size.width, (int)size.height);
+ }
+@@
+     struct ra_ctx_params params = {
+         .color_depth = NULL,
+-        .check_visible = NULL,
++        .check_visible = ios_vk_is_visible,
+     };

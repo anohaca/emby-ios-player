@@ -1037,12 +1037,6 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             shouldResumeAfterForeground = false
             player.setPaused(false)
             UIApplication.shared.isIdleTimerDisabled = true
-        } else if !player.isPaused {
-            player.nudgeVideoOutputAfterForeground()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-                guard let self, !self.player.isPaused, !self.didRequestClose else { return }
-                self.player.nudgeVideoOutputAfterForeground()
-            }
         }
 
         #if DEBUG

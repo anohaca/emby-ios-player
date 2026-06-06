@@ -37,8 +37,6 @@ struct ItemView: View {
     private var playerDismissLayoutTask: Task<Void, Never>?
     @State
     private var viewportSize: CGSize = .zero
-    @State
-    private var isLeavingItemView = false
 
     private let shouldReturnHomeFromEpisodeBack: Bool
 
@@ -151,8 +149,7 @@ struct ItemView: View {
             }
         }
         .background(CollectionLayoutInvalidator(revision: collectionLayoutRevision))
-        .background(ItemViewLifecycleObserver(isLeaving: $isLeavingItemView))
-        .allowsHitTesting(!isLeavingItemView)
+        .background(ItemViewDismissTransitionInterrupter())
         .onSizeChanged { size, _ in
             viewportSize = size
         }
@@ -268,46 +265,87 @@ private struct CollectionLayoutInvalidator: UIViewRepresentable {
     }
 }
 
-private struct ItemViewLifecycleObserver: UIViewControllerRepresentable {
-
-    @Binding
-    var isLeaving: Bool
+private struct ItemViewDismissTransitionInterrupter: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> ObserverViewController {
-        ObserverViewController(isLeaving: $isLeaving)
+        ObserverViewController()
     }
 
-    func updateUIViewController(_ controller: ObserverViewController, context: Context) {
-        controller.isLeaving = $isLeaving
-    }
+    func updateUIViewController(_ controller: ObserverViewController, context: Context) {}
 
     final class ObserverViewController: UIViewController {
 
-        var isLeaving: Binding<Bool>
-
-        init(isLeaving: Binding<Bool>) {
-            self.isLeaving = isLeaving
-            super.init(nibName: nil, bundle: nil)
-        }
-
-        @available(*, unavailable)
-        required init?(coder: NSCoder) {
-            fatalError("init(coder:) has not been implemented")
-        }
+        private weak var transitionView: UIView?
+        private var interruptGesture: UILongPressGestureRecognizer?
 
         override func loadView() {
             view = UIView(frame: .zero)
             view.isUserInteractionEnabled = false
         }
 
-        override func viewDidAppear(_ animated: Bool) {
-            super.viewDidAppear(animated)
-            isLeaving.wrappedValue = false
-        }
-
         override func viewWillDisappear(_ animated: Bool) {
             super.viewWillDisappear(animated)
-            isLeaving.wrappedValue = true
+            guard
+                animated,
+                let navigationController,
+                let transitionCoordinator = navigationController.transitionCoordinator,
+                let fromViewController = transitionCoordinator.viewController(forKey: .from),
+                !navigationController.viewControllers.contains(where: { $0 === fromViewController })
+            else {
+                return
+            }
+
+            let gesture = UILongPressGestureRecognizer(target: self, action: #selector(interruptDismissTransition(_:)))
+            gesture.minimumPressDuration = 0
+            gesture.cancelsTouchesInView = true
+            gesture.delaysTouchesBegan = false
+            gesture.delaysTouchesEnded = false
+
+            transitionView = navigationController.view
+            interruptGesture = gesture
+            navigationController.view.addGestureRecognizer(gesture)
+            transitionCoordinator.animate(alongsideTransition: nil) { [weak self] _ in
+                self?.removeInterruptGesture()
+            }
+        }
+
+        override func viewDidDisappear(_ animated: Bool) {
+            super.viewDidDisappear(animated)
+            removeInterruptGesture()
+        }
+
+        @objc
+        private func interruptDismissTransition(_ gesture: UILongPressGestureRecognizer) {
+            guard gesture.state == .began, let navigationController else { return }
+
+            removeInterruptGesture()
+
+            UIView.performWithoutAnimation {
+                navigationController.setViewControllers(navigationController.viewControllers, animated: false)
+                removeAnimationsRecursively(from: navigationController.view.layer)
+                navigationController.view.setNeedsLayout()
+                navigationController.view.layoutIfNeeded()
+            }
+
+            #if DEBUG
+            NSLog("EmbyItemDismissTransition interrupted")
+            #endif
+        }
+
+        private func removeInterruptGesture() {
+            guard let interruptGesture else { return }
+            transitionView?.removeGestureRecognizer(interruptGesture)
+            self.interruptGesture = nil
+            transitionView = nil
+        }
+
+        private func removeAnimationsRecursively(from layer: CALayer) {
+            layer.removeAllAnimations()
+            layer.sublayers?.forEach(removeAnimationsRecursively)
+        }
+
+        deinit {
+            removeInterruptGesture()
         }
     }
 }

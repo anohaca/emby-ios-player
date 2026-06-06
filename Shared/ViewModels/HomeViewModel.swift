@@ -314,19 +314,22 @@ final class HomeViewModel: ViewModel, Stateful {
         )
         #endif
 
-        async let nextUpRefresh: Void = refreshLibrary(nextUpViewModel)
-        async let recentlyAddedRefresh: Void = refreshLibrary(recentlyAddedViewModel)
+        let stagedNextUpViewModel = NextUpLibraryViewModel()
+        let stagedRecentlyAddedViewModel = RecentlyAddedLibraryViewModel(homeRecentlyUpdated: true, usesRememberedSort: false)
+
+        async let nextUpRefresh: Void = refreshLibrary(stagedNextUpViewModel)
+        async let recentlyAddedRefresh: Void = refreshLibrary(stagedRecentlyAddedViewModel)
         async let fetchedLibraries: [LatestInLibraryViewModel] = getLibraries()
 
         try await nextUpRefresh
         try Task.checkCancellation()
         #if DEBUG
-        NSLog("EmbyHomeExitTrace refresh-step nextUp elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, nextUpViewModel.elements.count)
+        NSLog("EmbyHomeExitTrace refresh-step nextUp elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, stagedNextUpViewModel.elements.count)
         #endif
         try await recentlyAddedRefresh
         try Task.checkCancellation()
         #if DEBUG
-        NSLog("EmbyHomeExitTrace refresh-step recentlyAdded elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, recentlyAddedViewModel.elements.count)
+        NSLog("EmbyHomeExitTrace refresh-step recentlyAdded elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, stagedRecentlyAddedViewModel.elements.count)
         #endif
 
         let libraries = try await fetchedLibraries
@@ -349,6 +352,16 @@ final class HomeViewModel: ViewModel, Stateful {
             if Array(self.resumeItems.elements) != resumeItems {
                 self.resumeItems.elements = resumeItems
             }
+            self.updateItemsIfChanged(
+                &self.nextUpViewModel.elements,
+                Array(stagedNextUpViewModel.elements)
+            )
+            self.nextUpViewModel.state = .content
+            self.updateItemsIfChanged(
+                &self.recentlyAddedViewModel.elements,
+                Array(stagedRecentlyAddedViewModel.elements)
+            )
+            self.recentlyAddedViewModel.state = .content
             if !Self.homeLibrariesContentEqual(self.libraries, libraries) {
                 self.libraries = libraries
             }

@@ -57,6 +57,7 @@ struct ConnectToServerView: View {
             )
                 .focused($isURLFocused)
         }
+        .listRowBackground(Color.secondarySystemFill)
 
         if viewModel.state == .connecting {
             Button(L10n.cancel, role: .cancel) {
@@ -99,6 +100,7 @@ struct ConnectToServerView: View {
                 }
             }
         }
+        .listRowBackground(Color.secondarySystemFill)
     }
 
     @ViewBuilder

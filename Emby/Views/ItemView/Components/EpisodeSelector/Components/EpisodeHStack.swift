@@ -26,6 +26,13 @@ extension SeriesEpisodeSelector {
         @StateObject
         private var playbackDisplayState = SeriesEpisodeSelector.EpisodePlaybackDisplayState()
 
+        @State
+        private var measuredWidth: CGFloat = 0
+        @State
+        private var playerTransitionLockedWidth: CGFloat?
+        @State
+        private var unlockPlayerTransitionTask: Task<Void, Never>?
+
         let playButtonItem: BaseItemDto?
         let inheritsPlayedState: Bool
 
@@ -83,17 +90,52 @@ extension SeriesEpisodeSelector {
         }
 
         var body: some View {
-            switch viewModel.state {
-            case .content:
-                if viewModel.elements.isEmpty {
-                    EmptyHStack()
-                } else {
-                    contentView(viewModel: viewModel)
+            Group {
+                switch viewModel.state {
+                case .content:
+                    if viewModel.elements.isEmpty {
+                        EmptyHStack()
+                    } else {
+                        contentView(viewModel: viewModel)
+                    }
+                case let .error(error):
+                    ErrorHStack(viewModel: viewModel, error: error)
+                case .initial, .refreshing:
+                    LoadingHStack()
                 }
-            case let .error(error):
-                ErrorHStack(viewModel: viewModel, error: error)
-            case .initial, .refreshing:
-                LoadingHStack()
+            }
+            .frame(width: playerTransitionLockedWidth, alignment: .leading)
+            .onSizeChanged { size, _ in
+                guard playerTransitionLockedWidth == nil, size.width > 0 else { return }
+                measuredWidth = size.width
+            }
+            .onReceive(Notifications[.willPresentVideoPlayer].publisher) {
+                unlockPlayerTransitionTask?.cancel()
+                unlockPlayerTransitionTask = nil
+                guard measuredWidth > 0 else { return }
+                playerTransitionLockedWidth = measuredWidth
+            }
+            .onReceive(Notifications[.willDismissVideoPlayer].publisher) {
+                unlockPlayerTransitionTask?.cancel()
+                unlockPlayerTransitionTask = Task { @MainActor in
+                    for _ in 0..<40 {
+                        let screenSize = UIScreen.main.bounds.size
+                        if screenSize.height >= screenSize.width {
+                            try? await Task.sleep(for: .milliseconds(100))
+                            guard !Task.isCancelled else { return }
+                            playerTransitionLockedWidth = nil
+                            unlockPlayerTransitionTask = nil
+                            return
+                        }
+
+                        try? await Task.sleep(for: .milliseconds(25))
+                        guard !Task.isCancelled else { return }
+                    }
+                }
+            }
+            .onDisappear {
+                unlockPlayerTransitionTask?.cancel()
+                unlockPlayerTransitionTask = nil
             }
         }
     }

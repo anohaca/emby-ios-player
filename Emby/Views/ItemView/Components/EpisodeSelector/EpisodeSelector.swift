@@ -10,6 +10,8 @@ import SwiftUI
 
 struct SeriesEpisodeSelector: View {
 
+    private static let selectedSeasonKeyPrefix = "seriesEpisodeSelector.selectedSeason."
+
     @ObservedObject
     var viewModel: SeriesItemViewModel
 
@@ -98,6 +100,7 @@ struct SeriesEpisodeSelector: View {
             }
         }
         .onChange(of: selection) { _ in
+            persistSelection()
             refreshSelectionIfNeeded()
         }
         .onAppear {
@@ -112,7 +115,16 @@ struct SeriesEpisodeSelector: View {
         didSelectInitialSeason = true
 
         if let seasonID = item?.seasonID,
+           focusItem != nil,
            let itemSeason = viewModel.seasons.first(where: { $0.id == seasonID })
+        {
+            selection = itemSeason.id
+        } else if let rememberedSeasonID,
+                  let rememberedSeason = viewModel.seasons.first(where: { $0.id == rememberedSeasonID })
+        {
+            selection = rememberedSeason.id
+        } else if let seasonID = item?.seasonID,
+                  let itemSeason = viewModel.seasons.first(where: { $0.id == seasonID })
         {
             selection = itemSeason.id
         } else {
@@ -128,5 +140,15 @@ struct SeriesEpisodeSelector: View {
         if selectionViewModel.state == .initial {
             selectionViewModel.send(.refresh)
         }
+    }
+
+    private var rememberedSeasonID: SeasonItemViewModel.ID? {
+        guard let seriesID = viewModel.item.id else { return nil }
+        return UserDefaults.currentUserSuite.string(forKey: Self.selectedSeasonKeyPrefix + seriesID)
+    }
+
+    private func persistSelection() {
+        guard let seriesID = viewModel.item.id, let selection else { return }
+        UserDefaults.currentUserSuite.set(selection, forKey: Self.selectedSeasonKeyPrefix + seriesID)
     }
 }

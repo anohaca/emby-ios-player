@@ -212,7 +212,8 @@ enum MediaTrackDefaults {
         let preference = Defaults[.VideoPlayer.Subtitle.defaultSubtitleLanguage]
         let streams = mediaSource.subtitleStreams ?? []
         if let stream = preference.preferredStream(in: streams) ??
-            (preference == .automatic ? MediaTrackLanguagePreference.automaticSubtitleStream(in: streams) : nil) {
+            (preference == .automatic ? MediaTrackLanguagePreference.automaticSubtitleStream(in: streams) : nil) ??
+            streams.first {
             return stream.index
         }
 

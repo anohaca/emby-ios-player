@@ -273,7 +273,8 @@ final class LibMPVMediaPlayerProxy: VideoMediaPlayerProxy,
     private func defaultSubtitleStream(for item: MediaPlayerItem) -> MediaStream? {
         let preference = Defaults[.VideoPlayer.Subtitle.defaultSubtitleLanguage]
         return preference.preferredStream(in: item.subtitleStreams) ??
-            (preference == .automatic ? MediaTrackLanguagePreference.automaticSubtitleStream(in: item.subtitleStreams) : nil)
+            (preference == .automatic ? MediaTrackLanguagePreference.automaticSubtitleStream(in: item.subtitleStreams) : nil) ??
+            item.subtitleStreams.first
     }
 
     private func applyDefaultSubtitleStream(_ subtitle: MediaStream) {

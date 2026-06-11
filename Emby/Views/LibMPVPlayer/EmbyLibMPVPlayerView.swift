@@ -2093,7 +2093,8 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private func defaultSubtitleStream(for item: MediaPlayerItem) -> MediaStream? {
         let preference = Defaults[.VideoPlayer.Subtitle.defaultSubtitleLanguage]
         guard let stream = preference.preferredStream(in: item.subtitleStreams) ??
-            (preference == .automatic ? MediaTrackLanguagePreference.automaticSubtitleStream(in: item.subtitleStreams) : nil) else {
+            (preference == .automatic ? MediaTrackLanguagePreference.automaticSubtitleStream(in: item.subtitleStreams) : nil) ??
+            item.subtitleStreams.first else {
             return nil
         }
 

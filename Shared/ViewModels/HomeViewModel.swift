@@ -69,6 +69,7 @@ final class HomeViewModel: ViewModel, Stateful {
     private var isRefreshInFlight = false
     private var shouldRefreshAgainAfterCurrentRefresh = false
     private static let resumeItemLimit = 20
+    private static let resumeItemCandidateLimit = 100
 
     var nextUpViewModel: NextUpLibraryViewModel = .init()
     var recentlyAddedViewModel: RecentlyAddedLibraryViewModel = .init(homeRecentlyUpdated: true, usesRememberedSort: false)
@@ -303,8 +304,8 @@ final class HomeViewModel: ViewModel, Stateful {
     }
 
     private func refresh() async throws {
-        #if DEBUG
         let refreshStart = CACurrentMediaTime()
+        #if DEBUG
         NSLog(
             "EmbyHomeExitTrace refresh-begin state=%@ background=%@ resume=%d libraries=%d",
             String(describing: state),
@@ -511,7 +512,9 @@ final class HomeViewModel: ViewModel, Stateful {
         let hiddenLibraryIDs = Self.hiddenHomeLibraryIDs().intersection(libraryIDs)
 
         guard hiddenLibraryIDs.isNotEmpty else {
-            return sortedResumeItems(try await getResumeItems(parentID: nil))
+            async let serverItems = getResumeItems(parentID: nil)
+            async let localItems = getLocalResumeCandidates(parentID: nil)
+            return sortedResumeItems(Self.uniqueItems(try await serverItems + localItems))
         }
 
         let visibleLibraryIDs = libraryIDs.filter { !hiddenLibraryIDs.contains($0) }
@@ -519,7 +522,9 @@ final class HomeViewModel: ViewModel, Stateful {
 
         var items: [BaseItemDto] = []
         for libraryID in visibleLibraryIDs {
-            items.append(contentsOf: try await getResumeItems(parentID: libraryID))
+            async let serverItems = getResumeItems(parentID: libraryID)
+            async let localItems = getLocalResumeCandidates(parentID: libraryID)
+            items.append(contentsOf: try await serverItems + localItems)
         }
 
         return sortedResumeItems(Self.uniqueItems(items))
@@ -529,7 +534,7 @@ final class HomeViewModel: ViewModel, Stateful {
         var parameters = EmbyPortResumeItemsParameters()
         parameters.enableUserData = true
         parameters.fields = .MinimumFields + [.primaryImageAspectRatio]
-        parameters.limit = Self.resumeItemLimit
+        parameters.limit = Self.resumeItemCandidateLimit
         parameters.mediaTypes = [.video]
         parameters.parentID = parentID
         parameters.sortBy = [.datePlayed]
@@ -541,6 +546,33 @@ final class HomeViewModel: ViewModel, Stateful {
         )
 
         return response.items ?? []
+    }
+
+    private func getLocalResumeCandidates(parentID: String?) async throws -> [BaseItemDto] {
+        let itemIDs = ResumeItemRecencyStore.recentItemIDs(
+            serverID: userSession.server.id,
+            userID: userSession.user.id,
+            limit: Self.resumeItemCandidateLimit
+        )
+        guard itemIDs.isNotEmpty else { return [] }
+
+        var parameters = EmbyPortItemsParameters()
+        parameters.enableUserData = true
+        parameters.fields = .MinimumFields + [.primaryImageAspectRatio]
+        parameters.ids = itemIDs
+        parameters.includeItemTypes = [.episode, .movie, .video]
+        parameters.isRecursive = true
+        parameters.limit = Self.resumeItemCandidateLimit
+        parameters.parentID = parentID
+
+        let response: EmbyPortItemsResponse<BaseItemDto> = try await userSession.embyClient.items(
+            parameters,
+            as: EmbyPortItemsResponse<BaseItemDto>.self
+        )
+
+        return (response.items ?? []).filter {
+            ($0.userData?.playbackPositionTicks ?? 0) > 0 && $0.userData?.isPlayed != true
+        }
     }
 
     private func sortedResumeItems(_ items: [BaseItemDto]) -> [BaseItemDto] {
@@ -1254,6 +1286,17 @@ enum ResumeItemRecencyStore {
                 }
             }
             .map(\.element)
+    }
+
+    static func recentItemIDs(serverID: String, userID: String, limit: Int) -> [String] {
+        let values = UserDefaults.standard.dictionary(
+            forKey: storageKey(serverID: serverID, userID: userID)
+        ) as? [String: TimeInterval] ?? [:]
+
+        return values
+            .sorted { $0.value > $1.value }
+            .prefix(limit)
+            .map(\.key)
     }
 
     private static func lastPlayedDate(for item: BaseItemDto, values: [String: TimeInterval]) -> Date? {

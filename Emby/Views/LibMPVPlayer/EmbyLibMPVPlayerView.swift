@@ -49,11 +49,6 @@ struct EmbyLibMPVPlayerView: View {
             guard UIApplication.shared.applicationState == .active else { return }
             isBeingDismissedByTransition = true
         }
-        .onReceive(manager.$state) { newState in
-            if newState == .stopped, !isBeingDismissedByTransition {
-                dismissPlayer()
-            }
-        }
     }
 
     private func dismissPlayer() {
@@ -1579,7 +1574,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             .sink { [weak self] state in
                 Task { @MainActor in
                     if state == .stopped {
-                        self?.stop()
+                        self?.closePlayer()
                     }
                 }
             }

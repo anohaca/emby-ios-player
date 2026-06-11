@@ -1788,6 +1788,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             Task { @MainActor in
                 guard let self else { return }
                 UIApplication.shared.isIdleTimerDisabled = false
+                self.controlsView.suppressPausedIndicatorTemporarily()
                 self.controlsView.setPaused(true)
                 self.showControls()
                 guard self.manager?.item.isLiveStream != true else { return }

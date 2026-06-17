@@ -160,22 +160,25 @@ class ItemViewModel: ViewModel, Stateful {
                     async let specialFeatures = getSpecialFeatures()
                     async let localTrailers = getLocalTrailers()
 
+                    let refreshedItem = try await fullItem
+                    guard !Task.isCancelled else { return }
+
+                    await MainActor.run {
+                        let fullItem = self.applyingUserDataOverrides(to: refreshedItem)
+                        if fullItem.id != self.item.id || fullItem != self.item {
+                            self.item = fullItem
+                        }
+                    }
+
                     let results = try await (
-                        fullItem: fullItem,
                         similarItems: similarItems,
                         specialFeatures: specialFeatures,
                         localTrailers: localTrailers
                     )
-
                     guard !Task.isCancelled else { return }
 
                     await MainActor.run {
-                        let fullItem = self.applyingUserDataOverrides(to: results.fullItem)
                         self.backgroundStates.remove(.refresh)
-                        if fullItem.id != self.item.id || fullItem != self.item {
-                            self.item = fullItem
-                        }
-
                         if !results.similarItems.elementsEqual(self.similarItems, by: { $0.id == $1.id }) {
                             self.similarItems = results.similarItems
                         }

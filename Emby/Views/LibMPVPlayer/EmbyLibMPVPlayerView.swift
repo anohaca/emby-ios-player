@@ -155,6 +155,8 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private var queueCancellable: AnyCancellable?
     private var gestureController: PlayerGestureController?
     private weak var volumeSlider: UISlider?
+    private var lastObservedOutputVolume = Double(AVAudioSession.sharedInstance().outputVolume)
+    private var volumePollingTimer: Timer?
     private var controlsHidden = false
     private var hideControlsWorkItem: DispatchWorkItem?
     private var hideSeekPreviewWorkItem: DispatchWorkItem?
@@ -321,6 +323,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         installVolumeView()
         bindPlayer()
         bindControls()
+        bindHardwareVolumeHUD()
         controlsView.applyEmbyPlaybackChrome()
         controlsView.updateSubtitleAdjustment(position: subtitlePosition, scale: subtitleScale, borderSize: subtitleBorderSize)
         controlsView.updateJumpIntervals(
@@ -499,6 +502,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         super.viewDidDisappear(animated)
         tracePlayerExit("viewDidDisappear animated=\(animated)")
         tracePlayerExitLayerState("viewDidDisappear")
+        stopHardwareVolumePolling()
         persistSubtitleAdjustmentSettingsNow()
         guard UIApplication.shared.applicationState == .active, !isInBackground else {
             isInBackground = true
@@ -1190,6 +1194,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        volumePollingTimer?.invalidate()
         reapplySubtitleAdjustmentWorkItem?.cancel()
         persistSubtitleAdjustmentWorkItem?.cancel()
         if backgroundTask != .invalid {
@@ -1480,6 +1485,38 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         volumeView.isUserInteractionEnabled = true
         view.addSubview(volumeView)
         resolveVolumeSlider()
+    }
+
+    private func bindHardwareVolumeHUD() {
+        lastObservedOutputVolume = Double(AVAudioSession.sharedInstance().outputVolume)
+        startHardwareVolumePolling()
+    }
+
+    private func startHardwareVolumePolling() {
+        guard volumePollingTimer == nil else { return }
+        let timer = Timer(timeInterval: 0.12, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.pollHardwareVolume()
+            }
+        }
+        volumePollingTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func stopHardwareVolumePolling() {
+        volumePollingTimer?.invalidate()
+        volumePollingTimer = nil
+    }
+
+    private func pollHardwareVolume() {
+        guard view.window != nil, !didRequestClose else { return }
+        let value = Double(AVAudioSession.sharedInstance().outputVolume)
+        guard abs(value - lastObservedOutputVolume) >= 0.005 else { return }
+        lastObservedOutputVolume = value
+        hideSeekPreviewNow()
+        presentGestureHUD(symbol: adjustmentSymbol(for: .volume),
+                          text: "\(adjustmentTitle(for: .volume)) \(Int((value * 100).rounded()))%",
+                          autoHideAfter: 0.8)
     }
 
     private func bindBufferingIndicator() {

@@ -135,18 +135,16 @@ private struct ContinueWatchingProgressOverlay: View {
     }
 
     private var progressLabel: String {
-        guard let totalTicks = item.runTimeTicks,
-              value.playbackPositionTicks > 0,
-              totalTicks > 0 else {
+        guard value.playbackPositionTicks > 0 else {
             return L10n.continue
         }
 
-        let remainingSeconds = max(0, totalTicks - value.playbackPositionTicks) / 10_000_000
+        let playbackSeconds = value.playbackPositionTicks / 10_000_000
         let formatter = DateComponentsFormatter()
         formatter.allowedUnits = [.hour, .minute]
         formatter.unitsStyle = .abbreviated
 
-        return formatter.string(from: TimeInterval(remainingSeconds)) ?? L10n.continue
+        return formatter.string(from: TimeInterval(playbackSeconds)) ?? L10n.continue
     }
 
     var body: some View {

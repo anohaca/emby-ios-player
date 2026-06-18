@@ -570,7 +570,13 @@ final class HomeViewModel: ViewModel, Stateful {
             as: EmbyPortItemsResponse<BaseItemDto>.self
         )
 
-        return (response.items ?? []).filter {
+        let items = HomeItemUserDataOverrideStore.applyingOverrides(
+            to: response.items ?? [],
+            serverID: userSession.server.id,
+            userID: userSession.user.id
+        )
+
+        return items.filter {
             ($0.userData?.playbackPositionTicks ?? 0) > 0 && $0.userData?.isPlayed != true
         }
     }
@@ -910,6 +916,8 @@ enum HomeItemUserDataOverrideStore {
         let isPlayed: Bool
         let changedAt: TimeInterval
         let appliesToRelatedItems: Bool?
+        let playbackPositionTicks: Int?
+        let playedPercentage: Double?
 
         var shouldApplyToRelatedItems: Bool {
             appliesToRelatedItems ?? true
@@ -932,7 +940,9 @@ enum HomeItemUserDataOverrideStore {
             itemID: itemID,
             isPlayed: isPlayed,
             changedAt: Date().timeIntervalSince1970,
-            appliesToRelatedItems: appliesToRelatedItems
+            appliesToRelatedItems: appliesToRelatedItems,
+            playbackPositionTicks: nil,
+            playedPercentage: nil
         )
         save(entries, serverID: serverID, userID: userID)
     }
@@ -952,7 +962,9 @@ enum HomeItemUserDataOverrideStore {
             itemID: itemID,
             isPlayed: isPlayed,
             changedAt: changedAt,
-            appliesToRelatedItems: true
+            appliesToRelatedItems: true,
+            playbackPositionTicks: nil,
+            playedPercentage: nil
         )
 
         for ancestorID in watchedAncestorIDsAffectedByChildPlayback(for: item) {
@@ -965,10 +977,43 @@ enum HomeItemUserDataOverrideStore {
                     itemID: ancestorID,
                     isPlayed: false,
                     changedAt: changedAt,
-                    appliesToRelatedItems: false
+                    appliesToRelatedItems: false,
+                    playbackPositionTicks: nil,
+                    playedPercentage: nil
                 )
             }
         }
+
+        save(entries, serverID: serverID, userID: userID)
+    }
+
+    static func markPlaybackPosition(
+        item: BaseItemDto,
+        seconds: Duration?,
+        serverID: String,
+        userID: String
+    ) {
+        guard let itemID = item.id, itemID.isNotEmpty else { return }
+        guard item.userData?.isPlayed != true else { return }
+        guard let ticks = seconds?.ticks, ticks > 0 else { return }
+
+        var entries = load(serverID: serverID, userID: userID)
+        let totalTicks = item.runTimeTicks ?? 0
+        let clampedTicks = totalTicks > 0 ? min(ticks, totalTicks) : ticks
+        let playedPercentage: Double? = if totalTicks > 0 {
+            min(max(Double(clampedTicks) / Double(totalTicks) * 100, 0), 100)
+        } else {
+            nil
+        }
+
+        entries[itemID] = Entry(
+            itemID: itemID,
+            isPlayed: false,
+            changedAt: Date().timeIntervalSince1970,
+            appliesToRelatedItems: true,
+            playbackPositionTicks: clampedTicks,
+            playedPercentage: playedPercentage
+        )
 
         save(entries, serverID: serverID, userID: userID)
     }
@@ -1140,9 +1185,26 @@ enum HomeItemUserDataOverrideStore {
         return copy
     }
 
+    private static func applyingPlaybackPosition(_ entry: Entry, to item: BaseItemDto) -> BaseItemDto {
+        guard let playbackPositionTicks = entry.playbackPositionTicks else {
+            return applyingPlayedState(entry.isPlayed, to: item)
+        }
+
+        var copy = item
+        var userData = copy.userData ?? UserItemDataDto()
+
+        userData.isPlayed = false
+        userData.playbackPositionTicks = playbackPositionTicks
+        userData.playedPercentage = entry.playedPercentage
+        userData.lastPlayedDate = Date(timeIntervalSince1970: entry.changedAt)
+
+        copy.userData = userData
+        return copy
+    }
+
     private static func applying(entries: [String: Entry], to item: BaseItemDto) -> BaseItemDto {
         guard let entry = entry(for: item, in: entries) else { return item }
-        return applyingPlayedState(entry.isPlayed, to: item)
+        return applyingPlaybackPosition(entry, to: item)
     }
 
     private static func entry(for item: BaseItemDto, in entries: [String: Entry]) -> Entry? {

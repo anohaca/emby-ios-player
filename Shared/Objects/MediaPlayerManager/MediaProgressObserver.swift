@@ -39,6 +39,8 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
     private var hasNotifiedHomeAfterServerProgress = false
     private weak var item: MediaPlayerItem?
     private var lastKnownPlaybackSeconds: Duration?
+    private var lastStoredPlaybackSeconds: Duration?
+    private var lastNotifiedPlaybackSeconds: Duration?
     private var lastPlaybackRequestStatus: MediaPlayerManager.PlaybackRequestStatus = .playing
 
     init(item: MediaPlayerItem) {
@@ -81,7 +83,7 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
             .store(in: &cancellables)
 
         manager.secondsBox.$value
-            .sink { [weak self] in self?.recordPlaybackSeconds($0) }
+            .sink { [weak self] in self?.playbackSecondsDidChange($0) }
             .store(in: &cancellables)
     }
 
@@ -111,7 +113,7 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
 
     private func sendStartReport(for item: MediaPlayerItem, seconds: Duration?) {
 
-        recordResumeRecency(for: item, notifyHome: true)
+        recordResumeRecency(for: item, seconds: seconds, notifyHome: true)
 
         #if DEBUG
         guard Defaults[.sendProgressReports] else { return }
@@ -141,7 +143,7 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
 
     private func sendStopReport(for item: MediaPlayerItem, seconds: Duration?) {
 
-        recordResumeRecency(for: item, notifyHome: true)
+        recordResumeRecency(for: item, seconds: seconds, notifyHome: true)
 
         #if DEBUG
         guard Defaults[.sendProgressReports] else { return }
@@ -189,6 +191,32 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
         }
     }
 
+    private func playbackSecondsDidChange(_ seconds: Duration) {
+        recordPlaybackSeconds(seconds)
+        recordLocalPlaybackPosition(seconds)
+    }
+
+    private func recordLocalPlaybackPosition(_ seconds: Duration) {
+        guard let item, seconds > .zero else { return }
+        guard lastStoredPlaybackSeconds.map({ abs(seconds - $0) >= .seconds(1) }) ?? true else { return }
+
+        lastStoredPlaybackSeconds = seconds
+
+        HomeItemUserDataOverrideStore.markPlaybackPosition(
+            item: item.baseItem,
+            seconds: seconds,
+            serverID: userSession.server.id,
+            userID: userSession.user.id
+        )
+
+        guard lastNotifiedPlaybackSeconds.map({ abs(seconds - $0) >= .seconds(5) }) ?? true else { return }
+        lastNotifiedPlaybackSeconds = seconds
+
+        if let itemID = item.baseItem.id {
+            Notifications[.resumeItemRecencyDidChange].post(itemID)
+        }
+    }
+
     private func stopReportSeconds(from seconds: Duration?) -> Duration? {
         if let seconds, seconds > .zero {
             return seconds
@@ -199,7 +227,7 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
 
     private func sendProgressReport(for item: MediaPlayerItem, seconds: Duration?, isPaused: Bool = false) {
 
-        recordResumeRecency(for: item)
+        recordResumeRecency(for: item, seconds: seconds)
 
         #if DEBUG
         guard Defaults[.sendProgressReports] else { return }
@@ -236,9 +264,16 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
         }
     }
 
-    private func recordResumeRecency(for item: MediaPlayerItem, notifyHome: Bool = false) {
+    private func recordResumeRecency(for item: MediaPlayerItem, seconds: Duration? = nil, notifyHome: Bool = false) {
         HomeItemUserDataOverrideStore.clearRelatedItems(
             for: item.baseItem,
+            serverID: userSession.server.id,
+            userID: userSession.user.id
+        )
+
+        HomeItemUserDataOverrideStore.markPlaybackPosition(
+            item: item.baseItem,
+            seconds: seconds,
             serverID: userSession.server.id,
             userID: userSession.user.id
         )

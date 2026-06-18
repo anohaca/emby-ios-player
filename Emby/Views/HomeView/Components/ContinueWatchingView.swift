@@ -19,6 +19,9 @@ extension HomeView {
         @ObservedObject
         var viewModel: HomeViewModel
 
+        @StateObject
+        private var overlayState = BaseItemPosterOverlayState()
+
         // TODO: see how this looks across multiple screen sizes
         //       alongside PosterHStack + landscape
         // TODO: need better handling for iPadOS + portrait orientation
@@ -28,6 +31,18 @@ extension HomeView {
             } else {
                 3.5
             }
+        }
+
+        private var overlaySignature: Int {
+            var hasher = Hasher()
+
+            for item in viewModel.resumeItems {
+                hasher.combine(item.id)
+                hasher.combine(item.userData?.playbackPositionTicks)
+                hasher.combine(item.userData?.playedPercentage)
+            }
+
+            return hasher.finalize()
         }
 
         private func play(_ item: BaseItemDto) {
@@ -84,16 +99,60 @@ extension HomeView {
                 }
             }
             .posterOverlay(for: BaseItemDto.self) { item in
-                LandscapePosterProgressBar(
-                    title: item.progressLabel ?? L10n.continue,
-                    progress: (item.userData?.playedPercentage ?? 0) / 100
+                ContinueWatchingProgressOverlay(
+                    item: item,
+                    overlayState: overlayState
                 )
             }
+            .onAppear {
+                refreshOverlayState()
+            }
+            .onChange(of: overlaySignature) { _ in
+                refreshOverlayState()
+            }
             .frame(minHeight: viewModel.resumeItems.isEmpty ? nil : stableMinimumHeight)
+        }
+
+        private func refreshOverlayState() {
+            overlayState.update(items: Array(viewModel.resumeItems))
         }
 
         private var stableMinimumHeight: CGFloat {
             UIDevice.isPhone ? 184 : 220
         }
+    }
+}
+
+private struct ContinueWatchingProgressOverlay: View {
+
+    let item: BaseItemDto
+
+    @ObservedObject
+    var overlayState: BaseItemPosterOverlayState
+
+    private var value: BaseItemPosterOverlayState.Value {
+        overlayState.value(for: item)
+    }
+
+    private var progressLabel: String {
+        guard let totalTicks = item.runTimeTicks,
+              value.playbackPositionTicks > 0,
+              totalTicks > 0 else {
+            return L10n.continue
+        }
+
+        let remainingSeconds = max(0, totalTicks - value.playbackPositionTicks) / 10_000_000
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.hour, .minute]
+        formatter.unitsStyle = .abbreviated
+
+        return formatter.string(from: TimeInterval(remainingSeconds)) ?? L10n.continue
+    }
+
+    var body: some View {
+        LandscapePosterProgressBar(
+            title: progressLabel,
+            progress: value.playedPercentage / 100
+        )
     }
 }

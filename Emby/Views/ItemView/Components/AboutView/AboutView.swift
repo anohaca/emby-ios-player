@@ -120,7 +120,10 @@ extension ItemView {
                     switch item {
                     case .image:
                         ImageCard(viewModel: viewModel)
-                            .frame(width: UIDevice.isPad ? padImageWidth : phoneImageWidth)
+                            .frame(
+                                width: UIDevice.isPad ? padImageWidth : phoneImageWidth,
+                                height: cardSize.height
+                            )
                     case .overview:
                         OverviewCard(item: viewModel.item)
                             .frame(width: cardSize.width, height: cardSize.height)

@@ -528,6 +528,10 @@ final class MPVPlayerController: NSObject {
         bridge?.setSubtitleBorderSize(min(max(borderSize, 0), 8))
     }
 
+    func setSubtitleDelay(_ delay: Double) {
+        bridge?.setSubtitleDelay(delay)
+    }
+
     func seek(to seconds: Double) {
         let target: Double
         if duration > 0 {

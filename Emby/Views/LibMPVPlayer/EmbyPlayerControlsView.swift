@@ -1,5 +1,18 @@
 import UIKit
 
+private final class CenteredCaretTextField: UITextField {
+    override func caretRect(for position: UITextPosition) -> CGRect {
+        let rect = super.caretRect(for: position)
+        guard (text ?? "").isEmpty else { return rect }
+        return CGRect(
+            x: (bounds.width - rect.width) / 2,
+            y: rect.minY,
+            width: rect.width,
+            height: rect.height
+        )
+    }
+}
+
 final class PlayerControlsView: UIView, UITextFieldDelegate {
     enum GestureHUDPlacement: Equatable {
         case center
@@ -15,6 +28,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         case position
         case scale
         case border
+        case delay
     }
 
     private static let pausedIndicatorVisibleDuration: TimeInterval = 0.5
@@ -25,6 +39,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private static let subtitlePositionStep = 1.0
     private static let subtitleScaleStep = 0.01
     private static let subtitleBorderSizeStep = 0.1
+    private static let subtitleDelayStep = 0.1
 
     private enum JumpDirection {
         case backward
@@ -74,6 +89,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     var onSubtitlePositionChanged: ((Double) -> Void)?
     var onSubtitleScaleChanged: ((Double) -> Void)?
     var onSubtitleBorderSizeChanged: ((Double) -> Void)?
+    var onSubtitleDelayChanged: ((Double) -> Void)?
     var onSubtitleAdjustmentBegan: (() -> Void)?
     var onSubtitleAdjustmentEnded: (() -> Void)?
     var onSubtitleAdjustmentVisibilityChanged: ((Bool) -> Void)?
@@ -102,7 +118,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private let pausedIndicatorView = UIImageView(image: UIImage(systemName: "pause.fill"))
     private let renderedSubtitleLabel = UILabel()
     private let subtitleAdjustmentPanel = UIVisualEffectView(effect: PlayerControlsView.panelEffect())
-    private let subtitleAdjustmentValueField = UITextField()
+    private let subtitleAdjustmentValueField = CenteredCaretTextField()
     private let subtitleAdjustmentIncreaseButton = UIButton(type: .system)
     private let subtitleAdjustmentSliderContainer = UIView()
     private let subtitleAdjustmentSlider = UISlider()
@@ -130,6 +146,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private var subtitlePosition = 100.0
     private var subtitleScale = 1.0
     private var subtitleBorderSize = 3.0
+    private var subtitleDelay = 0.0
     private var gestureHUDCenterYConstraint: NSLayoutConstraint?
     private var gestureHUDTopConstraint: NSLayoutConstraint?
     private var subtitleVisibleBottomConstraint: NSLayoutConstraint?
@@ -222,19 +239,24 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         updateSubtitleMenu()
     }
 
-    func updateSubtitleAdjustment(position: Double, scale: Double, borderSize: Double? = nil) {
+    func updateSubtitleAdjustment(position: Double, scale: Double, borderSize: Double? = nil, delay: Double? = nil) {
         let nextPosition = min(max(position, 0), 100)
         let nextScale = min(max(scale, 0.5), 2.5)
         let nextBorderSize = borderSize.map(Self.clampedSubtitleBorderSize) ?? subtitleBorderSize
+        let nextDelay = delay ?? subtitleDelay
         guard subtitlePosition != nextPosition ||
             subtitleScale != nextScale ||
-            subtitleBorderSize != nextBorderSize
+            subtitleBorderSize != nextBorderSize ||
+            subtitleDelay != nextDelay
         else { return }
 
         subtitlePosition = nextPosition
         subtitleScale = nextScale
         if borderSize != nil {
             subtitleBorderSize = nextBorderSize
+        }
+        if delay != nil {
+            subtitleDelay = nextDelay
         }
         updateSubtitleAdjustmentSlider(animated: false)
         updateSubtitleAdjustmentValueDisplays(forceField: false)
@@ -955,6 +977,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         subtitleAdjustmentValueField.tintColor = .white
         subtitleAdjustmentValueField.font = .monospacedDigitSystemFont(ofSize: 13, weight: .semibold)
         subtitleAdjustmentValueField.textAlignment = .center
+        applyCenteredSubtitleAdjustmentValueAttributes()
         subtitleAdjustmentValueField.adjustsFontSizeToFitWidth = true
         subtitleAdjustmentValueField.minimumFontSize = 10
         subtitleAdjustmentValueField.backgroundColor = UIColor.white.withAlphaComponent(0.12)
@@ -962,7 +985,6 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         subtitleAdjustmentValueField.layer.cornerCurve = .continuous
         subtitleAdjustmentValueField.layer.masksToBounds = false
         applyShadow(to: subtitleAdjustmentValueField.layer, opacity: 0.45, radius: 4, offset: CGSize(width: 0, height: 1))
-        subtitleAdjustmentValueField.inputAccessoryView = makeSubtitleAdjustmentInputAccessoryView()
         subtitleAdjustmentValueField.accessibilityLabel = "字幕调节数值"
         subtitleAdjustmentValueField.accessibilityCustomActions = subtitleAdjustmentAccessibilityActions()
         subtitleAdjustmentValueField.addTarget(self,
@@ -1063,16 +1085,16 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         button.addTarget(self, action: action, for: .touchDown)
     }
 
-    private func makeSubtitleAdjustmentInputAccessoryView() -> UIToolbar {
-        let toolbar = UIToolbar()
-        toolbar.sizeToFit()
-        toolbar.items = [
-            UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil),
-            UIBarButtonItem(barButtonSystemItem: .done,
-                            target: self,
-                            action: #selector(subtitleAdjustmentValueDoneTapped))
+    private func applyCenteredSubtitleAdjustmentValueAttributes() {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+        let attributes: [NSAttributedString.Key: Any] = [
+            .paragraphStyle: paragraphStyle,
+            .font: subtitleAdjustmentValueField.font ?? UIFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold),
+            .foregroundColor: subtitleAdjustmentValueField.textColor ?? UIColor.white,
         ]
-        return toolbar
+        subtitleAdjustmentValueField.defaultTextAttributes = attributes
+        subtitleAdjustmentValueField.typingAttributes = attributes
     }
 
     private func setSubtitleAdjustmentMode(_ mode: SubtitleAdjustmentMode) {
@@ -1118,6 +1140,9 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         case .border:
             imageName = "lineweight"
             accessibilityLabel = "字幕轮廓宽度"
+        case .delay:
+            imageName = "timer"
+            accessibilityLabel = "字幕延迟"
         }
         subtitleAdjustmentIconView.image = UIImage(systemName: imageName)
         subtitleAdjustmentIconView.accessibilityLabel = accessibilityLabel
@@ -1132,6 +1157,8 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             label = "字幕大小"
         case .border:
             label = "字幕轮廓宽度"
+        case .delay:
+            label = "字幕延迟"
         }
         subtitleAdjustmentIncreaseButton.accessibilityLabel = "增加\(label)"
         subtitleAdjustmentDecreaseButton.accessibilityLabel = "减少\(label)"
@@ -1155,6 +1182,11 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             subtitleAdjustmentSlider.maximumValue = 8
             subtitleAdjustmentSlider.accessibilityLabel = "字幕轮廓宽度"
             value = subtitleBorderSize
+        case .delay:
+            subtitleAdjustmentSlider.minimumValue = Float(min(-10, subtitleDelay))
+            subtitleAdjustmentSlider.maximumValue = Float(max(10, subtitleDelay))
+            subtitleAdjustmentSlider.accessibilityLabel = "字幕延迟"
+            value = subtitleDelay
         }
 
         subtitleAdjustmentSlider.setValue(Float(value), animated: animated)
@@ -1172,6 +1204,9 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         case .border:
             subtitleBorderSize = Self.clampedSubtitleBorderSize(sliderValue)
             onSubtitleBorderSizeChanged?(subtitleBorderSize)
+        case .delay:
+            subtitleDelay = sliderValue
+            onSubtitleDelayChanged?(subtitleDelay)
         }
         updateSubtitleAdjustmentValueDisplays(forceField: true)
     }
@@ -1198,6 +1233,9 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         case .border:
             subtitleBorderSize = Self.clampedSubtitleBorderSize(rawValue)
             onSubtitleBorderSizeChanged?(subtitleBorderSize)
+        case .delay:
+            subtitleDelay = rawValue
+            onSubtitleDelayChanged?(subtitleDelay)
         }
 
         updateSubtitleAdjustmentSlider(animated: false)
@@ -1222,6 +1260,10 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             let steppedValue = subtitleBorderSize + Double(direction) * Self.subtitleBorderSizeStep
             subtitleBorderSize = Self.clampedSubtitleBorderSize((steppedValue * 10).rounded() / 10)
             onSubtitleBorderSizeChanged?(subtitleBorderSize)
+        case .delay:
+            let steppedValue = subtitleDelay + Double(direction) * Self.subtitleDelayStep
+            subtitleDelay = (steppedValue * 10).rounded() / 10
+            onSubtitleDelayChanged?(subtitleDelay)
         }
 
         updateSubtitleAdjustmentSlider(animated: false)
@@ -1229,6 +1271,14 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     }
 
     private func updateSubtitleAdjustmentValueDisplays(forceField: Bool) {
+        let keyboardType: UIKeyboardType = subtitleAdjustmentMode == .delay ? .numbersAndPunctuation : .decimalPad
+        if subtitleAdjustmentValueField.keyboardType != keyboardType {
+            subtitleAdjustmentValueField.keyboardType = keyboardType
+            if subtitleAdjustmentValueField.isFirstResponder {
+                subtitleAdjustmentValueField.reloadInputViews()
+            }
+        }
+
         switch subtitleAdjustmentMode {
         case .position:
             subtitleAdjustmentValueField.placeholder = "0-100"
@@ -1239,6 +1289,9 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         case .border:
             subtitleAdjustmentValueField.placeholder = "0-8"
             subtitleAdjustmentValueField.accessibilityValue = Self.formatSubtitleBorderSize(subtitleBorderSize)
+        case .delay:
+            subtitleAdjustmentValueField.placeholder = "±10s"
+            subtitleAdjustmentValueField.accessibilityValue = Self.formatSubtitleDelay(subtitleDelay)
         }
 
         guard forceField || !subtitleAdjustmentValueField.isFirstResponder else { return }
@@ -1250,6 +1303,8 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             subtitleAdjustmentValueField.text = Self.formatSubtitleScale(subtitleScale)
         case .border:
             subtitleAdjustmentValueField.text = Self.formatSubtitleBorderSize(subtitleBorderSize)
+        case .delay:
+            subtitleAdjustmentValueField.text = Self.formatSubtitleDelayInput(subtitleDelay)
         }
     }
 
@@ -1291,6 +1346,27 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
 
     private static func clampedSubtitleBorderSize(_ value: Double) -> Double {
         min(max(value, 0), 8)
+    }
+
+    private static func formatSubtitleDelay(_ value: Double) -> String {
+        if abs(value) < 0.05 {
+            return "0s"
+        }
+        return String(format: "%+.1fs", value)
+    }
+
+    private static func formatSubtitleDelayInput(_ value: Double) -> String {
+        if abs(value) < 0.05 {
+            return "0"
+        }
+        var text = String(format: "%.1f", value)
+        while text.last == "0" {
+            text.removeLast()
+        }
+        if text.last == "." {
+            text.removeLast()
+        }
+        return text
     }
 
     private func configureRenderedSubtitleLabel() {
@@ -1492,6 +1568,10 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
                               image: UIImage(systemName: "lineweight")) { [weak self] _ in
             self?.openSubtitleAdjustmentFromSettings(.border)
         }
+        let delay = UIAction(title: "调整字幕延迟",
+                             image: UIImage(systemName: "timer")) { [weak self] _ in
+            self?.openSubtitleAdjustmentFromSettings(.delay)
+        }
 
         if subtitleAdjustmentPanelVisible {
             switch subtitleAdjustmentMode {
@@ -1501,6 +1581,8 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
                 scale.state = .on
             case .border:
                 border.state = .on
+            case .delay:
+                delay.state = .on
             }
         }
 
@@ -1510,6 +1592,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             position,
             scale,
             border,
+            delay,
         ])
         settingsButton.menu = UIMenu(title: "设置", children: [
             subtitleSettings,
@@ -1540,6 +1623,11 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
                 name: "调整字幕轮廓",
                 target: self,
                 selector: #selector(accessibilityAdjustSubtitleBorder)
+            ),
+            UIAccessibilityCustomAction(
+                name: "调整字幕延迟",
+                target: self,
+                selector: #selector(accessibilityAdjustSubtitleDelay)
             ),
         ]
     }
@@ -1794,6 +1882,11 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         return true
     }
 
+    @objc private func accessibilityAdjustSubtitleDelay() -> Bool {
+        showSubtitleAdjustmentPanel(mode: .delay, animated: true)
+        return true
+    }
+
     @objc private func accessibilityCloseSubtitleAdjustment() -> Bool {
         setSubtitleAdjustmentPanelVisible(false, animated: true)
         return true
@@ -1852,7 +1945,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         guard textField === subtitleAdjustmentValueField else { return true }
         guard !string.isEmpty else { return true }
 
-        let allowedCharacters = CharacterSet(charactersIn: "0123456789.,")
+        let allowedCharacters = CharacterSet(charactersIn: subtitleAdjustmentMode == .delay ? "0123456789.,+-" : "0123456789.,")
         guard string.rangeOfCharacter(from: allowedCharacters.inverted) == nil else {
             return false
         }
@@ -1862,14 +1955,22 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         let next = current.replacingCharacters(in: textRange, with: string)
         let separatorCount = next.filter { $0 == "." || $0 == "," }.count
         if separatorCount > 1 { return false }
+        let signCount = next.filter { $0 == "-" || $0 == "+" }.count
+        if signCount > 1 { return false }
+        if let signIndex = next.firstIndex(where: { $0 == "-" || $0 == "+" }),
+           signIndex != next.startIndex {
+            return false
+        }
 
         switch subtitleAdjustmentMode {
         case .position:
-            return separatorCount == 0 && next.count <= 3
+            return signCount == 0 && separatorCount == 0
         case .scale:
-            return next.count <= 4
+            return signCount == 0
         case .border:
-            return next.count <= 3
+            return signCount == 0
+        case .delay:
+            return true
         }
     }
 

@@ -46,6 +46,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setSubtitlePosition:(double)position;
 - (void)setSubtitleScale:(double)scale;
 - (void)setSubtitleBorderSize:(double)borderSize;
+- (void)setSubtitleDelay:(double)delay;
 - (void)seekToSeconds:(double)seconds;
 - (void)refreshVideoRect;
 - (void)nudgeVideoOutputAfterForeground;

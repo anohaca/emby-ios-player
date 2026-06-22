@@ -125,7 +125,9 @@ final class LibMPVMediaPlayerProxy: VideoMediaPlayerProxy,
     }
 
     func setAudioOffset(_ seconds: Duration) {}
-    func setSubtitleOffset(_ seconds: Duration) {}
+    func setSubtitleOffset(_ seconds: Duration) {
+        controller.setSubtitleDelay(seconds.seconds)
+    }
     func setSubtitleColor(_ color: Color) {}
     func setSubtitleFontName(_ fontName: String) {}
     func setSubtitleFontSize(_ fontSize: Int) {}

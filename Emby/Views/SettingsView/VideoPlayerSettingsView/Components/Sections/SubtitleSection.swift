@@ -20,6 +20,8 @@ extension VideoPlayerSettingsView {
         private var subtitleColor
         @Default(.VideoPlayer.Subtitle.subtitleBorderSize)
         private var subtitleBorderSize
+        @Default(.VideoPlayer.Subtitle.subtitleDelay)
+        private var subtitleDelay
 
         @Router
         private var router
@@ -43,6 +45,12 @@ extension VideoPlayerSettingsView {
                         Text(Self.formatSubtitleBorderSize(subtitleBorderSize))
                     }
                 }
+
+                Stepper(value: $subtitleDelay, in: -10 ... 10, step: 0.1) {
+                    LabeledContent("字幕延迟") {
+                        Text(Self.formatSubtitleDelay(subtitleDelay))
+                    }
+                }
             } header: {
                 Text(L10n.subtitle)
             } footer: {
@@ -59,6 +67,14 @@ extension VideoPlayerSettingsView {
                 text.removeLast()
             }
             return text
+        }
+
+        private static func formatSubtitleDelay(_ value: Double) -> String {
+            let clamped = min(max(value, -10), 10)
+            if abs(clamped) < 0.05 {
+                return "0s"
+            }
+            return String(format: "%+.1fs", clamped)
         }
     }
 }

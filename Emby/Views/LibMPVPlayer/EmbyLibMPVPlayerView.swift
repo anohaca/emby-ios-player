@@ -186,6 +186,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private var subtitlePosition = 100.0
     private var subtitleScale = 1.0
     private var subtitleBorderSize = 3.0
+    private var subtitleDelay = 0.0
     private var subtitleAdjustmentSettingsDidChange = false
     private var lastSubtitleAdjustmentLogAt: Date?
     private var shouldResumeAfterSubtitlePicker = false
@@ -287,6 +288,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         subtitlePosition = Self.clampedSubtitlePosition(Defaults[.VideoPlayer.Subtitle.subtitlePosition])
         subtitleScale = Self.clampedSubtitleScale(Defaults[.VideoPlayer.Subtitle.subtitleScale])
         subtitleBorderSize = Self.clampedSubtitleBorderSize(Defaults[.VideoPlayer.Subtitle.subtitleBorderSize])
+        subtitleDelay = Defaults[.VideoPlayer.Subtitle.subtitleDelay]
         self.usesManualWindowPresentation = usesManualWindowPresentation
         super.init(nibName: nil, bundle: nil)
         self.manager = manager
@@ -325,7 +327,10 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         bindControls()
         bindHardwareVolumeHUD()
         controlsView.applyEmbyPlaybackChrome()
-        controlsView.updateSubtitleAdjustment(position: subtitlePosition, scale: subtitleScale, borderSize: subtitleBorderSize)
+        controlsView.updateSubtitleAdjustment(position: subtitlePosition,
+                                              scale: subtitleScale,
+                                              borderSize: subtitleBorderSize,
+                                              delay: subtitleDelay)
         controlsView.updateJumpIntervals(
             backward: Defaults[.VideoPlayer.jumpBackwardInterval],
             forward: Defaults[.VideoPlayer.jumpForwardInterval]
@@ -1358,7 +1363,9 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     }
 
     func setAudioOffset(_ seconds: Duration) {}
-    func setSubtitleOffset(_ seconds: Duration) {}
+    func setSubtitleOffset(_ seconds: Duration) {
+        setSubtitleDelay(seconds.seconds)
+    }
     func setSubtitleColor(_ color: Color) {}
     func setSubtitleFontName(_ fontName: String) {}
     func setSubtitleFontSize(_ fontSize: Int) {
@@ -1878,6 +1885,10 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
         controlsView.onSubtitleBorderSizeChanged = { [weak self] borderSize in
             self?.setSubtitleBorderSize(borderSize)
+        }
+
+        controlsView.onSubtitleDelayChanged = { [weak self] delay in
+            self?.setSubtitleDelay(delay)
         }
 
         controlsView.onSubtitleAdjustmentVisibilityChanged = { [weak self] visible in
@@ -2803,7 +2814,10 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         subtitleAdjustmentSettingsDidChange = true
         player.setSubtitlePosition(subtitlePosition)
         updateRenderedSubtitleTransform()
-        controlsView.updateSubtitleAdjustment(position: subtitlePosition, scale: subtitleScale, borderSize: subtitleBorderSize)
+        controlsView.updateSubtitleAdjustment(position: subtitlePosition,
+                                              scale: subtitleScale,
+                                              borderSize: subtitleBorderSize,
+                                              delay: subtitleDelay)
         scheduleSubtitleAdjustmentPersistence()
         logSubtitleAdjustmentIfNeeded()
     }
@@ -2817,7 +2831,10 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         if renderedSubtitleLabel.alpha > 0 {
             updateRenderedSubtitle(renderedSubtitleLabel.attributedText?.string)
         }
-        controlsView.updateSubtitleAdjustment(position: subtitlePosition, scale: subtitleScale, borderSize: subtitleBorderSize)
+        controlsView.updateSubtitleAdjustment(position: subtitlePosition,
+                                              scale: subtitleScale,
+                                              borderSize: subtitleBorderSize,
+                                              delay: subtitleDelay)
         scheduleSubtitleAdjustmentPersistence()
         logSubtitleAdjustmentIfNeeded()
     }
@@ -2832,7 +2849,23 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         if renderedSubtitleLabel.alpha > 0 {
             updateRenderedSubtitle(renderedSubtitleLabel.attributedText?.string)
         }
-        controlsView.updateSubtitleAdjustment(position: subtitlePosition, scale: subtitleScale, borderSize: subtitleBorderSize)
+        controlsView.updateSubtitleAdjustment(position: subtitlePosition,
+                                              scale: subtitleScale,
+                                              borderSize: subtitleBorderSize,
+                                              delay: subtitleDelay)
+        scheduleSubtitleAdjustmentPersistence()
+        logSubtitleAdjustmentIfNeeded()
+    }
+
+    private func setSubtitleDelay(_ delay: Double) {
+        guard subtitleDelay != delay else { return }
+        subtitleDelay = delay
+        subtitleAdjustmentSettingsDidChange = true
+        player.setSubtitleDelay(subtitleDelay)
+        controlsView.updateSubtitleAdjustment(position: subtitlePosition,
+                                              scale: subtitleScale,
+                                              borderSize: subtitleBorderSize,
+                                              delay: subtitleDelay)
         scheduleSubtitleAdjustmentPersistence()
         logSubtitleAdjustmentIfNeeded()
     }
@@ -2841,7 +2874,11 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         player.setSubtitlePosition(subtitlePosition)
         player.setSubtitleScale(subtitleScale)
         player.setSubtitleBorderSize(subtitleBorderSize)
-        controlsView.updateSubtitleAdjustment(position: subtitlePosition, scale: subtitleScale, borderSize: subtitleBorderSize)
+        player.setSubtitleDelay(subtitleDelay)
+        controlsView.updateSubtitleAdjustment(position: subtitlePosition,
+                                              scale: subtitleScale,
+                                              borderSize: subtitleBorderSize,
+                                              delay: subtitleDelay)
         updateRenderedSubtitleOutline()
         updateRenderedSubtitleTransform()
     }
@@ -2850,15 +2887,17 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         player.setSubtitlePosition(subtitlePosition)
         player.setSubtitleScale(subtitleScale)
         player.setSubtitleBorderSize(subtitleBorderSize)
+        player.setSubtitleDelay(subtitleDelay)
         updateRenderedSubtitleOutline()
         updateRenderedSubtitleTransform()
         #if DEBUG
         NSLog(
-            "EmbyPlayerSubtitleAdjustmentReapply reason=%@ position=%.2f scale=%.2f border=%.2f",
+            "EmbyPlayerSubtitleAdjustmentReapply reason=%@ position=%.2f scale=%.2f border=%.2f delay=%.2f",
             reason,
             subtitlePosition,
             subtitleScale,
-            subtitleBorderSize
+            subtitleBorderSize,
+            subtitleDelay
         )
         #endif
     }
@@ -2888,7 +2927,13 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             return
         }
         lastSubtitleAdjustmentLogAt = now
-        NSLog("EmbyPlayerSubtitleAdjustment position=%.2f scale=%.2f border=%.2f", subtitlePosition, subtitleScale, subtitleBorderSize)
+        NSLog(
+            "EmbyPlayerSubtitleAdjustment position=%.2f scale=%.2f border=%.2f delay=%.2f",
+            subtitlePosition,
+            subtitleScale,
+            subtitleBorderSize,
+            subtitleDelay
+        )
         #endif
     }
 
@@ -2909,6 +2954,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         Defaults[.VideoPlayer.Subtitle.subtitlePosition] = subtitlePosition
         Defaults[.VideoPlayer.Subtitle.subtitleScale] = subtitleScale
         Defaults[.VideoPlayer.Subtitle.subtitleBorderSize] = subtitleBorderSize
+        Defaults[.VideoPlayer.Subtitle.subtitleDelay] = subtitleDelay
     }
 
     private static func clampedSubtitlePosition(_ position: Double) -> Double {

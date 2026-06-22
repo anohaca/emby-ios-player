@@ -672,6 +672,10 @@ extension Defaults.Keys {
                 AppKey("subtitleBorderSize", default: 3)
             }
 
+            static var subtitleDelay: Key<Double> {
+                AppKey("subtitleDelay", default: 0)
+            }
+
             static var convertTraditionalChineseSubtitles: Key<Bool> {
                 AppKey("convertTraditionalChineseSubtitles", default: false)
             }

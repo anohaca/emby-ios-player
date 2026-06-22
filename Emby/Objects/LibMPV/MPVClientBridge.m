@@ -659,6 +659,16 @@ static NSString *MPVXMLTextEscapedString(NSString *string)
     }
 }
 
+- (void)setSubtitleDelay:(double)delay
+{
+    double value = delay;
+    int delayRC = [self setProperty:"sub-delay" format:MPV_FORMAT_DOUBLE value:&value];
+    NSString *line = [NSString stringWithFormat:@"mpv-subtitle-delay value=%.2f delayRC=%s",
+                                                value,
+                                                mpv_error_string(delayRC)];
+    [self notifyDiagnosticLine:line];
+}
+
 - (void)seekToSeconds:(double)seconds
 {
     if (!self.mpv)

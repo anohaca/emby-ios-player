@@ -519,9 +519,11 @@ private struct DebugSubtitleAdjustmentSmokeRepresentable: UIViewRepresentable {
         Defaults[.VideoPlayer.Subtitle.subtitlePosition] = 72
         Defaults[.VideoPlayer.Subtitle.subtitleScale] = 1.4
         Defaults[.VideoPlayer.Subtitle.subtitleBorderSize] = 3.5
+        Defaults[.VideoPlayer.Subtitle.subtitleDelay] = 0.3
         let storedSubtitlePosition = Defaults[.VideoPlayer.Subtitle.subtitlePosition]
         let storedSubtitleScale = Defaults[.VideoPlayer.Subtitle.subtitleScale]
         let storedSubtitleBorderSize = Defaults[.VideoPlayer.Subtitle.subtitleBorderSize]
+        let storedSubtitleDelay = Defaults[.VideoPlayer.Subtitle.subtitleDelay]
         controlsView.backgroundColor = .black
         controlsView.updateTitle("Subtitle Adjustment", subtitle: "Position / Size / Border")
         controlsView.update(time: 62, duration: 24 * 60)
@@ -534,7 +536,8 @@ private struct DebugSubtitleAdjustmentSmokeRepresentable: UIViewRepresentable {
         controlsView.updateSubtitleAdjustment(
             position: storedSubtitlePosition,
             scale: storedSubtitleScale,
-            borderSize: storedSubtitleBorderSize
+            borderSize: storedSubtitleBorderSize,
+            delay: storedSubtitleDelay
         )
         if arguments.contains("-EmbySubtitleAdjustmentSmokeSeparated") {
             addSeparatedSubtitleAdjustmentSmokeStatus(to: controlsView)
@@ -601,6 +604,7 @@ private struct DebugSubtitleAdjustmentSmokeRepresentable: UIViewRepresentable {
         let menuSeparated = menuTitles.contains("调整字幕位置") &&
             menuTitles.contains("调整字幕大小") &&
             menuTitles.contains("调整字幕轮廓") &&
+            menuTitles.contains("调整字幕延迟") &&
             !menuTitles.contains("调整位置/大小/轮廓") &&
             rootMenuTitles == ["字幕设置"]
 
@@ -667,7 +671,40 @@ private struct DebugSubtitleAdjustmentSmokeRepresentable: UIViewRepresentable {
             borderRestored &&
             borderKeptPositionCallbackSeparated
 
-        let passed = menuSeparated && positionSeparated && scaleSeparated && borderSeparated
+        controlsView.showSubtitleAdjustmentPanelForSmoke(.delay)
+        lastPosition = nil
+        var lastDelay: Double?
+        controlsView.onSubtitleDelayChanged = { delay in
+            lastDelay = delay
+        }
+        let delayStepLabels = controlsView.subtitleAdjustmentStepButtonLabelsForSmoke == ["增加字幕延迟", "减少字幕延迟"]
+        controlsView.triggerSubtitleAdjustmentIncreaseForSmoke()
+        let delayIncremented = abs(controlsView.subtitleAdjustmentSliderValueForSmoke - 0.4) < 0.01 &&
+            controlsView.subtitleAdjustmentInputTextForSmoke == "0.4" &&
+            abs((lastDelay ?? -100) - 0.4) < 0.01
+        controlsView.triggerSubtitleAdjustmentDecreaseForSmoke()
+        let delayRestored = abs(controlsView.subtitleAdjustmentSliderValueForSmoke - 0.3) < 0.01 &&
+            controlsView.subtitleAdjustmentInputTextForSmoke == "0.3" &&
+            abs((lastDelay ?? -100) - 0.3) < 0.01
+        controlsView.updateSubtitleAdjustment(
+            position: 72,
+            scale: 1.4,
+            borderSize: 3.5,
+            delay: 50
+        )
+        let delayAllowsLargeInput = abs(controlsView.subtitleAdjustmentSliderValueForSmoke - 50) < 0.01 &&
+            controlsView.subtitleAdjustmentInputTextForSmoke == "50"
+        let delayKeptPositionCallbackSeparated = lastPosition == nil
+        let delaySeparated = controlsView.subtitleAdjustmentModeForSmoke == .delay &&
+            controlsView.subtitleAdjustmentValueFieldIsTopForSmoke &&
+            controlsView.subtitleAdjustmentIconLabelForSmoke == "字幕延迟" &&
+            delayStepLabels &&
+            delayIncremented &&
+            delayRestored &&
+            delayAllowsLargeInput &&
+            delayKeptPositionCallbackSeparated
+
+        let passed = menuSeparated && positionSeparated && scaleSeparated && borderSeparated && delaySeparated
         let label = UILabel()
         label.translatesAutoresizingMaskIntoConstraints = false
         label.text = passed ? "PASS separated subtitle adjustments" : "FAIL separated subtitle adjustments"
@@ -684,12 +721,13 @@ private struct DebugSubtitleAdjustmentSmokeRepresentable: UIViewRepresentable {
             label.widthAnchor.constraint(lessThanOrEqualTo: controlsView.safeAreaLayoutGuide.widthAnchor, constant: -32),
             label.heightAnchor.constraint(equalToConstant: 36),
         ])
-        NSLog("EmbySubtitleAdjustmentSmokeSeparated passed=%@ menu=%@ position=%@ scale=%@ border=%@",
+        NSLog("EmbySubtitleAdjustmentSmokeSeparated passed=%@ menu=%@ position=%@ scale=%@ border=%@ delay=%@",
               passed.description,
               "\(menuTitles.joined(separator: " | ")) root=\(rootMenuTitles.joined(separator: " | "))",
               positionSeparated.description,
               scaleSeparated.description,
-              borderSeparated.description)
+              borderSeparated.description,
+              delaySeparated.description)
         precondition(passed, "Subtitle adjustment controls are not separated")
     }
 }

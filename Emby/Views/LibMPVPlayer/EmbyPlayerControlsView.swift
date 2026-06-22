@@ -1,6 +1,17 @@
 import UIKit
 
 private final class CenteredCaretTextField: UITextField {
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        clearEditingBackgrounds(in: self)
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let becameFirstResponder = super.becomeFirstResponder()
+        clearEditingBackgrounds(in: self)
+        return becameFirstResponder
+    }
+
     override func caretRect(for position: UITextPosition) -> CGRect {
         let rect = super.caretRect(for: position)
         guard (text ?? "").isEmpty else { return rect }
@@ -10,6 +21,14 @@ private final class CenteredCaretTextField: UITextField {
             width: rect.width,
             height: rect.height
         )
+    }
+
+    private func clearEditingBackgrounds(in view: UIView) {
+        for subview in view.subviews {
+            subview.backgroundColor = .clear
+            subview.layer.backgroundColor = UIColor.clear.cgColor
+            clearEditingBackgrounds(in: subview)
+        }
     }
 }
 
@@ -980,10 +999,13 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         applyCenteredSubtitleAdjustmentValueAttributes()
         subtitleAdjustmentValueField.adjustsFontSizeToFitWidth = true
         subtitleAdjustmentValueField.minimumFontSize = 10
+        subtitleAdjustmentValueField.borderStyle = .none
+        subtitleAdjustmentValueField.background = nil
+        subtitleAdjustmentValueField.disabledBackground = nil
         subtitleAdjustmentValueField.backgroundColor = UIColor.white.withAlphaComponent(0.12)
         subtitleAdjustmentValueField.layer.cornerRadius = 10
         subtitleAdjustmentValueField.layer.cornerCurve = .continuous
-        subtitleAdjustmentValueField.layer.masksToBounds = false
+        subtitleAdjustmentValueField.layer.masksToBounds = true
         applyShadow(to: subtitleAdjustmentValueField.layer, opacity: 0.45, radius: 4, offset: CGSize(width: 0, height: 1))
         subtitleAdjustmentValueField.accessibilityLabel = "字幕调节数值"
         subtitleAdjustmentValueField.accessibilityCustomActions = subtitleAdjustmentAccessibilityActions()
@@ -1918,6 +1940,8 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     }
 
     @objc private func subtitleAdjustmentValueEditingDidBegin() {
+        subtitleAdjustmentValueField.setNeedsLayout()
+        subtitleAdjustmentValueField.layoutIfNeeded()
         onSubtitleAdjustmentBegan?()
     }
 

@@ -198,6 +198,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private var subtitleVisibleBottomConstraint: NSLayoutConstraint?
     private var subtitleControlsBottomConstraint: NSLayoutConstraint?
     private static var orientationOverrideGeneration = 0
+    private static let seasonSubtitleAdjustmentKeyPrefix = "libmpv.subtitleAdjustment.season."
     #if DEBUG
     private var didStartSubtitleBorderExerciseForSmoke = false
     private var didStartSubtitleScaleExerciseForSmoke = false
@@ -285,13 +286,10 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
     init(manager: MediaPlayerManager, usesManualWindowPresentation: Bool = false) {
         Defaults.Keys.migrateSubtitleAdjustmentSettingsToAppSuiteIfNeeded()
-        subtitlePosition = Self.clampedSubtitlePosition(Defaults[.VideoPlayer.Subtitle.subtitlePosition])
-        subtitleScale = Self.clampedSubtitleScale(Defaults[.VideoPlayer.Subtitle.subtitleScale])
-        subtitleBorderSize = Self.clampedSubtitleBorderSize(Defaults[.VideoPlayer.Subtitle.subtitleBorderSize])
-        subtitleDelay = Defaults[.VideoPlayer.Subtitle.subtitleDelay]
         self.usesManualWindowPresentation = usesManualWindowPresentation
         super.init(nibName: nil, bundle: nil)
         self.manager = manager
+        loadSubtitleAdjustmentSettings(for: manager.item)
         manager.proxy = self
         bind(manager: manager)
         for var observer in observers {
@@ -2019,6 +2017,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     }
 
     private func playNew(item: MediaPlayerItem) {
+        loadSubtitleAdjustmentSettings(for: item.baseItem)
         prepareVideoSurfaceForLoading()
         guard attachPlayerIfNeeded() else { return }
 
@@ -2951,10 +2950,60 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         persistSubtitleAdjustmentWorkItem = nil
         guard subtitleAdjustmentSettingsDidChange else { return }
         subtitleAdjustmentSettingsDidChange = false
-        Defaults[.VideoPlayer.Subtitle.subtitlePosition] = subtitlePosition
-        Defaults[.VideoPlayer.Subtitle.subtitleScale] = subtitleScale
-        Defaults[.VideoPlayer.Subtitle.subtitleBorderSize] = subtitleBorderSize
-        Defaults[.VideoPlayer.Subtitle.subtitleDelay] = subtitleDelay
+        guard let seasonID = subtitleAdjustmentSeasonID(for: manager?.item) else {
+            Defaults[.VideoPlayer.Subtitle.subtitlePosition] = subtitlePosition
+            Defaults[.VideoPlayer.Subtitle.subtitleScale] = subtitleScale
+            Defaults[.VideoPlayer.Subtitle.subtitleBorderSize] = subtitleBorderSize
+            Defaults[.VideoPlayer.Subtitle.subtitleDelay] = subtitleDelay
+            return
+        }
+
+        let suite = UserDefaults.currentUserSuite
+        suite.set(subtitlePosition, forKey: Self.seasonSubtitleAdjustmentKey(seasonID: seasonID, component: "position"))
+        suite.set(subtitleScale, forKey: Self.seasonSubtitleAdjustmentKey(seasonID: seasonID, component: "scale"))
+        suite.set(subtitleBorderSize, forKey: Self.seasonSubtitleAdjustmentKey(seasonID: seasonID, component: "borderSize"))
+        suite.set(subtitleDelay, forKey: Self.seasonSubtitleAdjustmentKey(seasonID: seasonID, component: "delay"))
+    }
+
+    private func loadSubtitleAdjustmentSettings(for item: BaseItemDto?) {
+        let suite = UserDefaults.currentUserSuite
+        let seasonID = subtitleAdjustmentSeasonID(for: item)
+
+        subtitlePosition = Self.clampedSubtitlePosition(
+            seasonSubtitleAdjustmentValue(component: "position", seasonID: seasonID, suite: suite) ??
+                Defaults[.VideoPlayer.Subtitle.subtitlePosition]
+        )
+        subtitleScale = Self.clampedSubtitleScale(
+            seasonSubtitleAdjustmentValue(component: "scale", seasonID: seasonID, suite: suite) ??
+                Defaults[.VideoPlayer.Subtitle.subtitleScale]
+        )
+        subtitleBorderSize = Self.clampedSubtitleBorderSize(
+            seasonSubtitleAdjustmentValue(component: "borderSize", seasonID: seasonID, suite: suite) ??
+                Defaults[.VideoPlayer.Subtitle.subtitleBorderSize]
+        )
+        subtitleDelay = seasonSubtitleAdjustmentValue(component: "delay", seasonID: seasonID, suite: suite) ??
+            Defaults[.VideoPlayer.Subtitle.subtitleDelay]
+        subtitleAdjustmentSettingsDidChange = false
+    }
+
+    private func seasonSubtitleAdjustmentValue(
+        component: String,
+        seasonID: String?,
+        suite: UserDefaults
+    ) -> Double? {
+        guard let seasonID else { return nil }
+        let key = Self.seasonSubtitleAdjustmentKey(seasonID: seasonID, component: component)
+        guard suite.object(forKey: key) != nil else { return nil }
+        return suite.double(forKey: key)
+    }
+
+    private func subtitleAdjustmentSeasonID(for item: BaseItemDto?) -> String? {
+        guard let item else { return nil }
+        return item.seasonID ?? item.parentID
+    }
+
+    private static func seasonSubtitleAdjustmentKey(seasonID: String, component: String) -> String {
+        seasonSubtitleAdjustmentKeyPrefix + seasonID + "." + component
     }
 
     private static func clampedSubtitlePosition(_ position: Double) -> Double {

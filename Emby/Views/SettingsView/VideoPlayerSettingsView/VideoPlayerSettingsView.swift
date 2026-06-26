@@ -103,8 +103,6 @@ struct VideoPlayerSettingsView: View {
                 .foregroundStyle(.secondary)
 
             SubtitleSection()
-                .disabled(true)
-                .foregroundStyle(.secondary)
 
             TimestampSection()
                 .disabled(true)

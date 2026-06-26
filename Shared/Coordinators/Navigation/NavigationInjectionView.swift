@@ -179,6 +179,7 @@ struct NavigationInjectionView: View {
                                     try? await Task.sleep(for: .milliseconds(1400))
                                     guard let completion = presentedFullScreenDismissCompletion else { return }
                                     presentedFullScreenDismissCompletion = nil
+                                    resetFullscreenPresentationResidue(reason: "fallback")
 
                                     #if DEBUG
                                     let elapsed = presentedFullScreenDismissStartedAt.map { CACurrentMediaTime() - $0 } ?? -1
@@ -198,6 +199,7 @@ struct NavigationInjectionView: View {
                 vc.onDidDisappearAfterDismiss = {
                     guard let completion = presentedFullScreenDismissCompletion else { return }
                     presentedFullScreenDismissCompletion = nil
+                    resetFullscreenPresentationResidue(reason: "viewDidDisappear")
 
                     #if DEBUG
                     let elapsed = presentedFullScreenDismissStartedAt.map { CACurrentMediaTime() - $0 } ?? -1
@@ -213,4 +215,52 @@ struct NavigationInjectionView: View {
             }
         #endif
     }
+
+    @MainActor
+    private func resetFullscreenPresentationResidue(reason: String) {
+        #if os(iOS)
+        Self.resetFullscreenPresentationResidue(reason: reason)
+        [0.05, 0.15].forEach { delay in
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(delay))
+                Self.resetFullscreenPresentationResidue(reason: "\(reason)-delayed")
+            }
+        }
+        #endif
+    }
+
+    #if os(iOS)
+    @MainActor
+    private static func resetFullscreenPresentationResidue(reason: String) {
+        let scenes = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .filter { $0.activationState == .foregroundActive || $0.activationState == .foregroundInactive }
+
+        for window in scenes.flatMap(\.windows) where String(describing: type(of: window)) == "UIWindow" {
+            guard let rootView = window.rootViewController?.view else { continue }
+            UIView.performWithoutAnimation {
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                window.backgroundColor = .embyAppBackground
+                rootView.transform = .identity
+                rootView.layer.transform = CATransform3DIdentity
+                rootView.layer.cornerRadius = 0
+                rootView.layer.masksToBounds = false
+                rootView.clipsToBounds = false
+                rootView.bounds = CGRect(origin: .zero, size: window.bounds.size)
+                rootView.center = CGPoint(x: window.bounds.midX, y: window.bounds.midY)
+                rootView.frame = window.bounds
+                rootView.setNeedsLayout()
+                rootView.layoutIfNeeded()
+                window.setNeedsLayout()
+                window.layoutIfNeeded()
+                CATransaction.commit()
+            }
+        }
+
+        #if DEBUG
+        NSLog("EmbyNavigation fullscreen-residue-reset reason=%@", reason)
+        #endif
+    }
+    #endif
 }

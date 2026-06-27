@@ -67,7 +67,7 @@ extension HomeView {
             viewModel.resumeItems.filter { !Self.hasPlaybackProgress($0) }
         }
 
-        private var unstartedContinueItems: [BaseItemDto] {
+        private var allUnstartedContinueItems: [BaseItemDto] {
             let startedIDs = Set(startedResumeItems.compactMap(\.id))
             let candidates = Array(viewModel.nextEpisodeAfterPlayedItems)
 
@@ -76,7 +76,11 @@ extension HomeView {
                 return !startedIDs.contains(id)
             }
 
-            return Array(items.prefix(Self.unstartedItemLimit))
+            return items
+        }
+
+        private var unstartedContinueItems: [BaseItemDto] {
+            Array(allUnstartedContinueItems.prefix(Self.unstartedItemLimit))
         }
 
         private static func hasPlaybackProgress(_ item: BaseItemDto) -> Bool {
@@ -123,12 +127,8 @@ extension HomeView {
             VStack(alignment: .leading, spacing: 12) {
                 resumeRow(items: startedResumeItems)
 
-                if unstartedContinueItems.isNotEmpty {
-                    Text(L10n.unplayed)
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .accessibility(addTraits: [.isHeader])
-                        .edgePadding(.horizontal)
+                if allUnstartedContinueItems.isNotEmpty {
+                    unstartedHeader(items: allUnstartedContinueItems)
 
                     resumeRow(items: unstartedContinueItems)
                 }
@@ -139,6 +139,30 @@ extension HomeView {
             .onChange(of: overlaySignature) { _ in
                 refreshOverlayState()
             }
+        }
+
+        @ViewBuilder
+        private func unstartedHeader(items: [BaseItemDto]) -> some View {
+            HStack {
+                Text(L10n.unplayed)
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .accessibility(addTraits: [.isHeader])
+
+                Spacer()
+
+                SeeAllButton()
+                    .onSelect {
+                        let viewModel = PagingLibraryViewModel(
+                            title: L10n.unplayed,
+                            id: "home-unplayed-after-played",
+                            items
+                        )
+
+                        router.route(to: .library(viewModel: viewModel))
+                    }
+            }
+            .edgePadding(.horizontal)
         }
 
         @ViewBuilder
@@ -190,7 +214,8 @@ extension HomeView {
         }
 
         private func refreshOverlayState() {
-            let unstartedItems = unstartedContinueItems
+            let allUnstartedItems = allUnstartedContinueItems
+            let unstartedItems = Array(allUnstartedItems.prefix(Self.unstartedItemLimit))
             overlayState.update(items: startedResumeItems + unstartedItems)
 
             #if DEBUG
@@ -200,7 +225,7 @@ extension HomeView {
             let unstartedTitles = unstartedItems.prefix(6).map(Self.debugEpisodeTitle).joined(separator: " | ")
 
             NSLog(
-                "EmbyHomeContinueSplit resume=%d started=%d unstartedResume=%d nextUp=%d nextUpUnstarted=%d nextAfterPlayed=%d finalUnstarted=%d titles=%@",
+                "EmbyHomeContinueSplit resume=%d started=%d unstartedResume=%d nextUp=%d nextUpUnstarted=%d nextAfterPlayed=%d finalUnstarted=%d allUnstarted=%d titles=%@",
                 viewModel.resumeItems.count,
                 startedResumeItems.count,
                 unstartedResumeItems.count,
@@ -208,6 +233,7 @@ extension HomeView {
                 nextUpUnstartedCount,
                 nextAfterPlayedCount,
                 unstartedItems.count,
+                allUnstartedItems.count,
                 unstartedTitles
             )
             #endif

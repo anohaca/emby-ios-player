@@ -818,7 +818,6 @@ final class HomeViewModel: ViewModel, Stateful {
             return results
                 .sorted(by: Self.nextEpisodeResultRecentlyUpdatedFirst)
                 .map(\.item)
-                .prefix(Self.resumeItemLimit)
                 .asArray
         }
     }

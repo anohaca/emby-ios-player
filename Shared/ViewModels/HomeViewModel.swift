@@ -49,6 +49,8 @@ final class HomeViewModel: ViewModel, Stateful {
     private(set) var libraries: [LatestInLibraryViewModel] = []
     @Published
     var resumeItems: OrderedSet<BaseItemDto> = []
+    @Published
+    var nextEpisodeAfterPlayedItems: OrderedSet<BaseItemDto> = []
 
     @Published
     var backgroundStates: Set<BackgroundState> = []
@@ -70,6 +72,18 @@ final class HomeViewModel: ViewModel, Stateful {
     private var shouldRefreshAgainAfterCurrentRefresh = false
     private static let resumeItemLimit = 20
     private static let resumeItemCandidateLimit = 100
+    private static let nextEpisodeSeriesCandidateLimit = 500
+
+    private struct NextEpisodeSeriesCandidate {
+        let id: String
+        let parentID: String?
+        let updatedAt: Date?
+    }
+
+    private struct NextEpisodeAfterPlayedResult {
+        let item: BaseItemDto
+        let updatedAt: Date?
+    }
 
     var nextUpViewModel: NextUpLibraryViewModel = .init()
     var recentlyAddedViewModel: RecentlyAddedLibraryViewModel = .init(homeRecentlyUpdated: true, usesRememberedSort: false)
@@ -345,6 +359,10 @@ final class HomeViewModel: ViewModel, Stateful {
         #endif
 
         try await refreshLibraries(libraries, refreshStart: refreshStart)
+        let nextEpisodeAfterPlayedItems = try await getNextEpisodeAfterPlayedItems(
+            libraries: libraries
+        )
+        try Task.checkCancellation()
 
         await MainActor.run {
             #if DEBUG
@@ -358,6 +376,10 @@ final class HomeViewModel: ViewModel, Stateful {
                 Array(stagedNextUpViewModel.elements)
             )
             self.nextUpViewModel.state = .content
+            self.updateItemsIfChanged(
+                &self.nextEpisodeAfterPlayedItems.elements,
+                nextEpisodeAfterPlayedItems
+            )
             self.updateItemsIfChanged(
                 &self.recentlyAddedViewModel.elements,
                 Array(stagedRecentlyAddedViewModel.elements)
@@ -645,6 +667,14 @@ final class HomeViewModel: ViewModel, Stateful {
                 playedAncestorIDs: visiblePlayedItemIDs
             )
         )
+        updateItemsIfChanged(
+            &nextEpisodeAfterPlayedItems.elements,
+            HomeItemUserDataOverrideStore.filteredNextUpItems(
+                Array(nextEpisodeAfterPlayedItems),
+                entries: entries,
+                playedAncestorIDs: visiblePlayedItemIDs
+            )
+        )
 
         updateItemsIfChanged(&recentlyAddedViewModel.elements, recentlyAddedItems)
 
@@ -684,6 +714,7 @@ final class HomeViewModel: ViewModel, Stateful {
 
         nextUpViewModel.elements = Self.identifiedItems(payload.nextUpItems)
         nextUpViewModel.state = .content
+        nextEpisodeAfterPlayedItems.elements = payload.nextEpisodeAfterPlayedItems
 
         recentlyAddedViewModel.elements = Self.identifiedItems(payload.recentlyAddedItems)
         recentlyAddedViewModel.state = .content
@@ -718,6 +749,7 @@ final class HomeViewModel: ViewModel, Stateful {
             savedAt: Date(),
             resumeItems: Array(resumeItems),
             nextUpItems: Array(nextUpViewModel.elements),
+            nextEpisodeAfterPlayedItems: Array(nextEpisodeAfterPlayedItems),
             recentlyAddedItems: Array(recentlyAddedViewModel.elements),
             libraries: cachedLibraries
         )
@@ -746,6 +778,171 @@ final class HomeViewModel: ViewModel, Stateful {
                 }
             }
         }
+    }
+
+    private func getNextEpisodeAfterPlayedItems(
+        libraries: [LatestInLibraryViewModel]
+    ) async throws -> [BaseItemDto] {
+        let visibleSeriesCandidates = try await getVisibleSeriesCandidatesForNextEpisodeAfterPlayed(libraries: libraries)
+        let seriesCandidates = Self.uniqueSeriesCandidates(visibleSeriesCandidates)
+            .sorted(by: Self.seriesCandidateRecentlyUpdatedFirst)
+            .prefix(Self.nextEpisodeSeriesCandidateLimit)
+
+        let seriesIDs = seriesCandidates.map(\.id)
+
+        guard seriesIDs.isNotEmpty else { return [] }
+
+        let entries = HomeItemUserDataOverrideStore.load(
+            serverID: userSession.server.id,
+            userID: userSession.user.id
+        )
+
+        return try await withThrowingTaskGroup(of: NextEpisodeAfterPlayedResult?.self) { group in
+            for (index, seriesID) in seriesIDs.enumerated() {
+                group.addTask { [weak self] in
+                    guard let self else { return nil }
+                    return try await self.getNextEpisodeAfterPlayedItem(
+                        seriesID: seriesID,
+                        fallbackUpdatedAt: seriesCandidates[index].updatedAt,
+                        entries: entries
+                    )
+                }
+            }
+
+            var results: [NextEpisodeAfterPlayedResult] = []
+            for try await result in group {
+                guard let result else { continue }
+                results.append(result)
+            }
+
+            return results
+                .sorted(by: Self.nextEpisodeResultRecentlyUpdatedFirst)
+                .map(\.item)
+                .prefix(Self.resumeItemLimit)
+                .asArray
+        }
+    }
+
+    private func getVisibleSeriesCandidatesForNextEpisodeAfterPlayed(
+        libraries: [LatestInLibraryViewModel]
+    ) async throws -> [NextEpisodeSeriesCandidate] {
+        let libraryIDs = Self.libraryIDs(from: libraries)
+        let hiddenLibraryIDs = Self.hiddenHomeLibraryIDs().intersection(libraryIDs)
+        let visibleLibraryIDs = libraryIDs.filter { !hiddenLibraryIDs.contains($0) }
+
+        guard visibleLibraryIDs.isNotEmpty else { return [] }
+
+        return try await withThrowingTaskGroup(of: [NextEpisodeSeriesCandidate].self) { group in
+            for libraryID in visibleLibraryIDs {
+                group.addTask { [weak self] in
+                    guard let self else { return [] }
+                    return try await self.getSeriesCandidatesForNextEpisodeAfterPlayed(parentID: libraryID)
+                }
+            }
+
+            var candidates: [NextEpisodeSeriesCandidate] = []
+            for try await libraryCandidates in group {
+                candidates.append(contentsOf: libraryCandidates)
+            }
+
+            return Self.uniqueSeriesCandidates(candidates)
+        }
+    }
+
+    private func getSeriesCandidatesForNextEpisodeAfterPlayed(parentID: String?) async throws -> [NextEpisodeSeriesCandidate] {
+        var parameters = EmbyPortItemsParameters()
+        parameters.enableUserData = true
+        parameters.fields = .MinimumFields + [.dateLastMediaAdded, .parentID]
+        parameters.includeItemTypes = [.series]
+        parameters.isRecursive = true
+        parameters.limit = Self.nextEpisodeSeriesCandidateLimit
+        parameters.parentID = parentID
+        parameters.sortBy = [.dateLastContentAdded, .dateCreated]
+        parameters.sortOrder = [.descending]
+        parameters.userID = userSession.user.id
+
+        let response: EmbyPortItemsResponse<BaseItemDto> = try await userSession.embyClient.items(
+            parameters,
+            as: EmbyPortItemsResponse<BaseItemDto>.self
+        )
+
+        return (response.items ?? []).compactMap { item in
+            guard let id = item.id else { return nil }
+            return NextEpisodeSeriesCandidate(
+                id: id,
+                parentID: item.parentID,
+                updatedAt: Self.recentUpdateDate(for: item)
+            )
+        }
+    }
+
+    private func getNextEpisodeAfterPlayedItem(
+        seriesID: String,
+        fallbackUpdatedAt: Date?,
+        entries: [String: HomeItemUserDataOverrideStore.Entry]
+    ) async throws -> NextEpisodeAfterPlayedResult? {
+        let parameters = EmbyPortEpisodesParameters(
+            enableUserData: true,
+            fields: .MinimumFields + [.dateCreated, .dateLastMediaAdded],
+            isMissing: false,
+            userID: userSession.user.id
+        )
+
+        let response: EmbyPortItemsResponse<BaseItemDto> = try await userSession.embyClient.episodes(
+            seriesID: seriesID,
+            parameters,
+            as: EmbyPortItemsResponse<BaseItemDto>.self
+        )
+
+        let episodes = HomeItemUserDataOverrideStore.applyingOverrides(
+            to: response.items ?? [],
+            entries: entries
+        )
+        .filter {
+            $0.type == .episode &&
+                !$0.isMissing &&
+                $0.parentIndexNumber != nil &&
+                $0.indexNumber != nil
+        }
+        .sorted(by: Self.episodePlaybackOrder)
+
+        guard episodes.count > 1 else { return nil }
+        let updatedAt = Self.latestUpdateDate(in: episodes) ?? fallbackUpdatedAt
+
+        for index in episodes.indices.dropFirst() {
+            let previousEpisode = episodes[episodes.index(before: index)]
+            let episode = episodes[index]
+
+            if previousEpisode.userData?.isPlayed == true,
+               Self.isUnplayedWithoutProgress(episode)
+            {
+                return NextEpisodeAfterPlayedResult(item: episode, updatedAt: updatedAt)
+            }
+        }
+
+        return nil
+    }
+
+    private static func isUnplayedWithoutProgress(_ item: BaseItemDto) -> Bool {
+        item.userData?.isPlayed != true &&
+            (item.userData?.playbackPositionTicks ?? 0) <= 0 &&
+            (item.startSeconds?.seconds ?? 0) <= 0
+    }
+
+    private static func episodePlaybackOrder(_ lhs: BaseItemDto, _ rhs: BaseItemDto) -> Bool {
+        let lhsSeason = lhs.parentIndexNumber ?? Int.min
+        let rhsSeason = rhs.parentIndexNumber ?? Int.min
+        guard lhsSeason == rhsSeason else {
+            return lhsSeason < rhsSeason
+        }
+
+        let lhsEpisode = lhs.indexNumber ?? Int.min
+        let rhsEpisode = rhs.indexNumber ?? Int.min
+        guard lhsEpisode == rhsEpisode else {
+            return lhsEpisode < rhsEpisode
+        }
+
+        return (lhs.name ?? "") < (rhs.name ?? "")
     }
 
     private static func identifiedItems(_ items: [BaseItemDto]) -> IdentifiedArray<Int, BaseItemDto> {
@@ -784,6 +981,57 @@ final class HomeViewModel: ViewModel, Stateful {
         return ids.filter { seen.insert($0).inserted }
     }
 
+    private static func uniqueSeriesCandidates(_ candidates: [NextEpisodeSeriesCandidate]) -> [NextEpisodeSeriesCandidate] {
+        var bestByID: [String: NextEpisodeSeriesCandidate] = [:]
+
+        for candidate in candidates {
+            guard let existing = bestByID[candidate.id] else {
+                bestByID[candidate.id] = candidate
+                continue
+            }
+
+            if seriesCandidateRecentlyUpdatedFirst(candidate, existing) {
+                bestByID[candidate.id] = candidate
+            }
+        }
+
+        return Array(bestByID.values)
+    }
+
+    private static func seriesCandidateRecentlyUpdatedFirst(
+        _ lhs: NextEpisodeSeriesCandidate,
+        _ rhs: NextEpisodeSeriesCandidate
+    ) -> Bool {
+        let lhsDate = lhs.updatedAt ?? .distantPast
+        let rhsDate = rhs.updatedAt ?? .distantPast
+        guard lhsDate != rhsDate else {
+            return lhs.id < rhs.id
+        }
+
+        return lhsDate > rhsDate
+    }
+
+    private static func nextEpisodeResultRecentlyUpdatedFirst(
+        _ lhs: NextEpisodeAfterPlayedResult,
+        _ rhs: NextEpisodeAfterPlayedResult
+    ) -> Bool {
+        let lhsDate = lhs.updatedAt ?? .distantPast
+        let rhsDate = rhs.updatedAt ?? .distantPast
+        guard lhsDate != rhsDate else {
+            return lhs.item.displayTitle < rhs.item.displayTitle
+        }
+
+        return lhsDate > rhsDate
+    }
+
+    private static func recentUpdateDate(for item: BaseItemDto) -> Date? {
+        item.dateLastMediaAdded ?? item.dateCreated ?? item.premiereDate
+    }
+
+    private static func latestUpdateDate(in items: [BaseItemDto]) -> Date? {
+        items.compactMap(recentUpdateDate(for:)).max()
+    }
+
     private static func uniqueItems(_ items: [BaseItemDto]) -> [BaseItemDto] {
         var seen = Set<String>()
 
@@ -800,6 +1048,7 @@ private struct HomeViewModelCachePayload: Codable {
     let savedAt: Date
     let resumeItems: [BaseItemDto]
     let nextUpItems: [BaseItemDto]
+    let nextEpisodeAfterPlayedItems: [BaseItemDto]
     let recentlyAddedItems: [BaseItemDto]
     let libraries: [HomeViewModelCachedLibrary]
 }

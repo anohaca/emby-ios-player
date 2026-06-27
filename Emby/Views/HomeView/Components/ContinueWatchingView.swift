@@ -7,6 +7,7 @@
 //
 
 import CollectionHStack
+import Foundation
 import SwiftUI
 
 extension HomeView {
@@ -42,7 +43,63 @@ extension HomeView {
                 hasher.combine(item.userData?.playedPercentage)
             }
 
+            for item in viewModel.nextUpViewModel.elements {
+                hasher.combine(item.id)
+                hasher.combine(item.userData?.playbackPositionTicks)
+                hasher.combine(item.userData?.playedPercentage)
+            }
+
+            for item in viewModel.nextEpisodeAfterPlayedItems {
+                hasher.combine(item.id)
+                hasher.combine(item.userData?.playbackPositionTicks)
+                hasher.combine(item.userData?.playedPercentage)
+                hasher.combine(item.userData?.isPlayed)
+            }
+
             return hasher.finalize()
+        }
+
+        private var startedResumeItems: [BaseItemDto] {
+            viewModel.resumeItems.filter(Self.hasPlaybackProgress)
+        }
+
+        private var unstartedResumeItems: [BaseItemDto] {
+            viewModel.resumeItems.filter { !Self.hasPlaybackProgress($0) }
+        }
+
+        private var unstartedContinueItems: [BaseItemDto] {
+            let startedIDs = Set(startedResumeItems.compactMap(\.id))
+            let candidates = Array(viewModel.nextEpisodeAfterPlayedItems)
+
+            let items = Self.uniqueItems(candidates).filter { item in
+                guard let id = item.id else { return true }
+                return !startedIDs.contains(id)
+            }
+
+            return Array(items.prefix(Self.unstartedItemLimit))
+        }
+
+        private static func hasPlaybackProgress(_ item: BaseItemDto) -> Bool {
+            (item.userData?.playbackPositionTicks ?? 0) > 0 ||
+                (item.startSeconds?.seconds ?? 0) > 0
+        }
+
+        private static func isUnplayedWithoutProgress(_ item: BaseItemDto) -> Bool {
+            isPlayableVideo(item) &&
+                item.userData?.isPlayed != true &&
+                !hasPlaybackProgress(item)
+        }
+
+        private static func isPlayableVideo(_ item: BaseItemDto) -> Bool {
+            item.type == .episode || item.type == .movie || item.type == .video
+        }
+
+        private static func uniqueItems(_ items: [BaseItemDto]) -> [BaseItemDto] {
+            var seen = Set<Int>()
+
+            return items.filter { item in
+                seen.insert(item.unwrappedIDHashOrZero).inserted
+            }
         }
 
         private func play(_ item: BaseItemDto) {
@@ -63,46 +120,18 @@ extension HomeView {
         }
 
         var body: some View {
-            CollectionHStack(
-                uniqueElements: viewModel.resumeItems,
-                columns: columnCount
-            ) { item in
-                PosterButton(
-                    item: item,
-                    type: .landscape,
-                    posterAction: { _ in
-                        play(item)
-                    }
-                ) { namespace in
-                    router.route(to: .item(item: item), in: namespace)
-                } label: {
-                    if item.type == .episode {
-                        PosterButton.EpisodeContentSubtitleContent(item: item)
-                    } else {
-                        PosterButton.TitleSubtitleContentView(item: item)
-                    }
-                }
-            }
-            .clipsToBounds(false)
-            .scrollBehavior(.continuousLeadingEdge)
-            .contextMenu(for: BaseItemDto.self) { item in
-                Button {
-                    viewModel.send(.setIsPlayed(true, item))
-                } label: {
-                    Label(L10n.played, systemImage: "checkmark.circle")
-                }
+            VStack(alignment: .leading, spacing: 12) {
+                resumeRow(items: startedResumeItems)
 
-                Button(role: .destructive) {
-                    viewModel.send(.setIsPlayed(false, item))
-                } label: {
-                    Label(L10n.unplayed, systemImage: "minus.circle")
+                if unstartedContinueItems.isNotEmpty {
+                    Text(L10n.unplayed)
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .accessibility(addTraits: [.isHeader])
+                        .edgePadding(.horizontal)
+
+                    resumeRow(items: unstartedContinueItems)
                 }
-            }
-            .posterOverlay(for: BaseItemDto.self) { item in
-                ContinueWatchingProgressOverlay(
-                    item: item,
-                    overlayState: overlayState
-                )
             }
             .onAppear {
                 refreshOverlayState()
@@ -110,15 +139,91 @@ extension HomeView {
             .onChange(of: overlaySignature) { _ in
                 refreshOverlayState()
             }
-            .frame(minHeight: viewModel.resumeItems.isEmpty ? nil : stableMinimumHeight)
+        }
+
+        @ViewBuilder
+        private func resumeRow(items: [BaseItemDto]) -> some View {
+            if items.isNotEmpty {
+                CollectionHStack(
+                    uniqueElements: items,
+                    columns: columnCount
+                ) { item in
+                    PosterButton(
+                        item: item,
+                        type: .landscape,
+                        posterAction: { _ in
+                            play(item)
+                        }
+                    ) { namespace in
+                        router.route(to: .item(item: item), in: namespace)
+                    } label: {
+                        if item.type == .episode {
+                            PosterButton.EpisodeContentSubtitleContent(item: item)
+                        } else {
+                            PosterButton.TitleSubtitleContentView(item: item)
+                        }
+                    }
+                }
+                .clipsToBounds(false)
+                .scrollBehavior(.continuousLeadingEdge)
+                .contextMenu(for: BaseItemDto.self) { item in
+                    Button {
+                        viewModel.send(.setIsPlayed(true, item))
+                    } label: {
+                        Label(L10n.played, systemImage: "checkmark.circle")
+                    }
+
+                    Button(role: .destructive) {
+                        viewModel.send(.setIsPlayed(false, item))
+                    } label: {
+                        Label(L10n.unplayed, systemImage: "minus.circle")
+                    }
+                }
+                .posterOverlay(for: BaseItemDto.self) { item in
+                    ContinueWatchingProgressOverlay(
+                        item: item,
+                        overlayState: overlayState
+                    )
+                }
+                .frame(minHeight: stableMinimumHeight)
+            }
         }
 
         private func refreshOverlayState() {
-            overlayState.update(items: Array(viewModel.resumeItems))
+            let unstartedItems = unstartedContinueItems
+            overlayState.update(items: startedResumeItems + unstartedItems)
+
+            #if DEBUG
+            let nextUpItems = Array(viewModel.nextUpViewModel.elements)
+            let nextUpUnstartedCount = nextUpItems.filter(Self.isUnplayedWithoutProgress).count
+            let nextAfterPlayedCount = viewModel.nextEpisodeAfterPlayedItems.count
+            let unstartedTitles = unstartedItems.prefix(6).map(Self.debugEpisodeTitle).joined(separator: " | ")
+
+            NSLog(
+                "EmbyHomeContinueSplit resume=%d started=%d unstartedResume=%d nextUp=%d nextUpUnstarted=%d nextAfterPlayed=%d finalUnstarted=%d titles=%@",
+                viewModel.resumeItems.count,
+                startedResumeItems.count,
+                unstartedResumeItems.count,
+                nextUpItems.count,
+                nextUpUnstartedCount,
+                nextAfterPlayedCount,
+                unstartedItems.count,
+                unstartedTitles
+            )
+            #endif
         }
 
         private var stableMinimumHeight: CGFloat {
             UIDevice.isPhone ? 184 : 220
+        }
+
+        private static let unstartedItemLimit = 20
+
+        private static func debugEpisodeTitle(_ item: BaseItemDto) -> String {
+            let series = item.seriesName ?? item.displayTitle
+            let season = item.parentIndexNumber.map { "S\($0)" } ?? "S?"
+            let episode = item.indexNumber.map { "E\($0)" } ?? "E?"
+            return "\(series) \(season)\(episode)"
         }
     }
 }

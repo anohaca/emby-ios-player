@@ -14,11 +14,18 @@ extension HomeView {
 
     struct ContinueWatchingView: View {
 
+        enum Kind {
+            case resume
+            case continueWatching
+        }
+
         @Router
         private var router
 
         @ObservedObject
         var viewModel: HomeViewModel
+
+        let kind: Kind
 
         @StateObject
         private var overlayState = BaseItemPosterOverlayState()
@@ -125,12 +132,18 @@ extension HomeView {
 
         var body: some View {
             VStack(alignment: .leading, spacing: 12) {
-                resumeRow(items: startedResumeItems)
+                switch kind {
+                case .resume:
+                    if startedResumeItems.isNotEmpty {
+                        resumeRow(items: startedResumeItems)
+                    }
 
-                if allUnstartedContinueItems.isNotEmpty {
-                    unstartedHeader(items: allUnstartedContinueItems)
+                case .continueWatching:
+                    if allUnstartedContinueItems.isNotEmpty {
+                        unstartedHeader(items: allUnstartedContinueItems)
 
-                    resumeRow(items: unstartedContinueItems)
+                        resumeRow(items: unstartedContinueItems)
+                    }
                 }
             }
             .onAppear {
@@ -144,7 +157,7 @@ extension HomeView {
         @ViewBuilder
         private func unstartedHeader(items: [BaseItemDto]) -> some View {
             HStack {
-                Text(L10n.unplayed)
+                Text(L10n.continueWatching)
                     .font(.title2)
                     .fontWeight(.semibold)
                     .accessibility(addTraits: [.isHeader])
@@ -154,7 +167,7 @@ extension HomeView {
                 SeeAllButton()
                     .onSelect {
                         let viewModel = PagingLibraryViewModel(
-                            title: L10n.unplayed,
+                            title: L10n.continueWatching,
                             id: "home-unplayed-after-played",
                             items
                         )
@@ -214,26 +227,34 @@ extension HomeView {
         }
 
         private func refreshOverlayState() {
-            let allUnstartedItems = allUnstartedContinueItems
-            let unstartedItems = Array(allUnstartedItems.prefix(Self.unstartedItemLimit))
-            overlayState.update(items: startedResumeItems + unstartedItems)
+            let visibleItems: [BaseItemDto]
+
+            switch kind {
+            case .resume:
+                visibleItems = startedResumeItems
+            case .continueWatching:
+                visibleItems = unstartedContinueItems
+            }
+
+            overlayState.update(items: visibleItems)
 
             #if DEBUG
             let nextUpItems = Array(viewModel.nextUpViewModel.elements)
             let nextUpUnstartedCount = nextUpItems.filter(Self.isUnplayedWithoutProgress).count
             let nextAfterPlayedCount = viewModel.nextEpisodeAfterPlayedItems.count
-            let unstartedTitles = unstartedItems.prefix(6).map(Self.debugEpisodeTitle).joined(separator: " | ")
+            let unstartedTitles = unstartedContinueItems.prefix(6).map(Self.debugEpisodeTitle).joined(separator: " | ")
 
             NSLog(
-                "EmbyHomeContinueSplit resume=%d started=%d unstartedResume=%d nextUp=%d nextUpUnstarted=%d nextAfterPlayed=%d finalUnstarted=%d allUnstarted=%d titles=%@",
+                "EmbyHomeContinueSplit kind=%@ resume=%d started=%d unstartedResume=%d nextUp=%d nextUpUnstarted=%d nextAfterPlayed=%d finalUnstarted=%d allUnstarted=%d titles=%@",
+                String(describing: kind),
                 viewModel.resumeItems.count,
                 startedResumeItems.count,
                 unstartedResumeItems.count,
                 nextUpItems.count,
                 nextUpUnstartedCount,
                 nextAfterPlayedCount,
-                unstartedItems.count,
-                allUnstartedItems.count,
+                unstartedContinueItems.count,
+                allUnstartedContinueItems.count,
                 unstartedTitles
             )
             #endif

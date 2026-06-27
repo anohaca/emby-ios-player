@@ -148,8 +148,10 @@ struct HomeView: View {
     @ViewBuilder
     private func sectionView(_ section: HomeSectionDescriptor) -> some View {
         switch section.id {
+        case HomeSectionDescriptor.resumeID:
+            ContinueWatchingView(viewModel: viewModel, kind: .resume)
         case HomeSectionDescriptor.continueWatchingID:
-            ContinueWatchingView(viewModel: viewModel)
+            ContinueWatchingView(viewModel: viewModel, kind: .continueWatching)
         case HomeSectionDescriptor.nextUpID:
             NextUpView(viewModel: viewModel.nextUpViewModel)
                 .onSetPlayed { item in

@@ -10,12 +10,14 @@ import Foundation
 
 struct HomeSectionDescriptor: Identifiable, Hashable, Displayable, SystemImageable {
 
+    static let resumeID = "resume"
     static let continueWatchingID = "continueWatching"
     static let nextUpID = "nextUp"
     static let recentlyAddedID = "recentlyAdded"
 
     private static let latestInLibraryPrefix = "latestInLibrary:"
     private static let standardSectionIDs = [
+        resumeID,
         continueWatchingID,
         nextUpID,
         recentlyAddedID,
@@ -28,8 +30,13 @@ struct HomeSectionDescriptor: Identifiable, Hashable, Displayable, SystemImageab
     static var standardSections: [HomeSectionDescriptor] {
         [
             .init(
-                id: continueWatchingID,
+                id: resumeID,
                 displayTitle: L10n.resume,
+                systemImage: "play.rectangle"
+            ),
+            .init(
+                id: continueWatchingID,
+                displayTitle: L10n.continueWatching,
                 systemImage: "play.rectangle.on.rectangle"
             ),
             .init(

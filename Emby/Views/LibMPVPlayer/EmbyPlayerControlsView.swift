@@ -96,6 +96,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     var onSeekBackward: (() -> Void)?
     var onSeekForward: (() -> Void)?
     var onNextEpisode: (() -> Void)?
+    var onEpisodeList: (() -> Void)?
     var onPlaybackSpeedSelected: ((Double) -> Void)?
     var onMenuOpened: (() -> Void)?
     var onOpenSubtitle: (() -> Void)? {
@@ -125,6 +126,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private let nextEpisodeButton = UIButton(type: .system)
     private let speedButton = UIButton(type: .system)
     private let tracksButton = UIButton(type: .system)
+    private let episodeListButton = UIButton(type: .system)
     private let settingsButton = UIButton(type: .system)
     private let currentTimeLabel = UILabel()
     private let durationLabel = UILabel()
@@ -386,9 +388,10 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         seekForwardButton.accessibilityLabel = "Forward \(Self.formatDuration(forward.rawValue))"
     }
 
-    func updateEpisodeNavigation(canGoPrevious: Bool, canGoNext: Bool) {
+    func updateEpisodeNavigation(canGoPrevious: Bool, canGoNext: Bool, canShowEpisodeList: Bool) {
         setNavigationButton(previousEpisodeButton, enabled: canGoPrevious)
         setNavigationButton(nextEpisodeButton, enabled: canGoNext)
+        setNavigationButton(episodeListButton, enabled: canShowEpisodeList)
     }
 
     func updateTitle(_ title: String, subtitle: String?) {
@@ -564,6 +567,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         configureButton(nextEpisodeButton, symbol: "forward.end.fill", label: "下一集")
         configureButton(speedButton, symbol: "speedometer", label: "播放速度")
         configureButton(tracksButton, symbol: "captions.bubble", label: "字幕")
+        configureButton(episodeListButton, symbol: "list.triangle", label: "选集")
         configureButton(settingsButton, symbol: "gearshape", label: "设置")
         applyIconShadow(to: settingsButton)
         configureTitleLabel(titleLabel, font: .systemFont(ofSize: 16, weight: .semibold))
@@ -576,11 +580,12 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         playPauseButton.addTarget(self, action: #selector(playPauseTapped), for: .touchUpInside)
         seekForwardButton.addTarget(self, action: #selector(seekForwardTapped), for: .touchUpInside)
         nextEpisodeButton.addTarget(self, action: #selector(nextEpisodeTapped), for: .touchUpInside)
+        episodeListButton.addTarget(self, action: #selector(episodeListTapped), for: .touchUpInside)
         configureOpenMenu()
         configureSpeedMenu()
         configureTracksMenu()
         configureSettingsMenu()
-        updateEpisodeNavigation(canGoPrevious: false, canGoNext: false)
+        updateEpisodeNavigation(canGoPrevious: false, canGoNext: false, canShowEpisodeList: false)
 
         configureTimeLabel(currentTimeLabel)
         configureTimeLabel(durationLabel)
@@ -643,12 +648,13 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             seekForwardButton,
             nextEpisodeButton,
             tracksButton,
-            speedButton
+            speedButton,
+            episodeListButton
         ])
         transportStack.axis = .horizontal
         transportStack.alignment = .center
         transportStack.distribution = .equalSpacing
-        transportStack.spacing = 10
+        transportStack.spacing = 6
         transportStack.translatesAutoresizingMaskIntoConstraints = false
 
         let timelineStack = UIStackView(arrangedSubviews: [currentTimeLabel, slider, durationLabel])
@@ -699,20 +705,22 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
 
             playPauseButton.widthAnchor.constraint(equalToConstant: 50),
             playPauseButton.heightAnchor.constraint(equalToConstant: 50),
-            previousEpisodeButton.widthAnchor.constraint(equalToConstant: 42),
+            previousEpisodeButton.widthAnchor.constraint(equalToConstant: 36),
             previousEpisodeButton.heightAnchor.constraint(equalToConstant: 42),
-            seekBackwardButton.widthAnchor.constraint(equalToConstant: 42),
+            seekBackwardButton.widthAnchor.constraint(equalToConstant: 36),
             seekBackwardButton.heightAnchor.constraint(equalToConstant: 42),
-            seekForwardButton.widthAnchor.constraint(equalToConstant: 42),
+            seekForwardButton.widthAnchor.constraint(equalToConstant: 36),
             seekForwardButton.heightAnchor.constraint(equalToConstant: 42),
-            nextEpisodeButton.widthAnchor.constraint(equalToConstant: 42),
+            nextEpisodeButton.widthAnchor.constraint(equalToConstant: 36),
             nextEpisodeButton.heightAnchor.constraint(equalToConstant: 42),
-            speedButton.widthAnchor.constraint(equalToConstant: 42),
+            speedButton.widthAnchor.constraint(equalToConstant: 36),
             speedButton.heightAnchor.constraint(equalToConstant: 42),
             openButton.widthAnchor.constraint(equalToConstant: 46),
             openButton.heightAnchor.constraint(equalToConstant: 46),
             tracksButton.widthAnchor.constraint(equalToConstant: 46),
             tracksButton.heightAnchor.constraint(equalToConstant: 46),
+            episodeListButton.widthAnchor.constraint(equalToConstant: 40),
+            episodeListButton.heightAnchor.constraint(equalToConstant: 46),
             settingsButton.widthAnchor.constraint(equalToConstant: 46),
             settingsButton.heightAnchor.constraint(equalToConstant: 46),
             currentTimeLabel.widthAnchor.constraint(equalToConstant: 56),
@@ -1860,6 +1868,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             nextEpisodeButton,
             tracksButton,
             speedButton,
+            episodeListButton,
         ].compactMap(\.accessibilityLabel)
     }
 
@@ -1883,6 +1892,10 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
 
     @objc private func nextEpisodeTapped() {
         onNextEpisode?()
+    }
+
+    @objc private func episodeListTapped() {
+        onEpisodeList?()
     }
 
     @objc private func menuButtonTouched() {

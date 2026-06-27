@@ -107,7 +107,9 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     VideoMediaPlayerProxy,
     MediaPlayerOffsetConfigurable,
     MediaPlayerSubtitleConfigurable,
-    UIDocumentPickerDelegate
+    UIDocumentPickerDelegate,
+    UITableViewDataSource,
+    UITableViewDelegate
 {
     private final class PlayerRootView: UIView {
         var onMoveToWindow: ((UIWindow?) -> Void)?
@@ -148,6 +150,10 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private let controlsView = PlayerControlsView()
     private let renderedSubtitleLabel = UILabel()
     private let bufferingIndicator = UIActivityIndicatorView(style: .large)
+    private let episodeListPanel = UIVisualEffectView(effect: EmbyLibMPVPlayerViewController.panelEffect())
+    private let episodeListTitleLabel = UILabel()
+    private let episodeListTableView = UITableView(frame: .zero, style: .plain)
+    private let episodeListLoadingIndicator = UIActivityIndicatorView(style: .medium)
     private let player = MPVPlayerController()
     private let volumeView = MPVolumeView(frame: CGRect(x: -100, y: -100, width: 1, height: 1))
 
@@ -155,6 +161,10 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private var queueCancellable: AnyCancellable?
     private var gestureController: PlayerGestureController?
     private weak var volumeSlider: UISlider?
+    private var episodeListItems: [BaseItemDto] = []
+    private var episodeListLoadTask: Task<Void, Never>?
+    private var episodeListSeriesID: String?
+    private var isEpisodeListVisible = false
     private var lastObservedOutputVolume = Double(AVAudioSession.sharedInstance().outputVolume)
     private var volumePollingTimer: Timer?
     private var controlsHidden = false
@@ -199,6 +209,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private var subtitleControlsBottomConstraint: NSLayoutConstraint?
     private static var orientationOverrideGeneration = 0
     private static let seasonSubtitleAdjustmentKeyPrefix = "libmpv.subtitleAdjustment.season."
+    private static let episodeListCellIdentifier = "EmbyPlayerEpisodeListCell"
     #if DEBUG
     private var didStartSubtitleBorderExerciseForSmoke = false
     private var didStartSubtitleScaleExerciseForSmoke = false
@@ -507,6 +518,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         tracePlayerExitLayerState("viewDidDisappear")
         stopHardwareVolumePolling()
         persistSubtitleAdjustmentSettingsNow()
+        closeEpisodeListForPlayerDismissal()
         guard UIApplication.shared.applicationState == .active, !isInBackground else {
             isInBackground = true
             return
@@ -924,6 +936,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         cancelControlsHide()
         hideSeekPreviewNow()
         hideGestureHUDNow()
+        closeEpisodeListForPlayerDismissal()
         if controlsView.needsSubtitleAdjustmentDismissalForPlayerDismissal {
             tracePlayerExit("closePlayer closeSubtitleAdjustment")
             controlsView.closeSubtitleAdjustmentForPlayerDismissal()
@@ -1197,6 +1210,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        episodeListLoadTask?.cancel()
         volumePollingTimer?.invalidate()
         reapplySubtitleAdjustmentWorkItem?.cancel()
         persistSubtitleAdjustmentWorkItem?.cancel()
@@ -1412,13 +1426,19 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         controlsView.translatesAutoresizingMaskIntoConstraints = false
         renderedSubtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         bufferingIndicator.translatesAutoresizingMaskIntoConstraints = false
+        episodeListPanel.translatesAutoresizingMaskIntoConstraints = false
+        episodeListTitleLabel.translatesAutoresizingMaskIntoConstraints = false
+        episodeListTableView.translatesAutoresizingMaskIntoConstraints = false
+        episodeListLoadingIndicator.translatesAutoresizingMaskIntoConstraints = false
         configureBufferingIndicator()
         configureRenderedSubtitleOverlay()
+        configureEpisodeListPanel()
 
         view.addSubview(playerView)
         view.addSubview(controlsView)
         view.addSubview(bufferingIndicator)
         view.addSubview(renderedSubtitleLabel)
+        view.addSubview(episodeListPanel)
 
         let subtitleVisibleBottomConstraint = renderedSubtitleLabel.bottomAnchor.constraint(
             equalTo: view.safeAreaLayoutGuide.bottomAnchor,
@@ -1444,6 +1464,21 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
             bufferingIndicator.centerXAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerXAnchor),
             bufferingIndicator.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerYAnchor),
+
+            episodeListPanel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 18),
+            episodeListPanel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -18),
+            episodeListPanel.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -96),
+            episodeListPanel.heightAnchor.constraint(equalToConstant: 250),
+
+            episodeListTitleLabel.leadingAnchor.constraint(equalTo: episodeListPanel.contentView.leadingAnchor, constant: 18),
+            episodeListTitleLabel.trailingAnchor.constraint(equalTo: episodeListLoadingIndicator.leadingAnchor, constant: -12),
+            episodeListTitleLabel.topAnchor.constraint(equalTo: episodeListPanel.contentView.topAnchor, constant: 14),
+            episodeListLoadingIndicator.centerYAnchor.constraint(equalTo: episodeListTitleLabel.centerYAnchor),
+            episodeListLoadingIndicator.trailingAnchor.constraint(equalTo: episodeListPanel.contentView.trailingAnchor, constant: -18),
+            episodeListTableView.leadingAnchor.constraint(equalTo: episodeListPanel.contentView.leadingAnchor),
+            episodeListTableView.trailingAnchor.constraint(equalTo: episodeListPanel.contentView.trailingAnchor),
+            episodeListTableView.topAnchor.constraint(equalTo: episodeListTitleLabel.bottomAnchor, constant: 8),
+            episodeListTableView.bottomAnchor.constraint(equalTo: episodeListPanel.contentView.bottomAnchor, constant: -8),
 
             renderedSubtitleLabel.centerXAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerXAnchor),
             renderedSubtitleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 54),
@@ -1482,6 +1517,60 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         renderedSubtitleLabel.layer.shadowRadius = 4
         renderedSubtitleLabel.layer.shadowOffset = CGSize(width: 0, height: 1)
         renderedSubtitleLabel.setContentCompressionResistancePriority(.required, for: .vertical)
+    }
+
+    private func configureEpisodeListPanel() {
+        episodeListPanel.alpha = 0
+        episodeListPanel.isHidden = true
+        episodeListPanel.transform = CGAffineTransform(translationX: 0, y: 14)
+        episodeListPanel.layer.zPosition = 13_000
+        episodeListPanel.clipsToBounds = true
+        episodeListPanel.layer.cornerRadius = 24
+        episodeListPanel.layer.cornerCurve = .continuous
+        episodeListPanel.layer.borderColor = UIColor.white.withAlphaComponent(0.12).cgColor
+        episodeListPanel.layer.borderWidth = 0.5
+        episodeListPanel.backgroundColor = .clear
+        episodeListPanel.contentView.backgroundColor = Self.menuPanelBackgroundColor
+        episodeListPanel.contentView.addSubview(episodeListTitleLabel)
+        episodeListPanel.contentView.addSubview(episodeListLoadingIndicator)
+        episodeListPanel.contentView.addSubview(episodeListTableView)
+
+        episodeListTitleLabel.text = "选集"
+        episodeListTitleLabel.textColor = .white
+        episodeListTitleLabel.font = .systemFont(ofSize: 17, weight: .semibold)
+        episodeListTitleLabel.adjustsFontSizeToFitWidth = true
+        episodeListTitleLabel.minimumScaleFactor = 0.8
+
+        episodeListLoadingIndicator.color = .white
+        episodeListLoadingIndicator.hidesWhenStopped = true
+
+        episodeListTableView.backgroundColor = .clear
+        episodeListTableView.separatorColor = UIColor.white.withAlphaComponent(0.12)
+        episodeListTableView.indicatorStyle = .white
+        episodeListTableView.rowHeight = 56
+        episodeListTableView.dataSource = self
+        episodeListTableView.delegate = self
+        episodeListTableView.register(UITableViewCell.self, forCellReuseIdentifier: Self.episodeListCellIdentifier)
+        episodeListTableView.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: 8, right: 0)
+    }
+
+    private static func panelEffect() -> UIVisualEffect {
+        if #available(iOS 26.0, *) {
+            let effect = UIGlassEffect(style: .clear)
+            effect.isInteractive = true
+            effect.tintColor = UIColor.black.withAlphaComponent(0.22)
+            return effect
+        }
+
+        return UIBlurEffect(style: .systemUltraThinMaterialDark)
+    }
+
+    private static var menuPanelBackgroundColor: UIColor {
+        if #available(iOS 26.0, *) {
+            return UIColor.black.withAlphaComponent(0.32)
+        }
+
+        return UIColor.black.withAlphaComponent(0.18)
     }
 
     private func installVolumeView() {
@@ -1955,6 +2044,10 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             self?.playAdjacentItem(offset: 1)
         }
 
+        controlsView.onEpisodeList = { [weak self] in
+            self?.toggleEpisodeList()
+        }
+
         controlsView.onPlaybackSpeedSelected = { [weak self] speed in
             guard let self else { return }
             let rate = Float(speed)
@@ -2027,6 +2120,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         isBuffering.value = true
         controlsView.update(time: item.baseItem.startSeconds?.seconds ?? 0, duration: item.baseItem.runtime?.seconds ?? 0)
         updateEpisodeNavigation()
+        updateEpisodeListForCurrentItemIfNeeded(item.baseItem)
 
         let startSeconds: Duration
         if !item.baseItem.isLiveStream {
@@ -2588,6 +2682,210 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         showControls()
     }
 
+    private func toggleEpisodeList() {
+        guard manager?.queue != nil else {
+            showControls()
+            return
+        }
+
+        setEpisodeListVisible(!isEpisodeListVisible, animated: true)
+    }
+
+    private func setEpisodeListVisible(_ visible: Bool, animated: Bool) {
+        guard isEpisodeListVisible != visible else {
+            if visible {
+                loadEpisodeListIfNeeded()
+            }
+            return
+        }
+
+        isEpisodeListVisible = visible
+        if visible {
+            cancelControlsHide()
+            hideSeekPreviewNow()
+            hideGestureHUDNow()
+            showControls()
+            cancelControlsHide()
+            episodeListPanel.isHidden = false
+            episodeListPanel.isUserInteractionEnabled = true
+            loadEpisodeListIfNeeded()
+        } else {
+            episodeListPanel.isUserInteractionEnabled = false
+        }
+
+        let animations = {
+            self.episodeListPanel.alpha = visible ? 1 : 0
+            self.episodeListPanel.transform = visible ? .identity : CGAffineTransform(translationX: 0, y: 14)
+        }
+
+        if animated {
+            UIView.animate(
+                withDuration: visible ? 0.18 : 0.14,
+                delay: 0,
+                options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut],
+                animations: animations
+            ) { [weak self] _ in
+                guard let self else { return }
+                self.episodeListPanel.isHidden = !self.isEpisodeListVisible
+            }
+        } else {
+            animations()
+            episodeListPanel.isHidden = !visible
+        }
+
+        if !visible {
+            scheduleControlsHide()
+        }
+    }
+
+    private func closeEpisodeListForPlayerDismissal() {
+        episodeListLoadTask?.cancel()
+        episodeListLoadTask = nil
+        isEpisodeListVisible = false
+        episodeListPanel.layer.removeAllAnimations()
+        episodeListPanel.alpha = 0
+        episodeListPanel.transform = CGAffineTransform(translationX: 0, y: 14)
+        episodeListPanel.isHidden = true
+        episodeListPanel.isUserInteractionEnabled = false
+        episodeListLoadingIndicator.stopAnimating()
+    }
+
+    private func loadEpisodeListIfNeeded() {
+        guard let item = manager?.item,
+              let seriesID = item.seriesID ?? item.parentID
+        else { return }
+
+        if episodeListSeriesID == seriesID, !episodeListItems.isEmpty {
+            episodeListTableView.reloadData()
+            scrollEpisodeListToCurrentItem(animated: false)
+            return
+        }
+
+        episodeListSeriesID = seriesID
+        episodeListItems = []
+        episodeListTableView.reloadData()
+        episodeListLoadingIndicator.startAnimating()
+        episodeListLoadTask?.cancel()
+        episodeListLoadTask = Task { [weak self] in
+            guard let self else { return }
+            guard let userSession = Container.shared.currentUserSession() else {
+                await MainActor.run {
+                    self.episodeListLoadingIndicator.stopAnimating()
+                }
+                return
+            }
+
+            var parameters = EmbyPortEpisodesParameters()
+            parameters.enableUserData = true
+            parameters.fields = .MinimumFields
+            parameters.isMissing = false
+            parameters.userID = userSession.user.id
+
+            do {
+                let response: EmbyPortItemsResponse<BaseItemDto> = try await userSession.embyClient.episodes(
+                    seriesID: seriesID,
+                    parameters,
+                    as: EmbyPortItemsResponse<BaseItemDto>.self
+                )
+
+                await MainActor.run {
+                    guard !Task.isCancelled, self.episodeListSeriesID == seriesID else { return }
+                    self.episodeListItems = response.items ?? []
+                    self.episodeListLoadingIndicator.stopAnimating()
+                    self.episodeListTableView.reloadData()
+                    self.scrollEpisodeListToCurrentItem(animated: false)
+                }
+            } catch {
+                await MainActor.run {
+                    guard !Task.isCancelled else { return }
+                    self.episodeListItems = []
+                    self.episodeListLoadingIndicator.stopAnimating()
+                    self.episodeListTableView.reloadData()
+                    #if DEBUG
+                    NSLog("EmbyPlayerEpisodeList load failed error=%@", error.localizedDescription)
+                    #endif
+                }
+            }
+        }
+    }
+
+    private func scrollEpisodeListToCurrentItem(animated: Bool) {
+        guard let currentID = manager?.item.id,
+              let row = episodeListItems.firstIndex(where: { $0.id == currentID })
+        else { return }
+
+        episodeListTableView.scrollToRow(
+            at: IndexPath(row: row, section: 0),
+            at: .middle,
+            animated: animated
+        )
+    }
+
+    private func updateEpisodeListForCurrentItemIfNeeded(_ item: BaseItemDto) {
+        guard isEpisodeListVisible else { return }
+        let seriesID = item.seriesID ?? item.parentID
+        if seriesID != episodeListSeriesID {
+            episodeListSeriesID = nil
+            loadEpisodeListIfNeeded()
+        } else {
+            episodeListTableView.reloadData()
+            scrollEpisodeListToCurrentItem(animated: true)
+        }
+    }
+
+    private func selectEpisodeListItem(at indexPath: IndexPath) {
+        guard episodeListItems.indices.contains(indexPath.row) else { return }
+        let episode = episodeListItems[indexPath.row]
+        if episode.id == manager?.item.id {
+            setEpisodeListVisible(false, animated: true)
+            return
+        }
+
+        controlsView.suppressPausedIndicatorTemporarily()
+        let provider = MediaPlayerItemProvider(item: episode) { item in
+            try await MediaPlayerItem.build(for: item)
+        }
+        manager?.playNewItem(provider: provider)
+        setEpisodeListVisible(false, animated: true)
+        showControls()
+    }
+
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        guard tableView === episodeListTableView else { return 0 }
+        return episodeListItems.count
+    }
+
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: Self.episodeListCellIdentifier, for: indexPath)
+        guard episodeListItems.indices.contains(indexPath.row) else { return cell }
+
+        let episode = episodeListItems[indexPath.row]
+        var content = cell.defaultContentConfiguration()
+        if let locator = episode.seasonEpisodeLabel {
+            content.text = "\(locator) · \(episode.displayTitle)"
+        } else {
+            content.text = episode.displayTitle
+        }
+        content.textProperties.color = .white
+        content.textProperties.font = .systemFont(ofSize: 15, weight: .semibold)
+
+        cell.contentConfiguration = content
+        cell.backgroundColor = .clear
+        cell.tintColor = .white
+        cell.accessoryType = episode.id == manager?.item.id ? .checkmark : .none
+        let selectedBackground = UIView()
+        selectedBackground.backgroundColor = UIColor.white.withAlphaComponent(0.12)
+        cell.selectedBackgroundView = selectedBackground
+
+        return cell
+    }
+
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        guard tableView === episodeListTableView else { return }
+        selectEpisodeListItem(at: indexPath)
+    }
+
     private func presentSubtitleDocumentPicker() {
         cancelControlsHide()
         showControls()
@@ -2651,15 +2949,26 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     }
 
     private func updateEpisodeNavigation() {
+        let hasQueue = manager?.queue != nil
+        if !hasQueue, isEpisodeListVisible {
+            setEpisodeListVisible(false, animated: true)
+        }
+
         controlsView.updateEpisodeNavigation(
             canGoPrevious: manager?.queue?.previousItem != nil,
-            canGoNext: manager?.queue?.nextItem != nil
+            canGoNext: manager?.queue?.nextItem != nil,
+            canShowEpisodeList: hasQueue
         )
     }
 
     private func toggleControls() {
         if controlsView.isSubtitleAdjustmentPanelVisible {
             controlsView.setSubtitleAdjustmentPanelVisible(false, animated: true)
+            return
+        }
+
+        if isEpisodeListVisible {
+            setEpisodeListVisible(false, animated: true)
             return
         }
 

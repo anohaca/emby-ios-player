@@ -415,7 +415,7 @@ private struct DebugPlayerLocalizationSmokeRepresentable: UIViewRepresentable {
         controlsView.updateTitle("播放器汉化", subtitle: "亮度 / 音量 / 字幕名称")
         controlsView.update(time: 62, duration: 24 * 60)
         controlsView.setPaused(true)
-        controlsView.updateEpisodeNavigation(canGoPrevious: true, canGoNext: true)
+        controlsView.updateEpisodeNavigation(canGoPrevious: true, canGoNext: true, canShowEpisodeList: true)
         controlsView.applyEmbyPlaybackChrome()
 
         let jumpBackwardSeconds = arguments.value(after: "-EmbyPlayerJumpBackwardSeconds").flatMap(Int.init) ?? 10
@@ -528,7 +528,7 @@ private struct DebugSubtitleAdjustmentSmokeRepresentable: UIViewRepresentable {
         controlsView.updateTitle("Subtitle Adjustment", subtitle: "Position / Size / Border")
         controlsView.update(time: 62, duration: 24 * 60)
         controlsView.setPaused(true)
-        controlsView.updateEpisodeNavigation(canGoPrevious: true, canGoNext: true)
+        controlsView.updateEpisodeNavigation(canGoPrevious: true, canGoNext: true, canShowEpisodeList: true)
         controlsView.updateSubtitleTracks([
             MPVSubtitleTrack(id: "1", title: "ASS · CHS", isSelected: true),
             MPVSubtitleTrack(id: "2", title: "SRT · ENG", isSelected: false),

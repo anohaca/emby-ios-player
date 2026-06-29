@@ -220,8 +220,6 @@ extension BaseItemKind {
             ItemSortBy.dateCreated
             ItemSortBy.datePlayed
             ItemSortBy.isFavoriteOrLiked
-            ItemSortBy.isPlayed
-            ItemSortBy.isUnplayed
             ItemSortBy.playCount
             ItemSortBy.runtime
         case .book:
@@ -229,8 +227,6 @@ extension BaseItemKind {
             ItemSortBy.dateCreated
             ItemSortBy.datePlayed
             ItemSortBy.isFavoriteOrLiked
-            ItemSortBy.isPlayed
-            ItemSortBy.isUnplayed
             ItemSortBy.officialRating
             ItemSortBy.productionYear
         case .boxSet:
@@ -253,8 +249,6 @@ extension BaseItemKind {
             ItemSortBy.datePlayed
             ItemSortBy.indexNumber
             ItemSortBy.isFavoriteOrLiked
-            ItemSortBy.isPlayed
-            ItemSortBy.isUnplayed
             ItemSortBy.officialRating
             ItemSortBy.parentIndexNumber
             ItemSortBy.playCount
@@ -273,8 +267,6 @@ extension BaseItemKind {
             ItemSortBy.dateCreated
             ItemSortBy.datePlayed
             ItemSortBy.isFavoriteOrLiked
-            ItemSortBy.isPlayed
-            ItemSortBy.isUnplayed
             ItemSortBy.officialRating
             ItemSortBy.playCount
             ItemSortBy.premiereDate
@@ -303,8 +295,6 @@ extension BaseItemKind {
             ItemSortBy.dateCreated
             ItemSortBy.datePlayed
             ItemSortBy.isFavoriteOrLiked
-            ItemSortBy.isPlayed
-            ItemSortBy.isUnplayed
             ItemSortBy.playCount
             ItemSortBy.productionYear
             ItemSortBy.runtime
@@ -354,8 +344,6 @@ extension BaseItemKind {
             ItemSortBy.isFolder
         case .video:
             ItemSortBy.isFavoriteOrLiked
-            ItemSortBy.isPlayed
-            ItemSortBy.isUnplayed
             ItemSortBy.videoBitRate
         default:
             [ItemSortBy]()

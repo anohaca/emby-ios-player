@@ -114,8 +114,6 @@ extension ItemSortBy: Displayable, SupportedCaseIterable {
             // Status
             .isFavoriteOrLiked,
             .isFolder,
-            .isPlayed,
-            .isUnplayed,
 
             // Stats
             .playCount,

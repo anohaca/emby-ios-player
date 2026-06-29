@@ -51,6 +51,7 @@ struct ItemFilterCollection: Hashable, Storable {
         self.tags = tags
         self.traits = traits
         self.years = years
+        normalizePlaybackStateSorts()
     }
 
     init(from decoder: Decoder) throws {
@@ -65,11 +66,36 @@ struct ItemFilterCollection: Hashable, Storable {
         tags = try container.decodeIfPresent([ItemTag].self, forKey: .tags) ?? []
         traits = try container.decodeIfPresent([ItemTrait].self, forKey: .traits) ?? []
         years = try container.decodeIfPresent([ItemYear].self, forKey: .years) ?? []
+        normalizePlaybackStateSorts()
     }
 
     var embyServerSortBy: [ItemSortBy] {
         let supportedSortBy = sortBy.filter { $0 != .videoBitRate }
         return supportedSortBy.isEmpty ? Self.default.sortBy : supportedSortBy
+    }
+
+    private mutating func normalizePlaybackStateSorts() {
+        let playbackSortTraits = sortBy.compactMap { sort -> ItemTrait? in
+            switch sort {
+            case .isPlayed:
+                .isPlayed
+            case .isUnplayed:
+                .isUnplayed
+            default:
+                nil
+            }
+        }
+
+        guard playbackSortTraits.isNotEmpty else { return }
+
+        sortBy.removeAll { $0 == .isPlayed || $0 == .isUnplayed }
+        if sortBy.isEmpty {
+            sortBy = Self.default.sortBy
+        }
+
+        for trait in playbackSortTraits where !traits.contains(trait) {
+            traits.append(trait)
+        }
     }
 
     var isVideoBitRateSort: Bool {

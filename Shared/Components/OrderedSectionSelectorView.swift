@@ -18,17 +18,20 @@ struct OrderedSectionSelectorView<Element: Displayable & Hashable>: View {
 
     private let data: [Element]
     private let removable: [Element]
+    private let alwaysEditing: Bool
     private let systemImage: String
 
     init(
         systemImage: String = "filemenu.and.selection",
         selection: Binding<[Element]>,
         sources: [Element],
-        removable: [Element]? = nil
+        removable: [Element]? = nil,
+        alwaysEditing: Bool = false
     ) {
         self._selection = StateObject(wrappedValue: BindingBox(source: selection))
         self.data = sources
         self.removable = removable ?? sources
+        self.alwaysEditing = alwaysEditing
         self.systemImage = systemImage
     }
 
@@ -41,7 +44,7 @@ struct OrderedSectionSelectorView<Element: Displayable & Hashable>: View {
     }
 
     private var isReordering: Bool {
-        editMode?.wrappedValue.isEditing == true
+        alwaysEditing || editMode?.wrappedValue.isEditing == true
     }
 
     private func select(element: Element) {
@@ -77,7 +80,7 @@ struct OrderedSectionSelectorView<Element: Displayable & Hashable>: View {
                 }
             }
         }
-        .disabled(isReordering)
+        .disabled(isReordering && !alwaysEditing)
         .foregroundStyle(.primary, .secondary)
     }
 
@@ -90,7 +93,7 @@ struct OrderedSectionSelectorView<Element: Displayable & Hashable>: View {
                 } else {
                     ForEach(selection.value, id: \.self) { element in
                         button(for: element) {
-                            if !isReordering, isRemovable(element) {
+                            if (!isReordering || alwaysEditing), isRemovable(element) {
                                 Image(systemName: "minus.circle.fill")
                                     .foregroundStyle(.red)
                             }
@@ -109,7 +112,7 @@ struct OrderedSectionSelectorView<Element: Displayable & Hashable>: View {
                 } else {
                     ForEach(disabledSelection, id: \.self) { element in
                         button(for: element) {
-                            if !isReordering {
+                            if !isReordering || alwaysEditing {
                                 Image(systemName: "plus.circle.fill")
                                     .foregroundStyle(.green)
                             }
@@ -121,7 +124,10 @@ struct OrderedSectionSelectorView<Element: Displayable & Hashable>: View {
         .animation(.linear(duration: 0.2), value: selection.value)
         .animation(.linear(duration: 0.2), value: editMode?.wrappedValue)
         .toolbar {
-            editButton
+            if !alwaysEditing {
+                editButton
+            }
         }
+        .environment(\.editMode, alwaysEditing ? .constant(.active) : editMode)
     }
 }

@@ -26,6 +26,9 @@ struct SettingsView: View {
     @Default(.VideoPlayer.videoPlayerType)
     private var videoPlayerType
 
+    @Default(.Customization.Library.enabledDrawerFilters)
+    private var libraryEnabledDrawerFilters
+
     @StateObject
     private var viewModel = SettingsViewModel()
 
@@ -142,6 +145,10 @@ struct SettingsView: View {
 
             ChevronButton(L10n.advanced) {
                 router.route(to: .customizeSettingsView)
+            }
+
+            ChevronButton("筛选栏") {
+                router.route(to: .itemFilterDrawerSelector(selection: $libraryEnabledDrawerFilters))
             }
         } header: {
             Text(L10n.customize)

@@ -162,7 +162,12 @@ extension NavigationRoute {
 
     static func itemFilterDrawerSelector(selection: Binding<[ItemFilterType]>) -> NavigationRoute {
         NavigationRoute(id: "itemFilterDrawerSelector") {
-            OrderedSectionSelectorView(systemImage: "line.3.horizontal.decrease", selection: selection, sources: ItemFilterType.allCases)
+            OrderedSectionSelectorView(
+                systemImage: "line.3.horizontal.decrease",
+                selection: selection,
+                sources: ItemFilterType.allCases,
+                alwaysEditing: true
+            )
                 .navigationTitle(L10n.filters)
         }
     }

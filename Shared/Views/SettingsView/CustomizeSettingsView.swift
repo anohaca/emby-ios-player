@@ -69,8 +69,16 @@ struct CustomizeSettingsView: View {
     private var letterPickerOrientation
     @Default(.Customization.Library.enabledDrawerFilters)
     private var libraryEnabledDrawerFilters
+    @Default(.Customization.Library.drawerFilterOrder)
+    private var libraryDrawerFilterOrder
+    @Default(.Customization.Library.hiddenDrawerFilters)
+    private var libraryHiddenDrawerFilters
     @Default(.Customization.Search.enabledDrawerFilters)
     private var searchEnabledDrawerFilters
+    @Default(.Customization.Search.drawerFilterOrder)
+    private var searchDrawerFilterOrder
+    @Default(.Customization.Search.hiddenDrawerFilters)
+    private var searchHiddenDrawerFilters
 
     // MARK: - Item Defaults
 
@@ -194,13 +202,86 @@ struct CustomizeSettingsView: View {
             PlatformPicker(L10n.letterPicker, selection: $letterPickerOrientation)
 
             ChevronButton(L10n.library) {
-                router.route(to: .itemFilterDrawerSelector(selection: $libraryEnabledDrawerFilters))
+                router.route(
+                    to: .itemFilterDrawerSelector(
+                        order: libraryDrawerFilterOrderBinding,
+                        hidden: libraryHiddenDrawerFiltersBinding
+                    )
+                )
             }
 
             ChevronButton(L10n.search) {
-                router.route(to: .itemFilterDrawerSelector(selection: $searchEnabledDrawerFilters))
+                router.route(
+                    to: .itemFilterDrawerSelector(
+                        order: searchDrawerFilterOrderBinding,
+                        hidden: searchHiddenDrawerFiltersBinding
+                    )
+                )
             }
         }
+    }
+
+    private var libraryDrawerFilterOrderBinding: Binding<[ItemFilterType]> {
+        Binding {
+            libraryDrawerFilterOrder
+        } set: { newValue in
+            libraryDrawerFilterOrder = newValue
+            syncEnabledDrawerFilters(
+                order: newValue,
+                hidden: libraryHiddenDrawerFilters,
+                enabled: $libraryEnabledDrawerFilters
+            )
+        }
+    }
+
+    private var libraryHiddenDrawerFiltersBinding: Binding<[ItemFilterType]> {
+        Binding {
+            libraryHiddenDrawerFilters
+        } set: { newValue in
+            libraryHiddenDrawerFilters = newValue
+            syncEnabledDrawerFilters(
+                order: libraryDrawerFilterOrder,
+                hidden: newValue,
+                enabled: $libraryEnabledDrawerFilters
+            )
+        }
+    }
+
+    private var searchDrawerFilterOrderBinding: Binding<[ItemFilterType]> {
+        Binding {
+            searchDrawerFilterOrder
+        } set: { newValue in
+            searchDrawerFilterOrder = newValue
+            syncEnabledDrawerFilters(
+                order: newValue,
+                hidden: searchHiddenDrawerFilters,
+                enabled: $searchEnabledDrawerFilters
+            )
+        }
+    }
+
+    private var searchHiddenDrawerFiltersBinding: Binding<[ItemFilterType]> {
+        Binding {
+            searchHiddenDrawerFilters
+        } set: { newValue in
+            searchHiddenDrawerFilters = newValue
+            syncEnabledDrawerFilters(
+                order: searchDrawerFilterOrder,
+                hidden: newValue,
+                enabled: $searchEnabledDrawerFilters
+            )
+        }
+    }
+
+    private func syncEnabledDrawerFilters(
+        order: [ItemFilterType],
+        hidden: [ItemFilterType],
+        enabled: Binding<[ItemFilterType]>
+    ) {
+        let normalizedOrder = order.filter { ItemFilterType.allCases.contains($0) } +
+            ItemFilterType.allCases.filter { !order.contains($0) }
+        let hiddenSet = Set(hidden)
+        enabled.wrappedValue = normalizedOrder.filter { !hiddenSet.contains($0) }
     }
 
     // MARK: - Library Settings

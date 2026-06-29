@@ -28,6 +28,10 @@ struct SettingsView: View {
 
     @Default(.Customization.Library.enabledDrawerFilters)
     private var libraryEnabledDrawerFilters
+    @Default(.Customization.Library.drawerFilterOrder)
+    private var libraryDrawerFilterOrder
+    @Default(.Customization.Library.hiddenDrawerFilters)
+    private var libraryHiddenDrawerFilters
 
     @StateObject
     private var viewModel = SettingsViewModel()
@@ -148,13 +152,46 @@ struct SettingsView: View {
             }
 
             ChevronButton("筛选栏") {
-                router.route(to: .itemFilterDrawerSelector(selection: $libraryEnabledDrawerFilters))
+                router.route(
+                    to: .itemFilterDrawerSelector(
+                        order: libraryDrawerFilterOrderBinding,
+                        hidden: libraryHiddenDrawerFiltersBinding
+                    )
+                )
             }
         } header: {
             Text(L10n.customize)
         } footer: {
             Text(L10n.viewsMayRequireRestart)
         }
+    }
+
+    private var libraryDrawerFilterOrderBinding: Binding<[ItemFilterType]> {
+        Binding {
+            libraryDrawerFilterOrder
+        } set: { newValue in
+            libraryDrawerFilterOrder = newValue
+            syncLibraryEnabledDrawerFilters(order: newValue, hidden: libraryHiddenDrawerFilters)
+        }
+    }
+
+    private var libraryHiddenDrawerFiltersBinding: Binding<[ItemFilterType]> {
+        Binding {
+            libraryHiddenDrawerFilters
+        } set: { newValue in
+            libraryHiddenDrawerFilters = newValue
+            syncLibraryEnabledDrawerFilters(order: libraryDrawerFilterOrder, hidden: newValue)
+        }
+    }
+
+    private func syncLibraryEnabledDrawerFilters(
+        order: [ItemFilterType],
+        hidden: [ItemFilterType]
+    ) {
+        let normalizedOrder = order.filter { ItemFilterType.allCases.contains($0) } +
+            ItemFilterType.allCases.filter { !order.contains($0) }
+        let hiddenSet = Set(hidden)
+        libraryEnabledDrawerFilters = normalizedOrder.filter { !hiddenSet.contains($0) }
     }
 
     // MARK: - Diagnostics Section

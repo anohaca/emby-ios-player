@@ -441,6 +441,20 @@ extension Defaults.Keys {
                 )
             }
 
+            static var drawerFilterOrder: Key<[ItemFilterType]> {
+                UserKey(
+                    "libraryDrawerFilterOrder",
+                    default: ItemFilterType.allCases
+                )
+            }
+
+            static var hiddenDrawerFilters: Key<[ItemFilterType]> {
+                UserKey(
+                    "libraryHiddenDrawerFilters",
+                    default: []
+                )
+            }
+
             static var letterPickerOrientation: Key<LetterPickerOrientation> {
                 UserKey("letterPickerOrientation", default: .disabled)
             }
@@ -505,6 +519,20 @@ extension Defaults.Keys {
                 UserKey(
                     "searchEnabledDrawerFilters",
                     default: ItemFilterType.allCases
+                )
+            }
+
+            static var drawerFilterOrder: Key<[ItemFilterType]> {
+                UserKey(
+                    "searchDrawerFilterOrder",
+                    default: ItemFilterType.allCases
+                )
+            }
+
+            static var hiddenDrawerFilters: Key<[ItemFilterType]> {
+                UserKey(
+                    "searchHiddenDrawerFilters",
+                    default: []
                 )
             }
         }

@@ -160,13 +160,16 @@ extension NavigationRoute {
         }
     }
 
-    static func itemFilterDrawerSelector(selection: Binding<[ItemFilterType]>) -> NavigationRoute {
+    static func itemFilterDrawerSelector(
+        order: Binding<[ItemFilterType]>,
+        hidden: Binding<[ItemFilterType]>
+    ) -> NavigationRoute {
         NavigationRoute(id: "itemFilterDrawerSelector") {
-            OrderedSectionSelectorView(
+            OrderedVisibilitySelectorView(
                 systemImage: "line.3.horizontal.decrease",
-                selection: selection,
-                sources: ItemFilterType.allCases,
-                alwaysEditing: true
+                order: order,
+                hidden: hidden,
+                sources: ItemFilterType.allCases
             )
                 .navigationTitle(L10n.filters)
         }

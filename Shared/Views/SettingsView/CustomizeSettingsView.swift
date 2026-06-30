@@ -47,6 +47,10 @@ struct CustomizeSettingsView: View {
     private var rememberLibraryLayout
     @Default(.Customization.Library.rememberSort)
     private var rememberLibrarySort
+    @Default(.Customization.Library.sortOptionOrder)
+    private var librarySortOptionOrder
+    @Default(.Customization.Library.hiddenSortOptions)
+    private var libraryHiddenSortOptions
 
     // MARK: - Poster Defaults
 
@@ -201,7 +205,7 @@ struct CustomizeSettingsView: View {
         Section(L10n.filters) {
             PlatformPicker(L10n.letterPicker, selection: $letterPickerOrientation)
 
-            ChevronButton(L10n.library) {
+            ChevronButton("影视库筛选栏") {
                 router.route(
                     to: .itemFilterDrawerSelector(
                         order: libraryDrawerFilterOrderBinding,
@@ -210,11 +214,20 @@ struct CustomizeSettingsView: View {
                 )
             }
 
-            ChevronButton(L10n.search) {
+            ChevronButton("搜索页筛选栏") {
                 router.route(
                     to: .itemFilterDrawerSelector(
                         order: searchDrawerFilterOrderBinding,
                         hidden: searchHiddenDrawerFiltersBinding
+                    )
+                )
+            }
+
+            ChevronButton(L10n.sort) {
+                router.route(
+                    to: .itemSortOptionSelector(
+                        order: librarySortOptionOrderBinding,
+                        hidden: libraryHiddenSortOptionsBinding
                     )
                 )
             }
@@ -270,6 +283,23 @@ struct CustomizeSettingsView: View {
                 hidden: newValue,
                 enabled: $searchEnabledDrawerFilters
             )
+        }
+    }
+
+    private var librarySortOptionOrderBinding: Binding<[ItemSortBy]> {
+        Binding {
+            librarySortOptionOrder
+        } set: { newValue in
+            librarySortOptionOrder = newValue
+            libraryHiddenSortOptions = libraryHiddenSortOptions.filter { newValue.contains($0) }
+        }
+    }
+
+    private var libraryHiddenSortOptionsBinding: Binding<[ItemSortBy]> {
+        Binding {
+            libraryHiddenSortOptions
+        } set: { newValue in
+            libraryHiddenSortOptions = newValue
         }
     }
 

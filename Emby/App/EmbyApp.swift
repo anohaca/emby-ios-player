@@ -34,6 +34,10 @@ struct EmbyApp: App {
             NavigationStack {
                 SettingsView()
             }
+        } else if ProcessInfo.processInfo.arguments.contains("-EmbySettingsSmokeCustomize") {
+            NavigationStack {
+                CustomizeSettingsView()
+            }
         } else if ProcessInfo.processInfo.arguments.contains("-EmbySettingsSmokeHomeSections") {
             NavigationStack {
                 HomeSectionSettingsView()

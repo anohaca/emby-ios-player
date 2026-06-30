@@ -8,7 +8,7 @@
 
 import Foundation
 
-extension ItemSortBy: Displayable, SupportedCaseIterable {
+extension ItemSortBy: Displayable, Storable, SupportedCaseIterable {
 
     var displayTitle: String {
         switch self {

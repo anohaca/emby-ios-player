@@ -9,6 +9,7 @@
 enum ItemFilterType: String, CaseIterable, Displayable, Identifiable, Storable, SystemImageable {
 
     typealias Group = (
+        id: String,
         displayTitle: String,
         keyPath: KeyPath<ItemFilterCollection, [AnyItemFilter]>,
         setter: @MainActor ([AnyItemFilter], FilterViewModel) -> Void,
@@ -47,6 +48,7 @@ enum ItemFilterType: String, CaseIterable, Displayable, Identifiable, Storable, 
         switch self {
         case .genres:
             (
+                id: "genres",
                 displayTitle: displayTitle,
                 keyPath: \ItemFilterCollection.genres.asAnyItemFilter,
                 setter: { $1.currentFilters.genres = $0.map(ItemGenre.init) },
@@ -54,6 +56,7 @@ enum ItemFilterType: String, CaseIterable, Displayable, Identifiable, Storable, 
             )
         case .letter:
             (
+                id: "letter",
                 displayTitle: displayTitle,
                 keyPath: \ItemFilterCollection.letter.asAnyItemFilter,
                 setter: { $1.currentFilters.letter = $0.map(ItemLetter.init) },
@@ -61,12 +64,14 @@ enum ItemFilterType: String, CaseIterable, Displayable, Identifiable, Storable, 
             )
         case .sortBy:
             (
+                id: "sortOrder",
                 displayTitle: L10n.order,
                 keyPath: \ItemFilterCollection.sortOrder.asAnyItemFilter,
                 setter: { $1.currentFilters.sortOrder = $0.map(ItemSortOrder.init) },
                 selectorType: .single
             )
             (
+                id: "sortBy",
                 displayTitle: displayTitle,
                 keyPath: \ItemFilterCollection.sortBy.asAnyItemFilter,
                 setter: { $1.currentFilters.sortBy = $0.map(ItemSortBy.init) },
@@ -74,6 +79,7 @@ enum ItemFilterType: String, CaseIterable, Displayable, Identifiable, Storable, 
             )
         case .studios:
             (
+                id: "studios",
                 displayTitle: displayTitle,
                 keyPath: \ItemFilterCollection.studios.asAnyItemFilter,
                 setter: { $1.currentFilters.studios = $0.map(ItemStudio.init) },
@@ -81,6 +87,7 @@ enum ItemFilterType: String, CaseIterable, Displayable, Identifiable, Storable, 
             )
         case .tags:
             (
+                id: "tags",
                 displayTitle: displayTitle,
                 keyPath: \ItemFilterCollection.tags.asAnyItemFilter,
                 setter: { $1.currentFilters.tags = $0.map(ItemTag.init) },
@@ -88,6 +95,7 @@ enum ItemFilterType: String, CaseIterable, Displayable, Identifiable, Storable, 
             )
         case .traits:
             (
+                id: "traits",
                 displayTitle: displayTitle,
                 keyPath: \ItemFilterCollection.traits.asAnyItemFilter,
                 setter: { $1.currentFilters.traits = $0.map(ItemTrait.init) },
@@ -95,6 +103,7 @@ enum ItemFilterType: String, CaseIterable, Displayable, Identifiable, Storable, 
             )
         case .years:
             (
+                id: "years",
                 displayTitle: displayTitle,
                 keyPath: \ItemFilterCollection.years.asAnyItemFilter,
                 setter: { $1.currentFilters.years = $0.map(ItemYear.init) },

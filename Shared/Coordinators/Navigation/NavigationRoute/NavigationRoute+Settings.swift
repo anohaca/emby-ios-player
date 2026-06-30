@@ -175,6 +175,21 @@ extension NavigationRoute {
         }
     }
 
+    static func itemSortOptionSelector(
+        order: Binding<[ItemSortBy]>,
+        hidden: Binding<[ItemSortBy]>
+    ) -> NavigationRoute {
+        NavigationRoute(id: "itemSortOptionSelector") {
+            OrderedVisibilitySelectorView(
+                systemImage: "arrow.up.arrow.down",
+                order: order,
+                hidden: hidden,
+                sources: ItemSortBy.supportedCases
+            )
+                .navigationTitle(L10n.sort)
+        }
+    }
+
     static func itemViewAttributes(selection: Binding<[ItemViewAttribute]>) -> NavigationRoute {
         NavigationRoute(id: "itemViewAttributes") {
             OrderedSectionSelectorView(systemImage: "tag", selection: selection, sources: ItemViewAttribute.allCases)

@@ -6,6 +6,7 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
+import Defaults
 import SwiftUI
 
 struct FilterView: View {
@@ -16,11 +17,33 @@ struct FilterView: View {
     @Router
     private var router
 
+    @Default(.Customization.Library.sortOptionOrder)
+    private var librarySortOptionOrder
+    @Default(.Customization.Library.hiddenSortOptions)
+    private var libraryHiddenSortOptions
+
     let type: ItemFilterType
+
+    private func visibleSource(for group: ItemFilterType.Group) -> [AnyItemFilter] {
+        let source = viewModel.allFilters[keyPath: group.keyPath]
+
+        guard type == .sortBy, group.id == "sortBy" else {
+            return source
+        }
+
+        let hiddenSet = Set(libraryHiddenSortOptions)
+        let supported = Set(source.compactMap { ItemSortBy(rawValue: $0.value) })
+        let normalizedOrder = librarySortOptionOrder.filter { supported.contains($0) } +
+            ItemSortBy.supportedCases.filter { supported.contains($0) && !librarySortOptionOrder.contains($0) }
+
+        return normalizedOrder
+            .filter { !hiddenSet.contains($0) }
+            .asAnyItemFilter
+    }
 
     @ViewBuilder
     private func selector(group: ItemFilterType.Group) -> some View {
-        let source = viewModel.allFilters[keyPath: group.keyPath]
+        let source = visibleSource(for: group)
 
         let selectionBinding: Binding<[AnyItemFilter]> = Binding {
             viewModel.currentFilters[keyPath: group.keyPath]

@@ -455,6 +455,20 @@ extension Defaults.Keys {
                 )
             }
 
+            static var sortOptionOrder: Key<[ItemSortBy]> {
+                UserKey(
+                    "librarySortOptionOrder",
+                    default: ItemSortBy.supportedCases
+                )
+            }
+
+            static var hiddenSortOptions: Key<[ItemSortBy]> {
+                UserKey(
+                    "libraryHiddenSortOptions",
+                    default: []
+                )
+            }
+
             static var letterPickerOrientation: Key<LetterPickerOrientation> {
                 UserKey("letterPickerOrientation", default: .disabled)
             }

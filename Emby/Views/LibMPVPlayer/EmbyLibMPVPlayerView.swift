@@ -2057,7 +2057,13 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         }
 
         controlsView.onMenuOpened = { [weak self] in
-            self?.cancelControlsHide()
+            guard let self else { return }
+            self.cancelControlsHide()
+            self.scheduleControlsHide(after: 5.0)
+        }
+
+        controlsView.onMenuSelectionFinished = { [weak self] in
+            self?.scheduleControlsHide()
         }
 
         controlsView.onSelectSubtitleTrack = { [weak self] id in

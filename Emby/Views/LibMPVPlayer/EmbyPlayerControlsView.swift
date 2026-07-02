@@ -99,6 +99,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     var onEpisodeList: (() -> Void)?
     var onPlaybackSpeedSelected: ((Double) -> Void)?
     var onMenuOpened: (() -> Void)?
+    var onMenuSelectionFinished: (() -> Void)?
     var onOpenSubtitle: (() -> Void)? {
         didSet { updateSubtitleMenu() }
     }
@@ -117,6 +118,8 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private let topBar = UIVisualEffectView(effect: PlayerControlsView.panelEffect())
     private let bottomBar = UIVisualEffectView(effect: PlayerControlsView.panelEffect())
     private let openButton = UIButton(type: .system)
+    private let clockLabel = UILabel()
+    private let batteryLabel = UILabel()
     private let titleLabel = UILabel()
     private let subtitleLabel = UILabel()
     private let playPauseButton = UIButton(type: .system)
@@ -172,6 +175,8 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private var gestureHUDTopConstraint: NSLayoutConstraint?
     private var subtitleVisibleBottomConstraint: NSLayoutConstraint?
     private var subtitleControlsBottomConstraint: NSLayoutConstraint?
+    private var clockTimer: Timer?
+    private var wasBatteryMonitoringEnabled = UIDevice.current.isBatteryMonitoringEnabled
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -181,6 +186,12 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         configure()
+    }
+
+    deinit {
+        clockTimer?.invalidate()
+        NotificationCenter.default.removeObserver(self)
+        UIDevice.current.isBatteryMonitoringEnabled = wasBatteryMonitoringEnabled
     }
 
     func setPaused(_ paused: Bool) {
@@ -570,6 +581,12 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         configureButton(episodeListButton, symbol: "list.triangle", label: "选集")
         configureButton(settingsButton, symbol: "gearshape", label: "设置")
         applyIconShadow(to: settingsButton)
+        configureStatusLabel(clockLabel, font: .monospacedDigitSystemFont(ofSize: 14, weight: .semibold))
+        configureStatusLabel(batteryLabel, font: .monospacedDigitSystemFont(ofSize: 13, weight: .semibold))
+        batteryLabel.textAlignment = .right
+        clockLabel.accessibilityLabel = "当前时间"
+        batteryLabel.accessibilityLabel = "电量"
+        startStatusUpdates()
         configureTitleLabel(titleLabel, font: .systemFont(ofSize: 16, weight: .semibold))
         configureTitleLabel(subtitleLabel, font: .systemFont(ofSize: 12, weight: .medium))
         subtitleLabel.textColor = UIColor.white.withAlphaComponent(0.72)
@@ -639,7 +656,11 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         topStack.spacing = 16
         topStack.distribution = .fill
         topStack.translatesAutoresizingMaskIntoConstraints = false
+        topBar.contentView.addSubview(clockLabel)
+        topBar.contentView.addSubview(batteryLabel)
         topBar.contentView.addSubview(topStack)
+        clockLabel.translatesAutoresizingMaskIntoConstraints = false
+        batteryLabel.translatesAutoresizingMaskIntoConstraints = false
 
         let transportStack = UIStackView(arrangedSubviews: [
             previousEpisodeButton,
@@ -684,11 +705,17 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         NSLayoutConstraint.activate([
             topBar.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor, constant: 18),
             topBar.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor, constant: -18),
-            topBar.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: 12),
+            topBar.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
+            clockLabel.centerXAnchor.constraint(equalTo: topBar.contentView.centerXAnchor),
+            clockLabel.topAnchor.constraint(equalTo: topBar.contentView.topAnchor),
+            clockLabel.heightAnchor.constraint(equalToConstant: 18),
+            batteryLabel.trailingAnchor.constraint(equalTo: topBar.contentView.trailingAnchor, constant: -16),
+            batteryLabel.centerYAnchor.constraint(equalTo: clockLabel.centerYAnchor),
+            batteryLabel.widthAnchor.constraint(equalToConstant: 58),
             topStack.leadingAnchor.constraint(equalTo: topBar.contentView.leadingAnchor, constant: 10),
             topStack.trailingAnchor.constraint(equalTo: topBar.contentView.trailingAnchor, constant: -10),
-            topStack.topAnchor.constraint(equalTo: topBar.contentView.topAnchor, constant: 8),
-            topStack.bottomAnchor.constraint(equalTo: topBar.contentView.bottomAnchor, constant: -8),
+            topStack.topAnchor.constraint(equalTo: clockLabel.bottomAnchor),
+            topStack.bottomAnchor.constraint(equalTo: topBar.contentView.bottomAnchor, constant: -6),
             titleStack.centerXAnchor.constraint(equalTo: topBar.contentView.centerXAnchor),
             titleStack.leadingAnchor.constraint(greaterThanOrEqualTo: openButton.trailingAnchor, constant: 16),
             titleStack.trailingAnchor.constraint(lessThanOrEqualTo: settingsButton.leadingAnchor, constant: -16),
@@ -848,6 +875,62 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         label.minimumScaleFactor = 0.8
         label.adjustsFontForContentSizeCategory = true
         applyShadow(to: label.layer, opacity: 0.6, radius: 3, offset: CGSize(width: 0, height: 1))
+    }
+
+    private func configureStatusLabel(_ label: UILabel, font: UIFont) {
+        label.textColor = .white
+        label.font = font
+        label.textAlignment = .center
+        label.numberOfLines = 1
+        label.adjustsFontSizeToFitWidth = true
+        label.minimumScaleFactor = 0.82
+        label.adjustsFontForContentSizeCategory = true
+        applyShadow(to: label.layer, opacity: 0.62, radius: 3, offset: CGSize(width: 0, height: 1))
+    }
+
+    private func startStatusUpdates() {
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        updateClockLabel()
+        updateBatteryLabel()
+
+        clockTimer?.invalidate()
+        let timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            self?.updateClockLabel()
+        }
+        clockTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(batteryStatusDidChange),
+            name: UIDevice.batteryStateDidChangeNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(batteryStatusDidChange),
+            name: UIDevice.batteryLevelDidChangeNotification,
+            object: nil
+        )
+    }
+
+    private func updateClockLabel() {
+        let formatter = DateFormatter()
+        formatter.locale = .autoupdatingCurrent
+        formatter.dateFormat = DateFormatter.dateFormat(fromTemplate: "Hm", options: 0, locale: formatter.locale)
+        clockLabel.text = formatter.string(from: Date())
+    }
+
+    private func updateBatteryLabel() {
+        let level = UIDevice.current.batteryLevel
+        guard level >= 0 else {
+            batteryLabel.text = "--%"
+            return
+        }
+
+        let percentage = Int((level * 100).rounded())
+        let isCharging = UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full
+        batteryLabel.text = isCharging ? "\(percentage)% 充" : "\(percentage)%"
     }
 
     private func configureTitleLabel(_ label: UILabel, font: UIFont) {
@@ -1578,6 +1661,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
                 self?.speedButton.accessibilityValue = Self.formatSpeed(speed)
                 self?.updateSpeedMenu()
                 self?.onPlaybackSpeedSelected?(speed)
+                self?.onMenuSelectionFinished?()
             }
             action.state = abs(speed - currentPlaybackSpeed) < 0.001 ? .on : .off
             return action
@@ -1680,12 +1764,14 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private func updateOpenMenu() {
         let openFile = UIAction(title: "打开文件...",
                                 image: UIImage(systemName: "doc")) { [weak self] _ in
+            self?.onMenuSelectionFinished?()
             self?.onOpen?()
         }
 
         let openFolder = UIAction(title: "打开文件夹...",
                                   image: UIImage(systemName: "folder"),
                                   attributes: onOpenFolder == nil ? .disabled : []) { [weak self] _ in
+            self?.onMenuSelectionFinished?()
             self?.onOpenFolder?()
         }
 
@@ -1707,6 +1793,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
                     image: UIImage(systemName: "captions.bubble")
                 ) { [weak self] _ in
                     self?.onSelectSubtitleTrack?(track.id)
+                    self?.onMenuSelectionFinished?()
                 }
                 action.state = track.isSelected || track.id == selectedSubtitleID ? .on : .off
                 return action
@@ -1715,6 +1802,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
 
         let openSubtitle = UIAction(title: "打开字幕文件...",
                                     image: UIImage(systemName: "folder.badge.plus")) { [weak self] _ in
+            self?.onMenuSelectionFinished?()
             self?.onOpenSubtitle?()
         }
         actions.append(openSubtitle)
@@ -1722,6 +1810,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         let off = UIAction(title: "关闭字幕",
                            image: UIImage(systemName: "captions.bubble")) { [weak self] _ in
             self?.onDisableSubtitle?()
+            self?.onMenuSelectionFinished?()
         }
         off.state = selectedSubtitleID == nil ? .on : .off
         actions.append(off)
@@ -1900,6 +1989,10 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
 
     @objc private func menuButtonTouched() {
         onMenuOpened?()
+    }
+
+    @objc private func batteryStatusDidChange() {
+        updateBatteryLabel()
     }
 
     @objc private func accessibilityAdjustSubtitlePosition() -> Bool {

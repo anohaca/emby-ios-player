@@ -53,7 +53,11 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private static let pausedIndicatorVisibleDuration: TimeInterval = 0.5
     private static let pausedIndicatorFadeOutDuration: TimeInterval = 0.5
     private static let pausedIndicatorFadeInDuration: TimeInterval = 0.18
-    private static let forwardJumpButtonSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 17, weight: .regular)
+    private static let bottomButtonSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 18, weight: .regular)
+    private static let playButtonSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 21, weight: .regular)
+    private static let jumpButtonSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 17, weight: .regular)
+    private static let bottomButtonSize = CGSize(width: 42, height: 46)
+    private static let playButtonSize = CGSize(width: 50, height: 50)
     private static let subtitlePositionBaseline = 100.0
     private static let subtitlePositionStep = 1.0
     private static let subtitleScaleStep = 0.01
@@ -566,19 +570,54 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         isUserInteractionEnabled = true
 
         configureButton(openButton, symbol: "folder", label: "打开")
-        configureButton(previousEpisodeButton, symbol: "backward.end.fill", label: "上一集")
-        configureButton(seekBackwardButton, symbol: "gobackward.10", label: "后退 10 秒")
-        configureButton(playPauseButton, symbol: "play.fill", label: "播放")
+        configureButton(
+            previousEpisodeButton,
+            symbol: "backward.end.fill",
+            label: "上一集",
+            symbolConfiguration: Self.bottomButtonSymbolConfiguration
+        )
+        configureButton(
+            seekBackwardButton,
+            symbol: "gobackward.10",
+            label: "后退 10 秒",
+            symbolConfiguration: Self.jumpButtonSymbolConfiguration
+        )
+        configureButton(
+            playPauseButton,
+            symbol: "play.fill",
+            label: "播放",
+            symbolConfiguration: Self.playButtonSymbolConfiguration
+        )
         configureButton(
             seekForwardButton,
             symbol: "goforward.10",
             label: "前进 10 秒",
-            symbolConfiguration: Self.forwardJumpButtonSymbolConfiguration
+            symbolConfiguration: Self.jumpButtonSymbolConfiguration
         )
-        configureButton(nextEpisodeButton, symbol: "forward.end.fill", label: "下一集")
-        configureButton(speedButton, symbol: "speedometer", label: "播放速度")
-        configureButton(tracksButton, symbol: "captions.bubble", label: "字幕")
-        configureButton(episodeListButton, symbol: "list.triangle", label: "选集")
+        configureButton(
+            nextEpisodeButton,
+            symbol: "forward.end.fill",
+            label: "下一集",
+            symbolConfiguration: Self.bottomButtonSymbolConfiguration
+        )
+        configureButton(
+            speedButton,
+            symbol: "speedometer",
+            label: "播放速度",
+            symbolConfiguration: Self.bottomButtonSymbolConfiguration
+        )
+        configureButton(
+            tracksButton,
+            symbol: "captions.bubble",
+            label: "字幕",
+            symbolConfiguration: Self.bottomButtonSymbolConfiguration
+        )
+        configureButton(
+            episodeListButton,
+            symbol: "list.triangle",
+            label: "选集",
+            symbolConfiguration: Self.bottomButtonSymbolConfiguration
+        )
         configureButton(settingsButton, symbol: "gearshape", label: "设置")
         applyIconShadow(to: settingsButton)
         configureStatusLabel(clockLabel, font: .monospacedDigitSystemFont(ofSize: 14, weight: .semibold))
@@ -730,24 +769,24 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             transportStack.centerXAnchor.constraint(equalTo: bottomStack.centerXAnchor),
             timelineStack.heightAnchor.constraint(equalToConstant: 30),
 
-            playPauseButton.widthAnchor.constraint(equalToConstant: 50),
-            playPauseButton.heightAnchor.constraint(equalToConstant: 50),
-            previousEpisodeButton.widthAnchor.constraint(equalToConstant: 36),
-            previousEpisodeButton.heightAnchor.constraint(equalToConstant: 42),
-            seekBackwardButton.widthAnchor.constraint(equalToConstant: 36),
-            seekBackwardButton.heightAnchor.constraint(equalToConstant: 42),
-            seekForwardButton.widthAnchor.constraint(equalToConstant: 36),
-            seekForwardButton.heightAnchor.constraint(equalToConstant: 42),
-            nextEpisodeButton.widthAnchor.constraint(equalToConstant: 36),
-            nextEpisodeButton.heightAnchor.constraint(equalToConstant: 42),
-            speedButton.widthAnchor.constraint(equalToConstant: 36),
-            speedButton.heightAnchor.constraint(equalToConstant: 42),
+            playPauseButton.widthAnchor.constraint(equalToConstant: Self.playButtonSize.width),
+            playPauseButton.heightAnchor.constraint(equalToConstant: Self.playButtonSize.height),
+            previousEpisodeButton.widthAnchor.constraint(equalToConstant: Self.bottomButtonSize.width),
+            previousEpisodeButton.heightAnchor.constraint(equalToConstant: Self.bottomButtonSize.height),
+            seekBackwardButton.widthAnchor.constraint(equalToConstant: Self.bottomButtonSize.width),
+            seekBackwardButton.heightAnchor.constraint(equalToConstant: Self.bottomButtonSize.height),
+            seekForwardButton.widthAnchor.constraint(equalToConstant: Self.bottomButtonSize.width),
+            seekForwardButton.heightAnchor.constraint(equalToConstant: Self.bottomButtonSize.height),
+            nextEpisodeButton.widthAnchor.constraint(equalToConstant: Self.bottomButtonSize.width),
+            nextEpisodeButton.heightAnchor.constraint(equalToConstant: Self.bottomButtonSize.height),
+            speedButton.widthAnchor.constraint(equalToConstant: Self.bottomButtonSize.width),
+            speedButton.heightAnchor.constraint(equalToConstant: Self.bottomButtonSize.height),
             openButton.widthAnchor.constraint(equalToConstant: 46),
             openButton.heightAnchor.constraint(equalToConstant: 46),
-            tracksButton.widthAnchor.constraint(equalToConstant: 46),
-            tracksButton.heightAnchor.constraint(equalToConstant: 46),
-            episodeListButton.widthAnchor.constraint(equalToConstant: 40),
-            episodeListButton.heightAnchor.constraint(equalToConstant: 46),
+            tracksButton.widthAnchor.constraint(equalToConstant: Self.bottomButtonSize.width),
+            tracksButton.heightAnchor.constraint(equalToConstant: Self.bottomButtonSize.height),
+            episodeListButton.widthAnchor.constraint(equalToConstant: Self.bottomButtonSize.width),
+            episodeListButton.heightAnchor.constraint(equalToConstant: Self.bottomButtonSize.height),
             settingsButton.widthAnchor.constraint(equalToConstant: 46),
             settingsButton.heightAnchor.constraint(equalToConstant: 46),
             currentTimeLabel.widthAnchor.constraint(equalToConstant: 56),
@@ -1525,16 +1564,18 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     }
 
     private func setButtonImage(_ button: UIButton, symbol: String) {
+        let symbolConfiguration = button === playPauseButton ? Self.playButtonSymbolConfiguration : Self.bottomButtonSymbolConfiguration
         if #available(iOS 15.0, *), var configuration = button.configuration {
-            configuration.image = UIImage(systemName: symbol)
+            configuration.image = Self.systemImage(named: symbol, configuration: symbolConfiguration)
+            configuration.preferredSymbolConfigurationForImage = symbolConfiguration
             button.configuration = configuration
         } else {
-            button.setImage(UIImage(systemName: symbol), for: .normal)
+            button.setImage(Self.systemImage(named: symbol, configuration: symbolConfiguration), for: .normal)
         }
     }
 
     private func setJumpButtonImage(_ button: UIButton, interval: MediaJumpInterval, direction: JumpDirection) {
-        let symbolConfiguration = direction == .forward ? Self.forwardJumpButtonSymbolConfiguration : nil
+        let symbolConfiguration = Self.jumpButtonSymbolConfiguration
         let image: UIImage?
         if interval.usesNativeNumberedSystemImage || interval.iconText == nil {
             image = Self.systemImage(

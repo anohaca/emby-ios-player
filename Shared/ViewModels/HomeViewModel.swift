@@ -604,13 +604,15 @@ final class HomeViewModel: ViewModel, Stateful {
     }
 
     private func sortedResumeItems(_ items: [BaseItemDto]) -> [BaseItemDto] {
-        return ResumeItemRecencyStore.sorted(
+        let sortedItems = ResumeItemRecencyStore.sorted(
             items,
             serverID: userSession.server.id,
             userID: userSession.user.id
         )
-        .prefix(Self.resumeItemLimit)
-        .asArray
+
+        return Self.uniqueResumeItems(sortedItems)
+            .prefix(Self.resumeItemLimit)
+            .asArray
     }
 
     private func reorderResumeItemsFromLocalRecency() {
@@ -619,8 +621,9 @@ final class HomeViewModel: ViewModel, Stateful {
             serverID: userSession.server.id,
             userID: userSession.user.id
         )
-        guard resumeItems.elements != sortedItems else { return }
-        resumeItems.elements = sortedItems
+        let uniqueItems = Self.uniqueResumeItems(sortedItems)
+        guard resumeItems.elements != uniqueItems else { return }
+        resumeItems.elements = uniqueItems
     }
 
     private func applyUserDataOverridesToVisibleItems() {
@@ -1037,6 +1040,24 @@ final class HomeViewModel: ViewModel, Stateful {
         return items.filter { item in
             guard let id = item.id, id.isNotEmpty else { return true }
             return seen.insert(id).inserted
+        }
+    }
+
+    private static func uniqueResumeItems(_ items: [BaseItemDto]) -> [BaseItemDto] {
+        var seen = Set<String>()
+
+        return items.filter { item in
+            guard let id = resumeItemGroupingID(for: item), id.isNotEmpty else { return true }
+            return seen.insert(id).inserted
+        }
+    }
+
+    private static func resumeItemGroupingID(for item: BaseItemDto) -> String? {
+        switch item.type {
+        case .episode:
+            return item.seriesID ?? item.parentID ?? item.id
+        default:
+            return item.id
         }
     }
 }

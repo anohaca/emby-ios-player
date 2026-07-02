@@ -123,7 +123,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private let bottomBar = UIVisualEffectView(effect: PlayerControlsView.panelEffect())
     private let openButton = UIButton(type: .system)
     private let clockLabel = UILabel()
-    private let batteryLabel = UILabel()
+    private let batteryImageView = UIImageView()
     private let titleLabel = UILabel()
     private let subtitleLabel = UILabel()
     private let playPauseButton = UIButton(type: .system)
@@ -620,11 +620,9 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         )
         configureButton(settingsButton, symbol: "gearshape", label: "设置")
         applyIconShadow(to: settingsButton)
-        configureStatusLabel(clockLabel, font: .monospacedDigitSystemFont(ofSize: 14, weight: .semibold))
-        configureStatusLabel(batteryLabel, font: .monospacedDigitSystemFont(ofSize: 13, weight: .semibold))
-        batteryLabel.textAlignment = .right
+        configureStatusLabel(clockLabel, font: .monospacedDigitSystemFont(ofSize: 12, weight: .medium))
+        configureBatteryImageView()
         clockLabel.accessibilityLabel = "当前时间"
-        batteryLabel.accessibilityLabel = "电量"
         startStatusUpdates()
         configureTitleLabel(titleLabel, font: .systemFont(ofSize: 16, weight: .semibold))
         configureTitleLabel(subtitleLabel, font: .systemFont(ofSize: 12, weight: .medium))
@@ -696,10 +694,10 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         topStack.distribution = .fill
         topStack.translatesAutoresizingMaskIntoConstraints = false
         topBar.contentView.addSubview(clockLabel)
-        topBar.contentView.addSubview(batteryLabel)
+        topBar.contentView.addSubview(batteryImageView)
         topBar.contentView.addSubview(topStack)
         clockLabel.translatesAutoresizingMaskIntoConstraints = false
-        batteryLabel.translatesAutoresizingMaskIntoConstraints = false
+        batteryImageView.translatesAutoresizingMaskIntoConstraints = false
 
         let transportStack = UIStackView(arrangedSubviews: [
             previousEpisodeButton,
@@ -748,9 +746,10 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             clockLabel.centerXAnchor.constraint(equalTo: topBar.contentView.centerXAnchor),
             clockLabel.topAnchor.constraint(equalTo: topBar.contentView.topAnchor),
             clockLabel.heightAnchor.constraint(equalToConstant: 18),
-            batteryLabel.trailingAnchor.constraint(equalTo: topBar.contentView.trailingAnchor, constant: -16),
-            batteryLabel.centerYAnchor.constraint(equalTo: clockLabel.centerYAnchor),
-            batteryLabel.widthAnchor.constraint(equalToConstant: 58),
+            batteryImageView.trailingAnchor.constraint(equalTo: topBar.contentView.trailingAnchor, constant: -16),
+            batteryImageView.centerYAnchor.constraint(equalTo: clockLabel.centerYAnchor),
+            batteryImageView.widthAnchor.constraint(equalToConstant: 25),
+            batteryImageView.heightAnchor.constraint(equalToConstant: 14),
             topStack.leadingAnchor.constraint(equalTo: topBar.contentView.leadingAnchor, constant: 10),
             topStack.trailingAnchor.constraint(equalTo: topBar.contentView.trailingAnchor, constant: -10),
             topStack.topAnchor.constraint(equalTo: clockLabel.bottomAnchor),
@@ -927,6 +926,15 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         applyShadow(to: label.layer, opacity: 0.62, radius: 3, offset: CGSize(width: 0, height: 1))
     }
 
+    private func configureBatteryImageView() {
+        batteryImageView.tintColor = .white
+        batteryImageView.contentMode = .scaleAspectFit
+        batteryImageView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 12, weight: .medium)
+        batteryImageView.isAccessibilityElement = true
+        batteryImageView.accessibilityLabel = "电量"
+        applyShadow(to: batteryImageView.layer, opacity: 0.62, radius: 3, offset: CGSize(width: 0, height: 1))
+    }
+
     private func startStatusUpdates() {
         UIDevice.current.isBatteryMonitoringEnabled = true
         updateClockLabel()
@@ -963,13 +971,31 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private func updateBatteryLabel() {
         let level = UIDevice.current.batteryLevel
         guard level >= 0 else {
-            batteryLabel.text = "--%"
+            batteryImageView.image = UIImage(systemName: "battery.0")
+            batteryImageView.accessibilityValue = "未知"
             return
         }
 
         let percentage = Int((level * 100).rounded())
         let isCharging = UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full
-        batteryLabel.text = isCharging ? "\(percentage)% 充" : "\(percentage)%"
+        let symbolName: String
+
+        if isCharging {
+            symbolName = "battery.100.bolt"
+        } else if percentage <= 12 {
+            symbolName = "battery.0"
+        } else if percentage <= 37 {
+            symbolName = "battery.25"
+        } else if percentage <= 62 {
+            symbolName = "battery.50"
+        } else if percentage <= 87 {
+            symbolName = "battery.75"
+        } else {
+            symbolName = "battery.100"
+        }
+
+        batteryImageView.image = UIImage(systemName: symbolName)
+        batteryImageView.accessibilityValue = isCharging ? "\(percentage)%，正在充电" : "\(percentage)%"
     }
 
     private func configureTitleLabel(_ label: UILabel, font: UIFont) {

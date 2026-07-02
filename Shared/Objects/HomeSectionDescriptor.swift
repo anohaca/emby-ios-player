@@ -40,11 +40,6 @@ struct HomeSectionDescriptor: Identifiable, Hashable, Displayable, SystemImageab
                 systemImage: "play.rectangle.on.rectangle"
             ),
             .init(
-                id: nextUpID,
-                displayTitle: L10n.nextUp,
-                systemImage: "text.line.first.and.arrowtriangle.forward"
-            ),
-            .init(
                 id: recentlyAddedID,
                 displayTitle: L10n.recentlyAdded.localizedCapitalized,
                 systemImage: "clock.arrow.circlepath"

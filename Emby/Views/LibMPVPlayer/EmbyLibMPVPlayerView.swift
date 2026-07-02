@@ -167,7 +167,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private var isEpisodeListVisible = false
     private var lastObservedOutputVolume = Double(AVAudioSession.sharedInstance().outputVolume)
     private var volumePollingTimer: Timer?
-    private var controlsHidden = false
+    private var controlsHidden = true
     private var hideControlsWorkItem: DispatchWorkItem?
     private var hideSeekPreviewWorkItem: DispatchWorkItem?
     private var endSeekTimelinePreviewWorkItem: DispatchWorkItem?
@@ -336,6 +336,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         bindControls()
         bindHardwareVolumeHUD()
         controlsView.applyEmbyPlaybackChrome()
+        controlsView.setControlsHidden(true, animated: false)
         controlsView.updateSubtitleAdjustment(position: subtitlePosition,
                                               scale: subtitleScale,
                                               borderSize: subtitleBorderSize,
@@ -417,7 +418,6 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         }
         attachPlayerIfNeeded()
         scheduleVideoRectRefreshBurst()
-        scheduleControlsHide()
         isReadyToStartPlayback = true
         playPendingPlaybackItemForPresentationIfNeeded()
         #if DEBUG
@@ -2110,6 +2110,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     }
 
     private func playNew(item: MediaPlayerItem) {
+        hidePlaybackChromeForNewItem()
         loadSubtitleAdjustmentSettings(for: item.baseItem)
         prepareVideoSurfaceForLoading()
         guard attachPlayerIfNeeded() else { return }
@@ -2679,7 +2680,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
         controlsView.suppressPausedIndicatorTemporarily()
         manager?.playNewItem(provider: provider)
-        showControls()
+        hidePlaybackChromeForNewItem()
     }
 
     private func toggleEpisodeList() {
@@ -2847,7 +2848,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         }
         manager?.playNewItem(provider: provider)
         setEpisodeListVisible(false, animated: true)
-        showControls()
+        hidePlaybackChromeForNewItem()
     }
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -2997,6 +2998,16 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         cancelControlsHide()
         controlsView.setControlsHidden(true, animated: animated)
         updateRenderedSubtitlePosition(controlsHidden: true, animated: animated)
+    }
+
+    private func hidePlaybackChromeForNewItem() {
+        controlsView.suppressPausedIndicatorTemporarily()
+        hideSeekPreviewNow()
+        hideGestureHUDNow()
+        if isEpisodeListVisible {
+            setEpisodeListVisible(false, animated: false)
+        }
+        hideControls(animated: false)
     }
 
     private func updateRenderedSubtitle(_ text: String?) {

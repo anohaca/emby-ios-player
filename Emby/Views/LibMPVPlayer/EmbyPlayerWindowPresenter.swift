@@ -37,13 +37,13 @@ final class EmbyPlayerWindowPresenter {
             content()
                 .ignoresSafeArea()
         }
-        hostingController.view.backgroundColor = .clear
+        hostingController.view.backgroundColor = .embyAppBackgroundSurface
         hostingController.supportedOrientationsOverride = .landscape
         hostingController.preferredInterfaceOrientationOverride = .landscapeRight
 
         let window = UIWindow(windowScene: scene)
         window.rootViewController = hostingController
-        window.backgroundColor = .clear
+        window.backgroundColor = .embyAppBackgroundSurface
         window.windowLevel = .normal + 10
         window.isHidden = false
         window.makeKeyAndVisible()

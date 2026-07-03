@@ -56,7 +56,7 @@ final class MPVPlayerView: UIView {
     }
 
     private func configureLayer() {
-        backgroundColor = .black
+        backgroundColor = .embyAppBackgroundSurface
         isOpaque = true
         layer.masksToBounds = true
 

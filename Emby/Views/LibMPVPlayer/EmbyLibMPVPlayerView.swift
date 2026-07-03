@@ -187,6 +187,9 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private var shouldResumeAfterForeground = false
     private var foregroundResumeBeganAt: Date?
     private var didLogForegroundTimeAdvance = false
+    private var foregroundRenderRefreshGeneration = 0
+    private var foregroundGeometryLogUntil: Date?
+    private var lastVideoRect: MPVVideoRect?
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     private var pendingResumeObservation: (itemID: String, expectedSeconds: Double)?
     private var currentSubtitleIdentifiers: Set<String> = []
@@ -314,7 +317,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
     override func loadView() {
         let rootView = PlayerRootView()
-        rootView.backgroundColor = .clear
+        rootView.backgroundColor = .embyAppBackgroundSurface
         rootView.onMoveToWindow = { [weak self] window in
             guard window != nil, self?.didRequestClose == false else { return }
             if self?.usesManualWindowPresentation != true {
@@ -326,7 +329,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .clear
+        view.backgroundColor = .embyAppBackgroundSurface
         installViews()
         bindBufferingIndicator()
         isBuffering.value = true
@@ -357,6 +360,12 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             self,
             selector: #selector(appWillEnterForegroundNotification),
             name: UIApplication.willEnterForegroundNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appDidBecomeActiveNotification),
+            name: UIApplication.didBecomeActiveNotification,
             object: nil
         )
         #if DEBUG
@@ -1008,6 +1017,12 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         }
     }
 
+    @objc private nonisolated func appDidBecomeActiveNotification() {
+        Task { @MainActor [weak self] in
+            self?.handleAppDidBecomeActive()
+        }
+    }
+
     private func handleAppDidEnterBackground() {
         isInBackground = true
         UIApplication.shared.isIdleTimerDisabled = false
@@ -1041,12 +1056,13 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         isInBackground = false
         endBackgroundPauseTask()
         foregroundResumeBeganAt = Date()
+        foregroundGeometryLogUntil = Date().addingTimeInterval(2)
         didLogForegroundTimeAdvance = false
 
         view.setNeedsLayout()
         view.layoutIfNeeded()
         playerView.refreshRenderingSurfaceForForeground()
-        scheduleVideoRectRefreshBurst()
+        scheduleForegroundRenderRefreshBurst(nudgeVideoOutput: true)
 
         if shouldResumeAfterForeground {
             shouldResumeAfterForeground = false
@@ -1059,6 +1075,20 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
               (!player.isPaused).description,
               player.currentTime,
               NSCoder.string(for: playerView.metalLayer.drawableSize))
+        logForegroundGeometry(reason: "willEnterForeground")
+        #endif
+    }
+
+    private func handleAppDidBecomeActive() {
+        guard !didRequestClose else { return }
+        isInBackground = false
+        scheduleForegroundRenderRefreshBurst(nudgeVideoOutput: false)
+
+        #if DEBUG
+        NSLog("EmbyPlayerBackground didBecomeActive bounds=%@ drawable=%@",
+              NSCoder.string(for: playerView.bounds),
+              NSCoder.string(for: playerView.metalLayer.drawableSize))
+        logForegroundGeometry(reason: "didBecomeActive")
         #endif
     }
 
@@ -1387,13 +1417,13 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
     private func prepareVideoSurfaceForLoading() {
         isWaitingForFirstVideoFrame = true
-        view.isOpaque = false
-        view.backgroundColor = .clear
+        view.isOpaque = true
+        view.backgroundColor = .embyAppBackgroundSurface
         playerView.layer.isHidden = false
         playerView.isHidden = false
         playerView.alpha = 0
-        playerView.isOpaque = false
-        playerView.backgroundColor = .clear
+        playerView.isOpaque = true
+        playerView.backgroundColor = .embyAppBackgroundSurface
         playerView.metalLayer.isOpaque = false
         playerView.metalLayer.opacity = 0
     }
@@ -1835,7 +1865,12 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
         player.onVideoRectChanged = { [weak self] rect in
             Task { @MainActor in
-                self?.videoSize.value = CGSize(width: rect.width, height: rect.height)
+                guard let self else { return }
+                self.lastVideoRect = rect
+                self.videoSize.value = CGSize(width: rect.width, height: rect.height)
+                #if DEBUG
+                self.logForegroundGeometry(reason: "videoRectChanged")
+                #endif
             }
         }
 
@@ -3386,6 +3421,82 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             }
         }
     }
+
+    private func scheduleForegroundRenderRefreshBurst(nudgeVideoOutput: Bool) {
+        foregroundRenderRefreshGeneration += 1
+        let generation = foregroundRenderRefreshGeneration
+        let delays: [TimeInterval] = [0.0, 0.05, 0.15, 0.35, 0.75, 1.5]
+
+        for delay in delays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self,
+                      !self.didRequestClose,
+                      self.foregroundRenderRefreshGeneration == generation
+                else { return }
+
+                self.view.setNeedsLayout()
+                self.view.layoutIfNeeded()
+                self.playerView.refreshRenderingSurfaceForForeground()
+                self.player.refreshVideoRect()
+
+                #if DEBUG
+                NSLog("EmbyPlayerBackground renderRefresh delay=%.2f bounds=%@ layer=%@ drawable=%@",
+                      delay,
+                      NSCoder.string(for: self.playerView.bounds),
+                      NSCoder.string(for: self.playerView.metalLayer.frame),
+                      NSCoder.string(for: self.playerView.metalLayer.drawableSize))
+                self.logForegroundGeometry(reason: String(format: "renderRefresh-%.2f", delay))
+                #endif
+            }
+        }
+
+        if nudgeVideoOutput {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                guard let self,
+                      !self.didRequestClose,
+                      self.foregroundRenderRefreshGeneration == generation
+                else { return }
+                self.player.nudgeVideoOutputAfterForeground()
+            }
+        }
+    }
+
+    #if DEBUG
+    private func logForegroundGeometry(reason: String) {
+        if let foregroundGeometryLogUntil,
+           Date() > foregroundGeometryLogUntil,
+           reason == "videoRectChanged"
+        {
+            return
+        }
+
+        let rect = lastVideoRect
+        let viewBounds = playerView.bounds
+        let layerFrame = playerView.metalLayer.frame
+        let drawable = playerView.metalLayer.drawableSize
+        let scale = playerView.window?.screen.scale ?? UIScreen.main.scale
+        let expectedDrawable = CGSize(width: viewBounds.width * scale, height: viewBounds.height * scale)
+
+        NSLog(
+            "EmbyPlayerGeometry reason=%@ view=%@ layer=%@ drawable=%@ expectedDrawable=%@ mpvRect={x=%.1f y=%.1f w=%.1f h=%.1f osd=%.1fx%.1f margins=%.1f/%.1f/%.1f/%.1f}",
+            reason,
+            NSCoder.string(for: viewBounds),
+            NSCoder.string(for: layerFrame),
+            NSCoder.string(for: drawable),
+            NSCoder.string(for: expectedDrawable),
+            rect?.x ?? -1,
+            rect?.y ?? -1,
+            rect?.width ?? -1,
+            rect?.height ?? -1,
+            rect?.osdWidth ?? -1,
+            rect?.osdHeight ?? -1,
+            rect?.marginLeft ?? -1,
+            rect?.marginRight ?? -1,
+            rect?.marginTop ?? -1,
+            rect?.marginBottom ?? -1
+        )
+    }
+    #endif
 
     private func handleLongPressSpeedGesture(state: UIGestureRecognizer.State) {
         switch state {

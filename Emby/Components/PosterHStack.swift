@@ -9,6 +9,17 @@
 import CollectionHStack
 import SwiftUI
 
+private struct HomeTransitionLockedRowWidthKey: EnvironmentKey {
+    static let defaultValue: CGFloat? = nil
+}
+
+extension EnvironmentValues {
+    var homeTransitionLockedRowWidth: CGFloat? {
+        get { self[HomeTransitionLockedRowWidthKey.self] }
+        set { self[HomeTransitionLockedRowWidthKey.self] = newValue }
+    }
+}
+
 // TODO: Migrate to single `header: View`
 
 struct PosterHStack<Element: Poster, Data: Collection>: View where Data.Element == Element, Data.Index == Int {
@@ -23,6 +34,8 @@ struct PosterHStack<Element: Poster, Data: Collection>: View where Data.Element 
 
     @StateObject
     private var baseItemOverlayState = BaseItemPosterOverlayState()
+    @Environment(\.homeTransitionLockedRowWidth)
+    private var homeTransitionLockedRowWidth
 
     private var baseItems: [BaseItemDto] {
         data.compactMap { $0 as? BaseItemDto }
@@ -43,6 +56,50 @@ struct PosterHStack<Element: Poster, Data: Collection>: View where Data.Element 
         return hasher.finalize()
     }
 
+    @ViewBuilder
+    private var stack: some View {
+        GeometryReader { proxy in
+            let width = max(homeTransitionLockedRowWidth ?? proxy.size.width, 320)
+
+            CollectionHStack(
+                uniqueElements: data,
+                layout: layout
+            ) { item in
+                PosterButton(
+                    item: item,
+                    type: type
+                ) { namespace in
+                    action(item, namespace)
+                } label: {
+                    label(item).eraseToAnyView()
+                }
+            }
+            .clipsToBounds(false)
+            .dataPrefix(20)
+            .insets(horizontal: EdgeInsets.edgePadding)
+            .itemSpacing(itemSpacing)
+            .scrollBehavior(.continuousLeadingEdge)
+            .frame(width: width, height: rowHeight(for: width), alignment: .leading)
+        }
+        .posterOverlay(for: BaseItemDto.self) { item in
+            PosterButton<BaseItemDto>.BaseItemOverlay(
+                displayState: baseItemOverlayState,
+                item: item
+            )
+        }
+        .frame(height: rowHeight(for: homeTransitionLockedRowWidth ?? 430))
+        .onAppear {
+            refreshBaseItemOverlayState()
+        }
+        .onChange(of: baseItemOverlaySignature) { _ in
+            refreshBaseItemOverlayState()
+        }
+    }
+
+    private func refreshBaseItemOverlayState() {
+        baseItemOverlayState.update(items: baseItems)
+    }
+
     private var layout: CollectionHStackLayout {
         if UIDevice.isPhone {
             .grid(
@@ -58,42 +115,38 @@ struct PosterHStack<Element: Poster, Data: Collection>: View where Data.Element 
         }
     }
 
-    @ViewBuilder
-    private var stack: some View {
-        CollectionHStack(
-            uniqueElements: data,
-            layout: layout
-        ) { item in
-            PosterButton(
-                item: item,
-                type: type
-            ) { namespace in
-                action(item, namespace)
-            } label: {
-                label(item).eraseToAnyView()
-            }
+    private func itemWidth(for width: CGFloat) -> CGFloat {
+        if UIDevice.isPhone {
+            let columns: CGFloat = type == .landscape ? 2 : 3
+            let safeWidth = max(width, 320)
+            let horizontalInsets = EdgeInsets.edgePadding * 2
+            return (safeWidth - horizontalInsets - itemSpacing * (columns - 1)) / columns
         }
-        .clipsToBounds(false)
-        .dataPrefix(20)
-        .insets(horizontal: EdgeInsets.edgePadding)
-        .itemSpacing(EdgeInsets.edgePadding / 2)
-        .scrollBehavior(.continuousLeadingEdge)
-        .posterOverlay(for: BaseItemDto.self) { item in
-            PosterButton<BaseItemDto>.BaseItemOverlay(
-                displayState: baseItemOverlayState,
-                item: item
-            )
-        }
-        .onAppear {
-            refreshBaseItemOverlayState()
-        }
-        .onChange(of: baseItemOverlaySignature) { _ in
-            refreshBaseItemOverlayState()
-        }
+
+        return type == .landscape ? 220 : 140
     }
 
-    private func refreshBaseItemOverlayState() {
-        baseItemOverlayState.update(items: baseItems)
+    private func rowHeight(for width: CGFloat) -> CGFloat {
+        let imageHeight: CGFloat
+
+        switch type {
+        case .landscape:
+            imageHeight = itemWidth(for: width) / 1.77
+        case .portrait:
+            imageHeight = itemWidth(for: width) * 1.5
+        case .square:
+            imageHeight = itemWidth(for: width)
+        }
+
+        return imageHeight + 40
+    }
+
+    private var itemSpacing: CGFloat {
+        EdgeInsets.edgePadding / 2
+    }
+
+    private var stableMinimumHeight: CGFloat {
+        rowHeight(for: 430)
     }
 
     var body: some View {

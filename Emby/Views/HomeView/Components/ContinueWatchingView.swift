@@ -29,13 +29,15 @@ extension HomeView {
 
         @StateObject
         private var overlayState = BaseItemPosterOverlayState()
+        @Environment(\.homeTransitionLockedRowWidth)
+        private var homeTransitionLockedRowWidth
 
         // TODO: see how this looks across multiple screen sizes
         //       alongside PosterHStack + landscape
         // TODO: need better handling for iPadOS + portrait orientation
         private var columnCount: CGFloat {
             if UIDevice.isPhone {
-                1.5
+                1.6
             } else {
                 3.5
             }
@@ -181,28 +183,33 @@ extension HomeView {
         @ViewBuilder
         private func resumeRow(items: [BaseItemDto]) -> some View {
             if items.isNotEmpty {
-                CollectionHStack(
-                    uniqueElements: items,
-                    columns: columnCount
-                ) { item in
-                    PosterButton(
-                        item: item,
-                        type: .landscape,
-                        posterAction: { _ in
-                            play(item)
-                        }
-                    ) { namespace in
-                        router.route(to: .item(item: item), in: namespace)
-                    } label: {
-                        if item.type == .episode {
-                            PosterButton.EpisodeContentSubtitleContent(item: item)
-                        } else {
-                            PosterButton.TitleSubtitleContentView(item: item)
+                GeometryReader { proxy in
+                    let width = max(homeTransitionLockedRowWidth ?? proxy.size.width, 320)
+
+                    CollectionHStack(
+                        uniqueElements: items,
+                        columns: columnCount
+                    ) { item in
+                        PosterButton(
+                            item: item,
+                            type: .landscape,
+                            posterAction: { _ in
+                                play(item)
+                            }
+                        ) { namespace in
+                            router.route(to: .item(item: item), in: namespace)
+                        } label: {
+                            if item.type == .episode {
+                                PosterButton.EpisodeContentSubtitleContent(item: item)
+                            } else {
+                                PosterButton.TitleSubtitleContentView(item: item)
+                            }
                         }
                     }
+                    .clipsToBounds(false)
+                    .scrollBehavior(.continuousLeadingEdge)
+                    .frame(width: width, height: rowHeight(for: width), alignment: .leading)
                 }
-                .clipsToBounds(false)
-                .scrollBehavior(.continuousLeadingEdge)
                 .contextMenu(for: BaseItemDto.self) { item in
                     Button {
                         viewModel.send(.setIsPlayed(true, item))
@@ -222,7 +229,7 @@ extension HomeView {
                         overlayState: overlayState
                     )
                 }
-                .frame(minHeight: stableMinimumHeight)
+                .frame(height: rowHeight(for: homeTransitionLockedRowWidth ?? 430))
             }
         }
 
@@ -260,8 +267,25 @@ extension HomeView {
             #endif
         }
 
+        private func rowHeight(for width: CGFloat) -> CGFloat {
+            let imageHeight = itemWidth(for: width) * 9 / 16
+            let labelHeight: CGFloat = 76
+            return max(UIDevice.isPhone ? 230 : 260, imageHeight + labelHeight)
+        }
+
+        private func itemWidth(for width: CGFloat) -> CGFloat {
+            let safeWidth = max(width, 320)
+            let horizontalInsets = EdgeInsets.edgePadding * 2
+            let visibleGapCount = max(ceil(columnCount) - 1, 0)
+            return (safeWidth - horizontalInsets - itemSpacing * visibleGapCount) / columnCount
+        }
+
+        private var itemSpacing: CGFloat {
+            EdgeInsets.edgePadding
+        }
+
         private var stableMinimumHeight: CGFloat {
-            UIDevice.isPhone ? 184 : 220
+            rowHeight(for: 430)
         }
 
         private static let unstartedItemLimit = 20

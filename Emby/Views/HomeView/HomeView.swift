@@ -235,6 +235,7 @@ struct HomeView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .environment(\.homeTransitionLockedRowWidth, isHomeLayoutLockedForPlayer ? validHomeViewportSizeForPlayer.width : nil)
         .onSizeChanged { size, _ in
             homeViewportSize = size
             guard !isHomeLayoutLockedForPlayer,

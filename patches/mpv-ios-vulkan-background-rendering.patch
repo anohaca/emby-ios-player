@@ -7,6 +7,8 @@ diff --git a/video/out/vulkan/context_ios.m b/video/out/vulkan/context_ios.m
      UIView *view;
      CAMetalLayer *layer;
      CGSize last_size;
++    bool needs_foreground_resize;
++    bool was_visible;
  };
  
 +static bool ios_vk_is_visible(struct ra_ctx *ctx)
@@ -21,15 +23,24 @@ diff --git a/video/out/vulkan/context_ios.m b/video/out/vulkan/context_ios.m
  {
      struct priv *p = ctx->priv;
      CGSize size = ios_vk_layer_size(ctx);
-     p->last_size = size;
+-    p->last_size = size;
+-    return ra_vk_ctx_resize(ctx, (int)size.width, (int)size.height);
 +
 +    // iOS rejects all Metal command submission while the app is in the
 +    // background. Keep decoding/audio alive, but leave the Vulkan swapchain
 +    // untouched until the app returns to the foreground.
-+    if (!ios_vk_is_visible(ctx))
++    if (!ios_vk_is_visible(ctx)) {
++        p->needs_foreground_resize = true;
 +        return true;
++    }
 +
-     return ra_vk_ctx_resize(ctx, (int)size.width, (int)size.height);
++    bool ok = ra_vk_ctx_resize(ctx, (int)size.width, (int)size.height);
++    if (ok) {
++        p->last_size = size;
++        p->needs_foreground_resize = false;
++    }
++
++    return ok;
  }
 @@
      struct ra_ctx_params params = {
@@ -37,3 +48,31 @@ diff --git a/video/out/vulkan/context_ios.m b/video/out/vulkan/context_ios.m
 -        .check_visible = NULL,
 +        .check_visible = ios_vk_is_visible,
      };
+@@
+     if (!ios_vk_resize(ctx))
+         goto error;
+ 
++    p->was_visible = ios_vk_is_visible(ctx);
++
+     MP_VERBOSE(ctx, "Initialized iOS Vulkan context with CAMetalLayer %p\n", p->layer);
+     return true;
+@@
+     case VOCTRL_CHECK_EVENTS: {
+         CGSize size = ios_vk_layer_size(ctx);
+-        if (!CGSizeEqualToSize(size, p->last_size)) {
++        bool visible = ios_vk_is_visible(ctx);
++        if (!visible) {
++            p->needs_foreground_resize = true;
++            p->was_visible = false;
++            return VO_TRUE;
++        }
++
++        bool became_visible = !p->was_visible;
++        p->was_visible = true;
++
++        if (became_visible || p->needs_foreground_resize ||
++            !CGSizeEqualToSize(size, p->last_size))
++        {
+             if (!ios_vk_resize(ctx))
+                 return VO_ERROR;
+             *events |= VO_EVENT_RESIZE;

@@ -123,7 +123,12 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private let bottomBar = UIVisualEffectView(effect: PlayerControlsView.panelEffect())
     private let openButton = UIButton(type: .system)
     private let clockLabel = UILabel()
+    private let wifiStatusLabel = UILabel()
+    private let batteryPercentLabel = UILabel()
+    private let statusAccessoryStack = UIStackView()
+    private let batteryIconContainer = UIView()
     private let batteryImageView = UIImageView()
+    private let batteryChargingImageView = UIImageView()
     private let titleLabel = UILabel()
     private let subtitleLabel = UILabel()
     private let playPauseButton = UIButton(type: .system)
@@ -621,7 +626,10 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         configureButton(settingsButton, symbol: "gearshape", label: "设置")
         applyIconShadow(to: settingsButton)
         configureStatusLabel(clockLabel, font: .monospacedDigitSystemFont(ofSize: 12, weight: .medium))
+        configureWifiStatusLabel()
+        configureStatusLabel(batteryPercentLabel, font: .monospacedDigitSystemFont(ofSize: 12, weight: .medium))
         configureBatteryImageView()
+        configureBatteryChargingImageView()
         clockLabel.accessibilityLabel = "当前时间"
         startStatusUpdates()
         configureTitleLabel(titleLabel, font: .systemFont(ofSize: 16, weight: .semibold))
@@ -694,10 +702,21 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         topStack.distribution = .fill
         topStack.translatesAutoresizingMaskIntoConstraints = false
         topBar.contentView.addSubview(clockLabel)
-        topBar.contentView.addSubview(batteryImageView)
+        statusAccessoryStack.axis = .horizontal
+        statusAccessoryStack.alignment = .center
+        statusAccessoryStack.spacing = 4
+        statusAccessoryStack.translatesAutoresizingMaskIntoConstraints = false
+        statusAccessoryStack.addArrangedSubview(wifiStatusLabel)
+        statusAccessoryStack.addArrangedSubview(batteryPercentLabel)
+        statusAccessoryStack.addArrangedSubview(batteryIconContainer)
+        batteryIconContainer.addSubview(batteryImageView)
+        batteryIconContainer.addSubview(batteryChargingImageView)
+        topBar.contentView.addSubview(statusAccessoryStack)
         topBar.contentView.addSubview(topStack)
         clockLabel.translatesAutoresizingMaskIntoConstraints = false
+        batteryIconContainer.translatesAutoresizingMaskIntoConstraints = false
         batteryImageView.translatesAutoresizingMaskIntoConstraints = false
+        batteryChargingImageView.translatesAutoresizingMaskIntoConstraints = false
 
         let transportStack = UIStackView(arrangedSubviews: [
             previousEpisodeButton,
@@ -746,10 +765,20 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             clockLabel.centerXAnchor.constraint(equalTo: topBar.contentView.centerXAnchor),
             clockLabel.topAnchor.constraint(equalTo: topBar.contentView.topAnchor),
             clockLabel.heightAnchor.constraint(equalToConstant: 18),
-            batteryImageView.trailingAnchor.constraint(equalTo: topBar.contentView.trailingAnchor, constant: -16),
-            batteryImageView.centerYAnchor.constraint(equalTo: clockLabel.centerYAnchor),
+            statusAccessoryStack.trailingAnchor.constraint(equalTo: topBar.contentView.trailingAnchor, constant: -4),
+            statusAccessoryStack.centerYAnchor.constraint(equalTo: clockLabel.centerYAnchor),
+            wifiStatusLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 32),
+            wifiStatusLabel.heightAnchor.constraint(equalToConstant: 16),
+            batteryIconContainer.widthAnchor.constraint(equalToConstant: 25),
+            batteryIconContainer.heightAnchor.constraint(equalToConstant: 16),
+            batteryImageView.leadingAnchor.constraint(equalTo: batteryIconContainer.leadingAnchor),
+            batteryImageView.centerYAnchor.constraint(equalTo: batteryIconContainer.centerYAnchor),
             batteryImageView.widthAnchor.constraint(equalToConstant: 25),
             batteryImageView.heightAnchor.constraint(equalToConstant: 14),
+            batteryChargingImageView.centerXAnchor.constraint(equalTo: batteryIconContainer.centerXAnchor, constant: -1),
+            batteryChargingImageView.centerYAnchor.constraint(equalTo: batteryIconContainer.centerYAnchor),
+            batteryChargingImageView.widthAnchor.constraint(equalToConstant: 8),
+            batteryChargingImageView.heightAnchor.constraint(equalToConstant: 10),
             topStack.leadingAnchor.constraint(equalTo: topBar.contentView.leadingAnchor, constant: 10),
             topStack.trailingAnchor.constraint(equalTo: topBar.contentView.trailingAnchor, constant: -10),
             topStack.topAnchor.constraint(equalTo: clockLabel.bottomAnchor),
@@ -927,12 +956,38 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     }
 
     private func configureBatteryImageView() {
-        batteryImageView.tintColor = .white
         batteryImageView.contentMode = .scaleAspectFit
         batteryImageView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 12, weight: .medium)
         batteryImageView.isAccessibilityElement = true
         batteryImageView.accessibilityLabel = "电量"
         applyShadow(to: batteryImageView.layer, opacity: 0.62, radius: 3, offset: CGSize(width: 0, height: 1))
+    }
+
+    private func configureBatteryChargingImageView() {
+        batteryChargingImageView.image = UIImage(
+            systemName: "bolt.fill",
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 7, weight: .bold)
+        )
+        batteryChargingImageView.tintColor = .white
+        batteryChargingImageView.contentMode = .scaleAspectFit
+        batteryChargingImageView.isHidden = true
+        applyShadow(to: batteryChargingImageView.layer, opacity: 0.62, radius: 2, offset: CGSize(width: 0, height: 1))
+    }
+
+    private func configureWifiStatusLabel() {
+        wifiStatusLabel.text = "WIFI"
+        wifiStatusLabel.textColor = UIColor.white.withAlphaComponent(0.92)
+        wifiStatusLabel.font = .systemFont(ofSize: 10, weight: .semibold)
+        wifiStatusLabel.textAlignment = .center
+        wifiStatusLabel.numberOfLines = 1
+        wifiStatusLabel.layer.cornerRadius = 8
+        wifiStatusLabel.layer.borderWidth = 1
+        wifiStatusLabel.layer.borderColor = UIColor.white.withAlphaComponent(0.58).cgColor
+        wifiStatusLabel.layer.backgroundColor = UIColor.black.withAlphaComponent(0.16).cgColor
+        wifiStatusLabel.layer.masksToBounds = false
+        wifiStatusLabel.isAccessibilityElement = true
+        wifiStatusLabel.accessibilityLabel = "无线网络"
+        applyShadow(to: wifiStatusLabel.layer, opacity: 0.52, radius: 3, offset: CGSize(width: 0, height: 1))
     }
 
     private func startStatusUpdates() {
@@ -971,18 +1026,18 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private func updateBatteryLabel() {
         let level = UIDevice.current.batteryLevel
         guard level >= 0 else {
+            batteryPercentLabel.text = "--%"
             batteryImageView.image = UIImage(systemName: "battery.0")
             batteryImageView.accessibilityValue = "未知"
             return
         }
 
         let percentage = Int((level * 100).rounded())
+        batteryPercentLabel.text = "\(percentage)%"
         let isCharging = UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full
         let symbolName: String
 
-        if isCharging {
-            symbolName = "battery.100.bolt"
-        } else if percentage <= 12 {
+        if percentage <= 12 {
             symbolName = "battery.0"
         } else if percentage <= 37 {
             symbolName = "battery.25"
@@ -994,7 +1049,11 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             symbolName = "battery.100"
         }
 
-        batteryImageView.image = UIImage(systemName: symbolName)
+        let symbolConfiguration = UIImage.SymbolConfiguration(pointSize: 12, weight: .medium)
+        let symbolImage = UIImage(systemName: symbolName, withConfiguration: symbolConfiguration)
+        batteryImageView.image = symbolImage
+        batteryImageView.tintColor = isCharging ? UIColor.systemGreen : .white
+        batteryChargingImageView.isHidden = !isCharging
         batteryImageView.accessibilityValue = isCharging ? "\(percentage)%，正在充电" : "\(percentage)%"
     }
 

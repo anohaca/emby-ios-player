@@ -515,6 +515,10 @@ extension Defaults.Keys {
                 UserKey("showRecentlyAdded", default: true)
             }
 
+            static var showContinueWatching: Key<Bool> {
+                UserKey("homeShowContinueWatching", default: false)
+            }
+
             static var resumeNextUp: Key<Bool> {
                 UserKey("homeResumeNextUp", default: false)
             }

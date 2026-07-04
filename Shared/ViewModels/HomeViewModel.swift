@@ -359,9 +359,9 @@ final class HomeViewModel: ViewModel, Stateful {
         #endif
 
         try await refreshLibraries(libraries, refreshStart: refreshStart)
-        let nextEpisodeAfterPlayedItems = try await getNextEpisodeAfterPlayedItems(
-            libraries: libraries
-        )
+        let nextEpisodeAfterPlayedItems = Defaults[.Customization.Home.showContinueWatching]
+            ? try await getNextEpisodeAfterPlayedItems(libraries: libraries)
+            : []
         try Task.checkCancellation()
 
         await MainActor.run {
@@ -717,7 +717,9 @@ final class HomeViewModel: ViewModel, Stateful {
 
         nextUpViewModel.elements = Self.identifiedItems(payload.nextUpItems)
         nextUpViewModel.state = .content
-        nextEpisodeAfterPlayedItems.elements = payload.nextEpisodeAfterPlayedItems
+        nextEpisodeAfterPlayedItems.elements = Defaults[.Customization.Home.showContinueWatching]
+            ? payload.nextEpisodeAfterPlayedItems
+            : []
 
         recentlyAddedViewModel.elements = Self.identifiedItems(payload.recentlyAddedItems)
         recentlyAddedViewModel.state = .content

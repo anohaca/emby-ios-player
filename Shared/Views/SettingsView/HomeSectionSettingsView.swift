@@ -18,6 +18,8 @@ struct HomeSectionSettingsView: View {
     private var hiddenSectionIDs
     @Default(.Customization.Home.showRecentlyAdded)
     private var showRecentlyAdded
+    @Default(.Customization.Home.showContinueWatching)
+    private var showContinueWatching
 
     @StateObject
     private var viewModel = HomeViewModel()
@@ -70,6 +72,10 @@ struct HomeSectionSettingsView: View {
     }
 
     private func isHidden(_ section: HomeSectionDescriptor) -> Bool {
+        if section.id == HomeSectionDescriptor.continueWatchingID, !showContinueWatching {
+            return true
+        }
+
         if section.id == HomeSectionDescriptor.recentlyAddedID, !showRecentlyAdded {
             return true
         }
@@ -91,6 +97,10 @@ struct HomeSectionSettingsView: View {
 
         if section.id == HomeSectionDescriptor.recentlyAddedID {
             showRecentlyAdded = !hidden
+        }
+
+        if section.id == HomeSectionDescriptor.continueWatchingID {
+            showContinueWatching = !hidden
         }
 
         sectionOrder = uniqueIDs(currentOrderIDs)

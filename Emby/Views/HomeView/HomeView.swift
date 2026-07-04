@@ -21,6 +21,8 @@ struct HomeView: View {
     private var nextUpPosterType
     @Default(.Customization.Home.showRecentlyAdded)
     private var showRecentlyAdded
+    @Default(.Customization.Home.showContinueWatching)
+    private var showContinueWatching
     @Default(.Customization.Home.sectionOrder)
     private var sectionOrder
     @Default(.Customization.Home.hiddenSectionIDs)
@@ -114,6 +116,10 @@ struct HomeView: View {
 
                 if section.id == HomeSectionDescriptor.recentlyAddedID {
                     return showRecentlyAdded
+                }
+
+                if section.id == HomeSectionDescriptor.continueWatchingID {
+                    return showContinueWatching
                 }
 
                 return true

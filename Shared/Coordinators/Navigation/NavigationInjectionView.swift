@@ -195,7 +195,7 @@ struct NavigationInjectionView: View {
                     }
                     .environmentObject(rootCoordinator)
                 }
-                vc.view.backgroundColor = .clear
+                vc.view.backgroundColor = .embyAppBackgroundSurface
                 vc.onDidDisappearAfterDismiss = {
                     guard let completion = presentedFullScreenDismissCompletion else { return }
                     presentedFullScreenDismissCompletion = nil

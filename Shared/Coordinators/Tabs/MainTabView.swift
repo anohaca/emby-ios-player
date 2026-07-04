@@ -107,18 +107,13 @@ struct MainTabView: View {
     }
 
     private var videoPlayerTransitionBackground: some View {
-        ZStack {
-            EmbyAppBackgroundView()
+        GeometryReader { proxy in
+            let side = max(proxy.size.width, proxy.size.height) * 2
 
-            LinearGradient(
-                stops: [
-                    .init(color: Color.mediaContentBackground.opacity(0.94), location: 0),
-                    .init(color: Color.mediaContentBackground.opacity(0.86), location: 0.48),
-                    .init(color: Color.mediaContentBackground.opacity(0.78), location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            Color.embyAppBackgroundSurface
+                .frame(width: side, height: side)
+                .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+                .ignoresSafeArea()
         }
         .ignoresSafeArea()
     }

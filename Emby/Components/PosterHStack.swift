@@ -31,6 +31,7 @@ struct PosterHStack<Element: Poster, Data: Collection>: View where Data.Element 
     private var label: (Element) -> any View
     private var trailingContent: () -> any View
     private var action: (Element, Namespace.ID) -> Void
+    private var posterAction: ((Element, Namespace.ID) -> Void)?
 
     @StateObject
     private var baseItemOverlayState = BaseItemPosterOverlayState()
@@ -67,7 +68,12 @@ struct PosterHStack<Element: Poster, Data: Collection>: View where Data.Element 
             ) { item in
                 PosterButton(
                     item: item,
-                    type: type
+                    type: type,
+                    posterAction: posterAction.map { posterAction in
+                        { namespace in
+                            posterAction(item, namespace)
+                        }
+                    }
                 ) { namespace in
                     action(item, namespace)
                 } label: {
@@ -174,6 +180,7 @@ extension PosterHStack {
         title: String? = nil,
         type: PosterDisplayType,
         items: Data,
+        posterAction: ((Element, Namespace.ID) -> Void)? = nil,
         action: @escaping (Element, Namespace.ID) -> Void,
         @ViewBuilder label: @escaping (Element) -> any View = { PosterButton<Element>.TitleSubtitleContentView(item: $0) }
     ) {
@@ -184,7 +191,8 @@ extension PosterHStack {
             type: type,
             label: label,
             trailingContent: { EmptyView() },
-            action: action
+            action: action,
+            posterAction: posterAction
         )
     }
 

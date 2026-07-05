@@ -16,9 +16,6 @@ extension ItemView {
         @StoredValue(.User.itemViewAttributes)
         private var attributes
 
-        @Router
-        private var router
-
         @ObservedObject
         private var viewModel: ItemViewModel
 
@@ -76,7 +73,7 @@ extension ItemView {
                         alignment: .center
                     )
 
-                    if viewModel.item.presentPlayButton {
+                    if viewModel.item.presentPlayButton || viewModel.playButtonItem != nil {
                         ItemView.PlayButton(viewModel: viewModel)
                             .frame(height: 50)
                     }
@@ -91,7 +88,7 @@ extension ItemView {
         // TODO: remove and just use `PosterImage` with landscape
         //       after poster environment implemented
         private var imageType: ImageType {
-            switch viewModel.item.type {
+            switch headerImageItem.type {
             case .episode, .musicVideo, .video:
                 .primary
             default:
@@ -99,23 +96,35 @@ extension ItemView {
             }
         }
 
+        private var headerImageItem: BaseItemDto {
+            if viewModel.item.type == .boxSet, let playButtonItem = viewModel.playButtonItem {
+                playButtonItem
+            } else {
+                viewModel.item
+            }
+        }
+
         private var detailBackgroundColor: Color {
-            (viewModel.item.blurHash(for: imageType)?.averageLinearColor ?? Color.secondarySystemFill)
+            (headerImageItem.blurHash(for: imageType)?.averageLinearColor ?? Color.secondarySystemFill)
                 .mediaDetailBackgroundColor
+        }
+
+        private var headerArtwork: some View {
+            ZStack {
+                Rectangle()
+                    .fill(.complexSecondary)
+
+                ImageView(headerImageItem.imageSource(imageType, maxWidth: 600))
+                    .failure {
+                        SystemImageContentView(systemName: headerImageItem.systemImage)
+                    }
+            }
         }
 
         @ViewBuilder
         private var header: some View {
             VStack(alignment: .center) {
-                ZStack {
-                    Rectangle()
-                        .fill(.complexSecondary)
-
-                    ImageView(viewModel.item.imageSource(imageType, maxWidth: 600))
-                        .failure {
-                            SystemImageContentView(systemName: viewModel.item.systemImage)
-                        }
-                }
+                headerArtwork
                 .frame(maxHeight: 300)
                 .posterStyle(.landscape)
                 .posterShadow()

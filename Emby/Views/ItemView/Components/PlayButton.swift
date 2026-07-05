@@ -39,6 +39,10 @@ extension ItemView {
                seriesViewModel.item.userData?.isPlayed == true
             {
                 L10n.played
+            } else if viewModel.item.type == .boxSet,
+                      let playButtonItem = viewModel.playButtonItem
+            {
+                playButtonItem.displayTitle
             } else if let seriesViewModel = viewModel as? SeriesItemViewModel,
                       let seasonEpisodeLabel = seriesViewModel.playButtonItem?.seasonEpisodeLabel
             {
@@ -70,7 +74,7 @@ extension ItemView {
 
         var body: some View {
             Button {
-                play()
+                ItemView.play(viewModel: viewModel, router: router)
             } label: {
                 HStack {
                     Image(systemName: "play.fill")
@@ -98,100 +102,110 @@ extension ItemView {
             .contextMenu {
                 if viewModel.playButtonItem?.userData?.playbackPositionTicks != 0 {
                     Button(L10n.playFromBeginning, systemImage: "gobackward") {
-                        play(fromBeginning: true)
+                        ItemView.play(viewModel: viewModel, router: router, fromBeginning: true)
                     }
                 }
             }
             .isSelected(true)
             .enabled(isEnabled)
         }
+    }
+}
 
-        // MARK: - Play Content
+extension ItemView {
 
-        private func play(fromBeginning: Bool = false) {
-            guard let playButtonItem = viewModel.playButtonItem,
+    // MARK: - Play Content
+
+    @MainActor
+    static func play(
+        viewModel: ItemViewModel,
+        router: Router.Wrapper,
+        fromBeginning: Bool = false
+    ) {
+        let logger = Logger.emby()
+
+        guard let playButtonItem = viewModel.playButtonItem,
                   let selectedMediaSource = viewModel.selectedMediaSource
-            else {
-                logger.error("Play selected with no item or media source")
-                return
+        else {
+            logger.error("Play selected with no item or media source")
+            return
+        }
+
+        let playbackMediaSource = mediaSourceForPlayback(
+            item: playButtonItem,
+            selectedMediaSource: selectedMediaSource
+        )
+        let shouldKeepSelectedTracks = playbackMediaSource.map {
+            mediaSource($0, matches: selectedMediaSource)
+        } ?? false
+        let selectedAudioStreamIndex = shouldKeepSelectedTracks ? viewModel.selectedAudioStreamIndex : nil
+        let selectedSubtitleStreamIndex = shouldKeepSelectedTracks ? viewModel.selectedSubtitleStreamIndex : nil
+
+        #if DEBUG
+        NSLog(
+            "EmbyPlayButton target=%@ title=%@ source=%@ selectedSource=%@ audio=%d subtitle=%d",
+            playButtonItem.id ?? "<nil>",
+            playButtonItem.seasonEpisodeLabel ?? playButtonItem.displayTitle,
+            playbackMediaSource?.id ?? "<auto>",
+            selectedMediaSource.id ?? "<nil>",
+            selectedAudioStreamIndex ?? -999,
+            selectedSubtitleStreamIndex ?? -999
+        )
+        #endif
+
+        let queue: (any MediaPlayerQueue)? = {
+            if playButtonItem.type == .episode {
+                return EpisodeMediaPlayerQueue(episode: playButtonItem)
             }
+            return nil
+        }()
 
-            let playbackMediaSource = mediaSourceForPlayback(
-                item: playButtonItem,
-                selectedMediaSource: selectedMediaSource
-            )
-            let shouldKeepSelectedTracks = playbackMediaSource.map {
-                mediaSource($0, matches: selectedMediaSource)
-            } ?? false
-            let selectedAudioStreamIndex = shouldKeepSelectedTracks ? viewModel.selectedAudioStreamIndex : nil
-            let selectedSubtitleStreamIndex = shouldKeepSelectedTracks ? viewModel.selectedSubtitleStreamIndex : nil
-
-            #if DEBUG
-            NSLog(
-                "EmbyPlayButton target=%@ title=%@ source=%@ selectedSource=%@ audio=%d subtitle=%d",
-                playButtonItem.id ?? "<nil>",
-                playButtonItem.seasonEpisodeLabel ?? playButtonItem.displayTitle,
-                playbackMediaSource?.id ?? "<auto>",
-                selectedMediaSource.id ?? "<nil>",
-                selectedAudioStreamIndex ?? -999,
-                selectedSubtitleStreamIndex ?? -999
-            )
-            #endif
-
-            let queue: (any MediaPlayerQueue)? = {
-                if playButtonItem.type == .episode {
-                    return EpisodeMediaPlayerQueue(episode: playButtonItem)
+        let provider = MediaPlayerItemProvider(item: playButtonItem) { item in
+            try await MediaPlayerItem.build(
+                for: item,
+                mediaSource: playbackMediaSource,
+                selectedAudioStreamIndex: selectedAudioStreamIndex,
+                selectedSubtitleStreamIndex: selectedSubtitleStreamIndex
+            ) {
+                if fromBeginning {
+                    $0.userData?.playbackPositionTicks = 0
                 }
-                return nil
-            }()
-
-            let provider = MediaPlayerItemProvider(item: playButtonItem) { item in
-                try await MediaPlayerItem.build(
-                    for: item,
-                    mediaSource: playbackMediaSource,
-                    selectedAudioStreamIndex: selectedAudioStreamIndex,
-                    selectedSubtitleStreamIndex: selectedSubtitleStreamIndex
-                ) {
-                    if fromBeginning {
-                        $0.userData?.playbackPositionTicks = 0
-                    }
-                }
             }
+        }
 
-            router.route(
-                to: .videoPlayer(
-                    provider: provider,
-                    queue: queue
-                )
+        router.route(
+            to: .videoPlayer(
+                provider: provider,
+                queue: queue
             )
+        )
+    }
+
+    private static func mediaSourceForPlayback(
+        item: BaseItemDto,
+        selectedMediaSource: MediaSourceInfo
+    ) -> MediaSourceInfo? {
+        guard let itemMediaSources = item.mediaSources, itemMediaSources.isNotEmpty else {
+            return item.type == .episode ? nil : selectedMediaSource
         }
 
-        private func mediaSourceForPlayback(
-            item: BaseItemDto,
-            selectedMediaSource: MediaSourceInfo
-        ) -> MediaSourceInfo? {
-            guard let itemMediaSources = item.mediaSources, itemMediaSources.isNotEmpty else {
-                return item.type == .episode ? nil : selectedMediaSource
-            }
+        return itemMediaSources.first { mediaSource($0, matches: selectedMediaSource) }
+            ?? itemMediaSources.first
+    }
 
-            return itemMediaSources.first { mediaSource($0, matches: selectedMediaSource) }
-                ?? itemMediaSources.first
+    private static func mediaSource(_ lhs: MediaSourceInfo, matches rhs: MediaSourceInfo) -> Bool {
+        if let lhsID = lhs.id, lhsID.isNotEmpty, lhsID == rhs.id {
+            return true
         }
 
-        private func mediaSource(_ lhs: MediaSourceInfo, matches rhs: MediaSourceInfo) -> Bool {
-            if let lhsID = lhs.id, lhsID.isNotEmpty, lhsID == rhs.id {
-                return true
-            }
-
-            if let lhsETag = lhs.eTag, lhsETag.isNotEmpty, lhsETag == rhs.eTag {
-                return true
-            }
-
-            if let lhsPath = lhs.path, lhsPath.isNotEmpty, lhsPath == rhs.path {
-                return true
-            }
-
-            return false
+        if let lhsETag = lhs.eTag, lhsETag.isNotEmpty, lhsETag == rhs.eTag {
+            return true
         }
+
+        if let lhsPath = lhs.path, lhsPath.isNotEmpty, lhsPath == rhs.path {
+            return true
+        }
+
+        return false
     }
 }

@@ -32,6 +32,13 @@ final class CollectionItemViewModel: ItemViewModel {
         )
 
         super.init(item: item)
+
+        itemCollection.$elements
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] sections in
+                self?.updatePlayButtonItem(from: sections)
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Override Response
@@ -63,5 +70,45 @@ final class CollectionItemViewModel: ItemViewModel {
             .value
             .elements
             .randomElement()
+    }
+
+    private func updatePlayButtonItem(from sections: OrderedDictionary<BaseItemKind, ItemLibraryViewModel>) {
+        guard item.type == .boxSet else { return }
+
+        let orderedSections = sections.elements.enumerated()
+            .sorted { lhs, rhs in
+                let lhsPriority = playableSectionPriority(lhs.element.key)
+                let rhsPriority = playableSectionPriority(rhs.element.key)
+
+                if lhsPriority != rhsPriority {
+                    return lhsPriority < rhsPriority
+                } else {
+                    return lhs.offset < rhs.offset
+                }
+            }
+            .map(\.element)
+
+        guard let firstPlayableItem = orderedSections
+            .lazy
+            .flatMap(\.value.elements)
+            .first(where: \.isPlayable)
+        else { return }
+
+        if playButtonItem?.id != firstPlayableItem.id {
+            playButtonItem = firstPlayableItem
+        }
+    }
+
+    private func playableSectionPriority(_ kind: BaseItemKind) -> Int {
+        switch kind {
+        case .video:
+            0
+        case .musicVideo:
+            1
+        case .movie:
+            2
+        default:
+            3
+        }
     }
 }

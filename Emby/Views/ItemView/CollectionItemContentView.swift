@@ -24,6 +24,72 @@ extension ItemView {
         @ObservedObject
         var viewModel: CollectionItemViewModel
 
+        private var sortedSections: [Element] {
+            guard viewModel.item.type == .boxSet else {
+                return Array(viewModel.sections.elements)
+            }
+
+            let sections = Array(viewModel.sections.elements)
+            return sections.enumerated()
+                .sorted { lhs, rhs in
+                    let lhsPriority = videoSectionPriority(lhs.element.key)
+                    let rhsPriority = videoSectionPriority(rhs.element.key)
+
+                    if lhsPriority != rhsPriority {
+                        return lhsPriority < rhsPriority
+                    } else {
+                        return lhs.offset < rhs.offset
+                    }
+                }
+                .map(\.element)
+        }
+
+        private func videoSectionPriority(_ kind: BaseItemKind) -> Int {
+            switch kind {
+            case .video:
+                0
+            case .musicVideo:
+                1
+            case .movie:
+                2
+            default:
+                3
+            }
+        }
+
+        private func shouldPlayPosterImage(in kind: BaseItemKind) -> Bool {
+            guard viewModel.item.type == .boxSet else { return false }
+
+            switch kind {
+            case .video, .musicVideo, .movie:
+                return true
+            default:
+                return false
+            }
+        }
+
+        private func play(_ item: BaseItemDto) {
+            guard item.isPlayable else {
+                router.route(to: .item(item: item))
+                return
+            }
+
+            let queue: (any MediaPlayerQueue)? = {
+                if item.type == .episode {
+                    return EpisodeMediaPlayerQueue(episode: item)
+                }
+                return nil
+            }()
+
+            router.route(
+                to: .videoPlayer(
+                    item: item,
+                    mediaSource: item.mediaSources?.first,
+                    queue: queue
+                )
+            )
+        }
+
         private func episodeHStack(element: Element) -> some View {
             VStack(alignment: .leading) {
 
@@ -50,7 +116,10 @@ extension ItemView {
             PosterHStack(
                 title: element.key.pluralDisplayTitle,
                 type: element.key.preferredPosterDisplayType,
-                items: element.value.elements
+                items: element.value.elements,
+                posterAction: shouldPlayPosterImage(in: element.key) ? { item, _ in
+                    play(item)
+                } : nil
             ) { item, namespace in
                 router.route(to: .item(item: item), in: namespace)
             }
@@ -68,7 +137,7 @@ extension ItemView {
                 // MARK: - Items
 
                 ForEach(
-                    viewModel.sections.elements,
+                    sortedSections,
                     id: \.key
                 ) { element in
                     if element.key == .episode {

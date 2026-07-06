@@ -122,6 +122,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private let topBar = UIVisualEffectView(effect: PlayerControlsView.panelEffect())
     private let bottomBar = UIVisualEffectView(effect: PlayerControlsView.panelEffect())
     private let openButton = UIButton(type: .system)
+    private let networkSpeedLabel = UILabel()
     private let clockLabel = UILabel()
     private let wifiStatusLabel = UILabel()
     private let batteryPercentLabel = UILabel()
@@ -143,6 +144,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private let currentTimeLabel = UILabel()
     private let durationLabel = UILabel()
     private let slider = UISlider()
+    private let cacheProgressView = UIProgressView(progressViewStyle: .bar)
     private let seekPreviewView = UIVisualEffectView(effect: PlayerControlsView.panelEffect())
     private let seekPreviewLabel = UILabel()
     private let gestureHUDView = UIVisualEffectView(effect: PlayerControlsView.panelEffect())
@@ -162,6 +164,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private var trackingSlider = false
     private var previewingTimeline = false
     private var mediaDuration = 0.0
+    private var cachedTime = 0.0
     private var currentPlaybackSpeed = 1.0
     private var isPaused = false
     private var areControlsHidden = false
@@ -222,6 +225,15 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         updateTimeline(time: time, duration: duration)
     }
 
+    func updateCachedTime(_ cachedTime: Double) {
+        self.cachedTime = cachedTime
+        updateCacheProgress()
+    }
+
+    func updateCacheSpeed(_ bytesPerSecond: Double) {
+        networkSpeedLabel.text = Self.formatNetworkSpeed(bytesPerSecond)
+    }
+
     func previewTimeline(time: Double, duration: Double) {
         previewingTimeline = true
         mediaDuration = duration
@@ -238,6 +250,17 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         durationLabel.text = Self.formatTime(duration)
         slider.maximumValue = Float(max(duration, 1))
         slider.value = Float(min(max(time, 0), max(duration, 1)))
+        updateCacheProgress()
+    }
+
+    private func updateCacheProgress() {
+        guard mediaDuration > 0, cachedTime.isFinite else {
+            cacheProgressView.progress = 0
+            return
+        }
+
+        let progress = min(max(cachedTime / mediaDuration, 0), 1)
+        cacheProgressView.setProgress(Float(progress), animated: false)
     }
 
     func setControlsHidden(_ hidden: Bool, animated: Bool) {
@@ -625,11 +648,14 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         )
         configureButton(settingsButton, symbol: "gearshape", label: "设置")
         applyIconShadow(to: settingsButton)
+        configureStatusLabel(networkSpeedLabel, font: .monospacedDigitSystemFont(ofSize: 12, weight: .medium))
         configureStatusLabel(clockLabel, font: .monospacedDigitSystemFont(ofSize: 12, weight: .medium))
         configureWifiStatusLabel()
         configureStatusLabel(batteryPercentLabel, font: .monospacedDigitSystemFont(ofSize: 12, weight: .medium))
         configureBatteryImageView()
         configureBatteryChargingImageView()
+        networkSpeedLabel.text = Self.formatNetworkSpeed(0)
+        networkSpeedLabel.accessibilityLabel = "网络速度"
         clockLabel.accessibilityLabel = "当前时间"
         startStatusUpdates()
         configureTitleLabel(titleLabel, font: .systemFont(ofSize: 16, weight: .semibold))
@@ -664,12 +690,18 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         slider.minimumValue = 0
         slider.maximumValue = 1
         slider.minimumTrackTintColor = .white
-        slider.maximumTrackTintColor = UIColor.white.withAlphaComponent(0.22)
+        slider.maximumTrackTintColor = .clear
         slider.thumbTintColor = .white
         applyShadow(to: slider.layer, opacity: 0.45, radius: 3, offset: CGSize(width: 0, height: 1))
         slider.addTarget(self, action: #selector(sliderTouchDown), for: .touchDown)
         slider.addTarget(self, action: #selector(sliderValueChanged), for: .valueChanged)
         slider.addTarget(self, action: #selector(sliderTouchEnded), for: [.touchUpInside, .touchUpOutside, .touchCancel])
+        cacheProgressView.progress = 0
+        cacheProgressView.trackTintColor = UIColor.white.withAlphaComponent(0.18)
+        cacheProgressView.progressTintColor = UIColor.white.withAlphaComponent(0.36)
+        cacheProgressView.layer.cornerRadius = 2
+        cacheProgressView.clipsToBounds = true
+        cacheProgressView.isUserInteractionEnabled = false
 
         addSubview(topBar)
         addSubview(bottomBar)
@@ -701,6 +733,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         topStack.spacing = 16
         topStack.distribution = .fill
         topStack.translatesAutoresizingMaskIntoConstraints = false
+        topBar.contentView.addSubview(networkSpeedLabel)
         topBar.contentView.addSubview(clockLabel)
         statusAccessoryStack.axis = .horizontal
         statusAccessoryStack.alignment = .center
@@ -713,6 +746,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         batteryIconContainer.addSubview(batteryChargingImageView)
         topBar.contentView.addSubview(statusAccessoryStack)
         topBar.contentView.addSubview(topStack)
+        networkSpeedLabel.translatesAutoresizingMaskIntoConstraints = false
         clockLabel.translatesAutoresizingMaskIntoConstraints = false
         batteryIconContainer.translatesAutoresizingMaskIntoConstraints = false
         batteryImageView.translatesAutoresizingMaskIntoConstraints = false
@@ -734,7 +768,14 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         transportStack.spacing = 6
         transportStack.translatesAutoresizingMaskIntoConstraints = false
 
-        let timelineStack = UIStackView(arrangedSubviews: [currentTimeLabel, slider, durationLabel])
+        let sliderContainer = UIView()
+        sliderContainer.translatesAutoresizingMaskIntoConstraints = false
+        slider.translatesAutoresizingMaskIntoConstraints = false
+        cacheProgressView.translatesAutoresizingMaskIntoConstraints = false
+        sliderContainer.addSubview(cacheProgressView)
+        sliderContainer.addSubview(slider)
+
+        let timelineStack = UIStackView(arrangedSubviews: [currentTimeLabel, sliderContainer, durationLabel])
         timelineStack.axis = .horizontal
         timelineStack.alignment = .center
         timelineStack.spacing = 10
@@ -762,6 +803,10 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             topBar.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor, constant: 18),
             topBar.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor, constant: -18),
             topBar.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
+            networkSpeedLabel.leadingAnchor.constraint(equalTo: topBar.contentView.leadingAnchor, constant: 4),
+            networkSpeedLabel.centerYAnchor.constraint(equalTo: clockLabel.centerYAnchor),
+            networkSpeedLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 58),
+            networkSpeedLabel.trailingAnchor.constraint(lessThanOrEqualTo: clockLabel.leadingAnchor, constant: -12),
             clockLabel.centerXAnchor.constraint(equalTo: topBar.contentView.centerXAnchor),
             clockLabel.topAnchor.constraint(equalTo: topBar.contentView.topAnchor),
             clockLabel.heightAnchor.constraint(equalToConstant: 18),
@@ -796,6 +841,14 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             bottomStack.bottomAnchor.constraint(equalTo: bottomBar.contentView.bottomAnchor, constant: -4),
             transportStack.centerXAnchor.constraint(equalTo: bottomStack.centerXAnchor),
             timelineStack.heightAnchor.constraint(equalToConstant: 30),
+            sliderContainer.heightAnchor.constraint(equalToConstant: 30),
+            slider.leadingAnchor.constraint(equalTo: sliderContainer.leadingAnchor),
+            slider.trailingAnchor.constraint(equalTo: sliderContainer.trailingAnchor),
+            slider.centerYAnchor.constraint(equalTo: sliderContainer.centerYAnchor),
+            cacheProgressView.leadingAnchor.constraint(equalTo: sliderContainer.leadingAnchor),
+            cacheProgressView.trailingAnchor.constraint(equalTo: sliderContainer.trailingAnchor),
+            cacheProgressView.centerYAnchor.constraint(equalTo: slider.centerYAnchor),
+            cacheProgressView.heightAnchor.constraint(equalToConstant: 4),
 
             playPauseButton.widthAnchor.constraint(equalToConstant: Self.playButtonSize.width),
             playPauseButton.heightAnchor.constraint(equalToConstant: Self.playButtonSize.height),
@@ -2260,6 +2313,15 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private static func formatDuration(_ duration: Duration) -> String {
         let seconds = max(1, Int(duration.seconds.rounded()))
         return "\(seconds) Seconds"
+    }
+
+    private static func formatNetworkSpeed(_ bytesPerSecond: Double) -> String {
+        guard bytesPerSecond.isFinite && bytesPerSecond > 0 else { return "0 KB/s" }
+        let kib = bytesPerSecond / 1024
+        if kib < 1024 {
+            return String(format: "%.0f KB/s", kib)
+        }
+        return String(format: "%.1f MB/s", kib / 1024)
     }
 
     private static func formatTime(_ seconds: Double) -> String {

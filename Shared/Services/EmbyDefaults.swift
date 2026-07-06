@@ -689,6 +689,26 @@ extension Defaults.Keys {
             static var defaultAudioLanguage: Key<MediaTrackLanguagePreference> {
                 UserKey("defaultAudioTrackLanguage", default: .automatic)
             }
+
+            static var mpvCacheEnabled: Key<Bool> {
+                UserKey("mpvCacheEnabled", default: false)
+            }
+
+            static var mpvDemuxerMaxBytesMiB: Key<Int> {
+                UserKey("mpvDemuxerMaxBytesMiB", default: 256)
+            }
+
+            static var mpvDemuxerMaxBackBytesMiB: Key<Int> {
+                UserKey("mpvDemuxerMaxBackBytesMiB", default: 64)
+            }
+
+            static var mpvDemuxerReadaheadSeconds: Key<Int> {
+                UserKey("mpvDemuxerReadaheadSeconds", default: 30)
+            }
+
+            static var mpvCachePauseEnabled: Key<Bool> {
+                UserKey("mpvCachePauseEnabled", default: true)
+            }
         }
 
         // TODO: transition into a SubtitleConfiguration instead of multiple types

@@ -25,6 +25,16 @@ struct VideoPlayerSettingsView: View {
     private var defaultSubtitleLanguage
     @Default(.VideoPlayer.Subtitle.convertTraditionalChineseSubtitles)
     private var convertTraditionalChineseSubtitles
+    @Default(.VideoPlayer.Playback.mpvCacheEnabled)
+    private var mpvCacheEnabled
+    @Default(.VideoPlayer.Playback.mpvDemuxerMaxBytesMiB)
+    private var mpvDemuxerMaxBytesMiB
+    @Default(.VideoPlayer.Playback.mpvDemuxerMaxBackBytesMiB)
+    private var mpvDemuxerMaxBackBytesMiB
+    @Default(.VideoPlayer.Playback.mpvDemuxerReadaheadSeconds)
+    private var mpvDemuxerReadaheadSeconds
+    @Default(.VideoPlayer.Playback.mpvCachePauseEnabled)
+    private var mpvCachePauseEnabled
 
     @Router
     private var router
@@ -59,6 +69,38 @@ struct VideoPlayerSettingsView: View {
                 Text("默认轨道")
             } footer: {
                 Text("选择“自动”时会优先日语音轨和中文字幕，找不到再使用服务器或文件默认轨道。")
+            }
+
+            Section {
+                Toggle("启用缓存", isOn: $mpvCacheEnabled)
+
+                Stepper(value: $mpvDemuxerMaxBytesMiB, in: 0 ... 2048, step: 16) {
+                    LabeledContent("前向缓存") {
+                        Text("\(mpvDemuxerMaxBytesMiB) MiB")
+                    }
+                }
+                .disabled(!mpvCacheEnabled)
+
+                Stepper(value: $mpvDemuxerMaxBackBytesMiB, in: 0 ... 1024, step: 16) {
+                    LabeledContent("回退缓存") {
+                        Text("\(mpvDemuxerMaxBackBytesMiB) MiB")
+                    }
+                }
+                .disabled(!mpvCacheEnabled)
+
+                Stepper(value: $mpvDemuxerReadaheadSeconds, in: 0 ... 300, step: 5) {
+                    LabeledContent("预读时间") {
+                        Text("\(mpvDemuxerReadaheadSeconds) 秒")
+                    }
+                }
+                .disabled(!mpvCacheEnabled)
+
+                Toggle("缓存不足时暂停", isOn: $mpvCachePauseEnabled)
+                    .disabled(!mpvCacheEnabled)
+            } header: {
+                Text("mpv 缓存")
+            } footer: {
+                Text("这些选项会在每次打开视频前写入 mpv。增大缓存可改善网络抖动，但会占用更多内存。")
             }
 
             Section(L10n.jump) {

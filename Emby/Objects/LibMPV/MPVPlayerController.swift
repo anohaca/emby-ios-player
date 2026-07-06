@@ -1,4 +1,5 @@
 import AVFoundation
+import Defaults
 import Foundation
 import QuartzCore
 
@@ -438,6 +439,8 @@ final class MPVPlayerController: NSObject {
     var onTimeChanged: ((Double, Double) -> Void)?
     var onPausedChanged: ((Bool) -> Void)?
     var onBufferingChanged: ((Bool) -> Void)?
+    var onCachedTimeChanged: ((Double) -> Void)?
+    var onCacheSpeedChanged: ((Double) -> Void)?
     var onVideoRectChanged: ((MPVVideoRect) -> Void)?
     var onFirstFrameRendered: (() -> Void)?
     var onFinished: (() -> Void)?
@@ -455,6 +458,8 @@ final class MPVPlayerController: NSObject {
 
     private(set) var currentTime: Double = 0
     private(set) var duration: Double = 0
+    private(set) var cachedTime: Double = 0
+    private(set) var cacheSpeed: Double = 0
     private(set) var isPaused: Bool = true
     private(set) var isBuffering: Bool = false
     private(set) var playbackSpeed: Double = 1.0
@@ -480,11 +485,16 @@ final class MPVPlayerController: NSObject {
         releaseScopedSubtitleURLs()
         releaseConvertedSubtitleURLs()
         subtitleLoadGeneration += 1
+        cachedTime = 0
+        cacheSpeed = 0
+        onCachedTimeChanged?(0)
+        onCacheSpeedChanged?(0)
         if url.isFileURL {
             scopedAccess = url.startAccessingSecurityScopedResource()
             scopedURL = url
         }
 
+        applyCacheSettings()
         bridge?.load(url, headers: headers, startSeconds: startSeconds)
         setPaused(false)
     }
@@ -530,6 +540,27 @@ final class MPVPlayerController: NSObject {
 
     func setSubtitleDelay(_ delay: Double) {
         bridge?.setSubtitleDelay(delay)
+    }
+
+    private func applyCacheSettings() {
+        let cacheEnabled = Defaults[.VideoPlayer.Playback.mpvCacheEnabled]
+        bridge?.setOptionString("cache", value: cacheEnabled ? "yes" : "no")
+        bridge?.setOptionString(
+            "demuxer-max-bytes",
+            value: "\(max(0, Defaults[.VideoPlayer.Playback.mpvDemuxerMaxBytesMiB]))MiB"
+        )
+        bridge?.setOptionString(
+            "demuxer-max-back-bytes",
+            value: "\(max(0, Defaults[.VideoPlayer.Playback.mpvDemuxerMaxBackBytesMiB]))MiB"
+        )
+        bridge?.setOptionString(
+            "demuxer-readahead-secs",
+            value: "\(max(0, Defaults[.VideoPlayer.Playback.mpvDemuxerReadaheadSeconds]))"
+        )
+        bridge?.setOptionString(
+            "cache-pause",
+            value: Defaults[.VideoPlayer.Playback.mpvCachePauseEnabled] ? "yes" : "no"
+        )
     }
 
     func seek(to seconds: Double) {
@@ -699,6 +730,16 @@ extension MPVPlayerController: MPVClientBridgeDelegate {
     func mpvClientDidUpdateBuffering(_ buffering: Bool) {
         isBuffering = buffering
         onBufferingChanged?(buffering)
+    }
+
+    func mpvClientDidUpdateCachedTime(_ cachedTime: Double) {
+        self.cachedTime = cachedTime.isFinite ? cachedTime : 0
+        onCachedTimeChanged?(self.cachedTime)
+    }
+
+    func mpvClientDidUpdateCacheSpeed(_ bytesPerSecond: Double) {
+        cacheSpeed = bytesPerSecond.isFinite ? max(0, bytesPerSecond) : 0
+        onCacheSpeedChanged?(cacheSpeed)
     }
 
     func mpvClientDidUpdateVideoRectWith(x: Double,

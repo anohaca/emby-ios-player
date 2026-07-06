@@ -1862,6 +1862,18 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             }
         }
 
+        player.onCachedTimeChanged = { [weak self] cachedTime in
+            Task { @MainActor in
+                self?.controlsView.updateCachedTime(cachedTime)
+            }
+        }
+
+        player.onCacheSpeedChanged = { [weak self] bytesPerSecond in
+            Task { @MainActor in
+                self?.controlsView.updateCacheSpeed(bytesPerSecond)
+            }
+        }
+
         player.onVideoRectChanged = { [weak self] rect in
             Task { @MainActor in
                 guard let self else { return }

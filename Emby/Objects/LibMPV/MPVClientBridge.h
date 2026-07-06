@@ -5,6 +5,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @protocol MPVClientBridgeDelegate <NSObject>
 - (void)mpvClientDidUpdateTime:(double)time duration:(double)duration;
+- (void)mpvClientDidUpdateCachedTime:(double)cachedTime;
+- (void)mpvClientDidUpdateCacheSpeed:(double)bytesPerSecond;
 - (void)mpvClientDidUpdatePaused:(BOOL)paused;
 - (void)mpvClientDidUpdateBuffering:(BOOL)buffering;
 - (void)mpvClientDidUpdateVideoRectWithX:(double)x
@@ -47,6 +49,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setSubtitleScale:(double)scale;
 - (void)setSubtitleBorderSize:(double)borderSize;
 - (void)setSubtitleDelay:(double)delay;
+- (void)setOptionString:(NSString *)name value:(NSString *)value;
 - (void)seekToSeconds:(double)seconds;
 - (void)refreshVideoRect;
 - (void)nudgeVideoOutputAfterForeground;

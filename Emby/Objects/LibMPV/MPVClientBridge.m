@@ -35,6 +35,8 @@ static const uint64_t MPVObservedSubText = 1017;
 static const uint64_t MPVObservedSubStart = 1018;
 static const uint64_t MPVObservedSubEnd = 1019;
 static const uint64_t MPVObservedPausedForCache = 1020;
+static const uint64_t MPVObservedDemuxerCacheTime = 1021;
+static const uint64_t MPVObservedCacheSpeed = 1022;
 
 static NSString *MPVXMLTextEscapedString(NSString *string)
 {
@@ -399,6 +401,8 @@ static NSString *MPVXMLTextEscapedString(NSString *string)
         {"sub-text", MPV_FORMAT_STRING, MPVObservedSubText},
         {"sub-visibility", MPV_FORMAT_FLAG, MPVObservedSubVisibility},
         {"paused-for-cache", MPV_FORMAT_FLAG, MPVObservedPausedForCache},
+        {"demuxer-cache-time", MPV_FORMAT_DOUBLE, MPVObservedDemuxerCacheTime},
+        {"cache-speed", MPV_FORMAT_INT64, MPVObservedCacheSpeed},
     };
 
     for (size_t index = 0; index < sizeof(properties) / sizeof(properties[0]); index++) {
@@ -667,6 +671,18 @@ static NSString *MPVXMLTextEscapedString(NSString *string)
                                                 value,
                                                 mpv_error_string(delayRC)];
     [self notifyDiagnosticLine:line];
+}
+
+- (void)setOptionString:(NSString *)name value:(NSString *)value
+{
+    if (!self.mpv || name.length == 0)
+        return;
+
+    int rc = mpv_set_option_string(self.mpv, name.UTF8String, (value ?: @"").UTF8String);
+    [self notifyDiagnosticLine:[NSString stringWithFormat:@"mpv-option name=%@ value=%@ rc=%s",
+                                                           name,
+                                                           value ?: @"",
+                                                           rc < 0 ? mpv_error_string(rc) : "ok"]];
 }
 
 - (void)seekToSeconds:(double)seconds
@@ -1006,6 +1022,10 @@ static NSString *MPVXMLTextEscapedString(NSString *string)
     } else if (strcmp(name, "paused-for-cache") == 0 && property->data && property->format == MPV_FORMAT_FLAG) {
         BOOL buffering = *(int *)property->data != 0;
         [self notifyBuffering:buffering];
+    } else if (strcmp(name, "demuxer-cache-time") == 0 && property->data && property->format == MPV_FORMAT_DOUBLE) {
+        [self notifyCachedTime:*(double *)property->data];
+    } else if (strcmp(name, "cache-speed") == 0 && property->data && property->format == MPV_FORMAT_INT64) {
+        [self notifyCacheSpeed:(double)(*(int64_t *)property->data)];
     } else if (strcmp(name, "osd-dimensions") == 0 && property->data && property->format == MPV_FORMAT_NODE) {
         [self handleOSDDimensions:(mpv_node *)property->data];
     } else if (strcmp(name, "track-list") == 0 && property->data && property->format == MPV_FORMAT_NODE) {
@@ -1062,6 +1082,28 @@ static NSString *MPVXMLTextEscapedString(NSString *string)
 
     dispatch_async(dispatch_get_main_queue(), ^{
         [delegate mpvClientDidUpdateBuffering:buffering];
+    });
+}
+
+- (void)notifyCachedTime:(double)cachedTime
+{
+    id<MPVClientBridgeDelegate> delegate = self.delegate;
+    if (!delegate)
+        return;
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [delegate mpvClientDidUpdateCachedTime:cachedTime];
+    });
+}
+
+- (void)notifyCacheSpeed:(double)bytesPerSecond
+{
+    id<MPVClientBridgeDelegate> delegate = self.delegate;
+    if (!delegate)
+        return;
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [delegate mpvClientDidUpdateCacheSpeed:bytesPerSecond];
     });
 }
 

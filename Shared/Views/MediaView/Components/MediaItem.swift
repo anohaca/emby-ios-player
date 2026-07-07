@@ -44,6 +44,9 @@ extension MediaView {
             self.viewModel = viewModel
             self.action = action
             self.mediaType = type
+            self._imageSources = State(
+                initialValue: MediaItemImageSourceCache.shared.imageSources(for: type) ?? Self.fallbackImageSources(for: type)
+            )
         }
 
         private var useTitleLabel: Bool {
@@ -53,6 +56,10 @@ extension MediaView {
         }
 
         private var fallbackImageSources: [ImageSource] {
+            Self.fallbackImageSources(for: mediaType)
+        }
+
+        private static func fallbackImageSources(for mediaType: MediaViewModel.MediaType) -> [ImageSource] {
             if case let MediaViewModel.MediaType.collectionFolder(item) = mediaType {
                 return [item.imageSource(.primary, maxWidth: 500)]
             } else if case let MediaViewModel.MediaType.liveTV(item) = mediaType {
@@ -62,13 +69,18 @@ extension MediaView {
             return []
         }
 
-        private func setImageSources() {
+        private func setImageSources(forceRefresh: Bool = false) {
+            if !forceRefresh, let cachedImageSources = MediaItemImageSourceCache.shared.imageSources(for: mediaType) {
+                setImageSourcesIfNeeded(cachedImageSources)
+                return
+            }
+
             Task { @MainActor in
                 if useRandomImage {
                     do {
                         let randomImageSources = try await viewModel.randomItemImageSources(for: mediaType)
                         if randomImageSources.isNotEmpty {
-                            self.imageSources = randomImageSources
+                            setImageSourcesIfNeeded(randomImageSources)
                             return
                         }
                     } catch {
@@ -76,8 +88,15 @@ extension MediaView {
                     }
                 }
 
-                self.imageSources = fallbackImageSources
+                setImageSourcesIfNeeded(fallbackImageSources)
             }
+        }
+
+        private func setImageSourcesIfNeeded(_ newImageSources: [ImageSource]) {
+            guard imageSources != newImageSources else { return }
+
+            imageSources = newImageSources
+            MediaItemImageSourceCache.shared.set(newImageSources, for: mediaType)
         }
 
         @ViewBuilder
@@ -125,18 +144,51 @@ extension MediaView {
                                     .foregroundColor(.primary)
                             }
                     }
-                    .id(imageSources.hashValue)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .posterStyle(.landscape)
                     .backport
                     .matchedTransitionSource(id: "item", in: namespace)
             }
-            .onFirstAppear(perform: setImageSources)
-            .backport
-            .onChange(of: useRandomImage) { _, _ in
+            .onFirstAppear {
                 setImageSources()
             }
+            .backport
+            .onChange(of: useRandomImage) { _, _ in
+                setImageSources(forceRefresh: true)
+            }
             .buttonStyle(.card)
+        }
+    }
+}
+
+private final class MediaItemImageSourceCache {
+    static let shared = MediaItemImageSourceCache()
+
+    private var imageSourcesByMediaTypeID: [String: [ImageSource]] = [:]
+
+    func imageSources(for mediaType: MediaViewModel.MediaType) -> [ImageSource]? {
+        guard let cacheKey = mediaType.cacheKey else { return nil }
+        return imageSourcesByMediaTypeID[cacheKey]
+    }
+
+    func set(_ imageSources: [ImageSource], for mediaType: MediaViewModel.MediaType) {
+        guard let cacheKey = mediaType.cacheKey else { return }
+        imageSourcesByMediaTypeID[cacheKey] = imageSources
+    }
+}
+
+private extension MediaViewModel.MediaType {
+
+    var cacheKey: String? {
+        switch self {
+        case let .collectionFolder(item):
+            item.id.map { "collectionFolder:\($0)" }
+        case .downloads:
+            "downloads"
+        case .favorites:
+            "favorites"
+        case let .liveTV(item):
+            item.id.map { "liveTV:\($0)" }
         }
     }
 }

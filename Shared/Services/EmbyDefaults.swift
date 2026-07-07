@@ -277,7 +277,7 @@ private extension Defaults.Keys {
     }
 
     static func UserKey<Value: Defaults.Serializable>(_ name: String, default: Value) -> Key<Value> {
-        Key(name, default: `default`, suite: .currentUserSuite)
+        Key(name, default: `default`, suite: .appSuite)
     }
 }
 
@@ -312,6 +312,30 @@ extension Defaults.Keys {
 
     static let signOutOnBackground: Key<Bool> = AppKey("signOutOnBackground", default: true)
     static let signOutOnClose: Key<Bool> = AppKey("signOutOnClose", default: false)
+
+    static func migrateUserSettingsToAppSuiteIfNeeded() {
+        let migrationKeyPrefix = "sharedUserSettingsMigrationCompleted"
+        let userSuite: UserDefaults
+        let migrationKey: String
+
+        switch Defaults[.lastSignedInUserID] {
+        case .signedOut:
+            userSuite = .userSuite(id: "default")
+            migrationKey = "\(migrationKeyPrefix):default"
+        case let .signedIn(userID):
+            userSuite = .userSuite(id: userID)
+            migrationKey = "\(migrationKeyPrefix):\(userID)"
+        }
+
+        let appSuite = UserDefaults.appSuite
+        guard appSuite.bool(forKey: migrationKey) == false else { return }
+
+        for (key, value) in userSuite.dictionaryRepresentation() where appSuite.object(forKey: key) == nil {
+            appSuite.set(value, forKey: key)
+        }
+
+        appSuite.set(true, forKey: migrationKey)
+    }
 
     static func migrateSubtitleAdjustmentSettingsToAppSuiteIfNeeded() {
         let positionKey = "subtitlePosition"

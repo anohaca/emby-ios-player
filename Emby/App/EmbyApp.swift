@@ -129,6 +129,8 @@ struct EmbyApp: App {
 
         // UIKit
 
+        Defaults.Keys.migrateUserSettingsToAppSuiteIfNeeded()
+
         if Defaults[.appearance] != .dark {
             Defaults[.appearance] = .dark
         }

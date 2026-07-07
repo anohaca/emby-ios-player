@@ -25,8 +25,23 @@ struct MediaView: View {
         } else if UIDevice.isPad {
             .minWidth(200)
         } else {
-            .columns(2)
+            .columns(
+                2,
+                insets: .init(EdgeInsets.edgePadding),
+                itemSpacing: EdgeInsets.edgePadding / 2,
+                lineSpacing: EdgeInsets.edgePadding
+            )
         }
+    }
+
+    private var mediaItemHeight: CGFloat? {
+        guard UIDevice.isPhone else { return nil }
+
+        let horizontalInsets = EdgeInsets.edgePadding * 2
+        let itemSpacing = EdgeInsets.edgePadding / 2
+        let itemWidth = (UIScreen.main.bounds.width - horizontalInsets - itemSpacing) / 2
+
+        return itemWidth / 1.77
     }
 
     @ViewBuilder
@@ -51,6 +66,7 @@ struct MediaView: View {
                     router.route(to: .liveTV)
                 }
             }
+            .frame(height: mediaItemHeight)
         }
     }
 

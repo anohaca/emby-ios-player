@@ -112,6 +112,7 @@ extension MediaView {
         private func titleLabelOverlay(with content: some View) -> some View {
             ZStack {
                 content
+                    .scaledToFill()
 
                 Color.black
                     .opacity(0.5)
@@ -125,29 +126,39 @@ extension MediaView {
             Button {
                 action(namespace)
             } label: {
-                ImageView(imageSources)
-                    .image { image in
-                        if useTitleLabel {
-                            titleLabelOverlay(with: image)
-                        } else {
-                            image
-                        }
-                    }
-                    .placeholder { imageSource in
-                        titleLabelOverlay(with: DefaultPlaceholderView(blurHash: imageSource.blurHash))
-                    }
-                    .failure {
-                        Color.secondarySystemFill
-                            .opacity(0.75)
-                            .overlay {
-                                titleLabel
-                                    .foregroundColor(.primary)
+                Rectangle()
+                    .fill(.complexSecondary)
+                    .overlay {
+                        ImageView(imageSources)
+                            .image { image in
+                                let croppedImage = image
+                                    .scaledToFill()
+
+                                if useTitleLabel {
+                                    titleLabelOverlay(with: croppedImage)
+                                } else {
+                                    croppedImage
+                                }
                             }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .posterStyle(.landscape)
-                    .backport
-                    .matchedTransitionSource(id: "item", in: namespace)
+                            .placeholder { imageSource in
+                                titleLabelOverlay(with: DefaultPlaceholderView(blurHash: imageSource.blurHash))
+                            }
+                            .failure {
+                                Color.secondarySystemFill
+                                    .opacity(0.75)
+                                    .overlay {
+                                        titleLabel
+                                            .foregroundColor(.primary)
+                                    }
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .clipped()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .posterStyle(.landscape)
+                .clipped()
+                .backport
+                .matchedTransitionSource(id: "item", in: namespace)
             }
             .onFirstAppear {
                 setImageSources()

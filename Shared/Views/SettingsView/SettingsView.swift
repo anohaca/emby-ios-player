@@ -166,6 +166,10 @@ struct SettingsView: View {
                 router.route(to: .log)
             }
 
+            ChevronButton("缓存统计") {
+                router.route(to: .cacheStatistics)
+            }
+
             #if DEBUG
             ChevronButton("Debug") {
                 router.route(to: .debugSettings)

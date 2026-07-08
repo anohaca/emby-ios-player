@@ -72,6 +72,14 @@ extension NavigationRoute {
         }
     }
 
+    static var cacheStatistics: NavigationRoute {
+        NavigationRoute(
+            id: "cacheStatistics"
+        ) {
+            CacheStatisticsView()
+        }
+    }
+
     #if DEBUG
     static var debugSettings: NavigationRoute {
         NavigationRoute(

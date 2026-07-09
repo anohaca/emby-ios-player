@@ -609,6 +609,14 @@ extension Defaults.Keys {
             UserKey("jumpForwardLength", default: .fifteen)
         }
 
+        static var showSkipIntroButton: Key<Bool> {
+            UserKey("showSkipIntroButton", default: true)
+        }
+
+        static var skipIntroSeconds: Key<Int> {
+            UserKey("skipIntroSeconds", default: 70)
+        }
+
         static var menuActionButtons: Key<[VideoPlayerActionButton]> {
             UserKey(
                 "menuActionButtons",

@@ -449,6 +449,7 @@ class ItemViewModel: ViewModel, Stateful {
 
         try await userSession.embyClient.setPlayed(isPlayed, itemID: itemID)
         try? await userSession.embyClient.clearPlaybackProgress(itemID: itemID)
+        SkipIntroDismissalStore.reset(for: item)
         HomeItemUserDataOverrideStore.markPlayed(
             item: item,
             isPlayed: isPlayed,

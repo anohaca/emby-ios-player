@@ -15,6 +15,11 @@ struct VideoPlayerSettingsView: View {
     private var jumpBackwardLength
     @Default(.VideoPlayer.jumpForwardInterval)
     private var jumpForwardLength
+    @Default(.VideoPlayer.showSkipIntroButton)
+    private var showSkipIntroButton
+
+    @Default(.VideoPlayer.skipIntroSeconds)
+    private var skipIntroSeconds
     @Default(.VideoPlayer.resumeOffset)
     private var resumeOffset
     @Default(.VideoPlayer.Playback.playbackRate)
@@ -106,6 +111,13 @@ struct VideoPlayerSettingsView: View {
             Section(L10n.jump) {
                 JumpIntervalPicker(L10n.jumpBackwardLength, selection: $jumpBackwardLength)
                 JumpIntervalPicker(L10n.jumpForwardLength, selection: $jumpForwardLength)
+                Toggle("显示跳过片头按钮", isOn: $showSkipIntroButton)
+                Stepper(value: $skipIntroSeconds, in: 5 ... 300, step: 5) {
+                    LabeledContent("跳过片头默认时长") {
+                        Text("\(skipIntroSeconds) 秒")
+                    }
+                }
+                .disabled(!showSkipIntroButton)
             }
 
             Section {

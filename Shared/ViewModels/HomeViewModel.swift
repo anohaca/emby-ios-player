@@ -1206,6 +1206,8 @@ enum HomeItemUserDataOverrideStore {
         userID: String,
         appliesToRelatedItems: Bool = true
     ) {
+        SkipIntroDismissalStore.setDismissed(false, itemID: itemID)
+
         var entries = load(serverID: serverID, userID: userID)
         entries[itemID] = Entry(
             itemID: itemID,
@@ -1225,6 +1227,8 @@ enum HomeItemUserDataOverrideStore {
         userID: String
     ) {
         guard let itemID = item.id else { return }
+
+        SkipIntroDismissalStore.reset(for: item)
 
         var entries = load(serverID: serverID, userID: userID)
         let changedAt = Date().timeIntervalSince1970
@@ -1686,6 +1690,7 @@ extension HomeViewModel {
         guard let itemID = item.id else { return }
         try await userSession.embyClient.setPlayed(isPlayed, itemID: itemID)
         try? await userSession.embyClient.clearPlaybackProgress(itemID: itemID)
+        SkipIntroDismissalStore.reset(for: item)
         HomeItemUserDataOverrideStore.markPlayed(
             item: item,
             isPlayed: isPlayed,

@@ -1783,10 +1783,23 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
         let subtitle = subtitleParts.isEmpty ? nil : subtitleParts.joined(separator: " · ")
         controlsView.updateTitle(title, subtitle: subtitle)
+        updateSkipIntroButtonVisibility(for: item)
 
         #if DEBUG
         NSLog("EmbyPlayerTitle title=%@ subtitle=%@", title, subtitle ?? "<nil>")
         #endif
+    }
+
+    private func updateSkipIntroButtonVisibility(for item: BaseItemDto?) {
+        controlsView.updateSkipIntroSeconds(
+            SkipIntroDismissalStore.seconds(
+                for: item,
+                default: Defaults[.VideoPlayer.skipIntroSeconds]
+            )
+        )
+        let shouldHide = !Defaults[.VideoPlayer.showSkipIntroButton]
+            || SkipIntroDismissalStore.contains(item: item)
+        controlsView.setSkipIntroDismissed(shouldHide)
     }
 
     private func bindQueue(_ queue: AnyMediaPlayerQueue?) {
@@ -1964,6 +1977,8 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                 self.controlsView.setPaused(true)
                 self.showControls()
                 guard self.manager?.item.isLiveStream != true else { return }
+                SkipIntroDismissalStore.reset(for: self.manager?.item)
+                self.updateSkipIntroButtonVisibility(for: self.manager?.item)
                 self.manager?.ended()
             }
         }
@@ -2084,6 +2099,34 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         controlsView.onSeekForward = { [weak self] in
             self?.jumpForward(Defaults[.VideoPlayer.jumpForwardInterval].rawValue)
             self?.scheduleControlsHide()
+        }
+
+        controlsView.onSkipIntro = { [weak self] seconds in
+            guard let self else { return }
+            if seconds >= 0 {
+                self.jumpForward(.seconds(seconds))
+            } else {
+                self.jumpBackward(.seconds(abs(seconds)))
+            }
+        }
+
+        controlsView.onSkipIntroReverseBegan = { [weak self] in
+            guard let self else { return }
+            self.pause()
+            self.controlsView.setPaused(true, showsIndicator: false)
+        }
+
+        controlsView.onSkipIntroReverseEnded = { [weak self] in
+            guard let self else { return }
+            self.play()
+            self.controlsView.setPaused(false)
+        }
+
+        controlsView.onSkipIntroAdjustmentCommitted = { [weak self] seconds in
+            guard let self else { return }
+            SkipIntroDismissalStore.setSeconds(seconds, for: self.manager?.item)
+            SkipIntroDismissalStore.setDismissed(true, item: self.manager?.item)
+            self.scheduleControlsHide(after: 0)
         }
 
         controlsView.onNextEpisode = { [weak self] in

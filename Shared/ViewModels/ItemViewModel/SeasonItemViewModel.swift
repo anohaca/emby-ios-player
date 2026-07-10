@@ -66,6 +66,16 @@ final class SeasonItemViewModel: PagingLibraryViewModel<BaseItemDto>, Identifiab
                 self.applyUserDataOverridesToVisibleEpisodes()
             }
             .store(in: &cancellables)
+
+        Notifications[.resumeItemRecencyDidChange]
+            .publisher
+            .receive(on: RunLoop.main)
+            .sink { [weak self] itemID in
+                guard let self, self.shouldApplyUserDataOverrideChange(for: itemID) else { return }
+
+                self.applyUserDataOverridesToVisibleEpisodes()
+            }
+            .store(in: &cancellables)
     }
 
     private func shouldApplyUserDataOverrideChange(for itemID: String) -> Bool {

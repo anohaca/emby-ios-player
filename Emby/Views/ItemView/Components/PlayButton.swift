@@ -48,6 +48,9 @@ extension ItemView {
             {
                 seasonEpisodeLabel
 
+            } else if let elapsedTimeLabel {
+                elapsedTimeLabel
+
                 /// Use a Play/Resume label for single Media Source items that are not Series
             } else if let playButtonLabel = viewModel.playButtonItem?.playButtonLabel {
                 playButtonLabel
@@ -56,6 +59,17 @@ extension ItemView {
             } else {
                 L10n.play
             }
+        }
+
+        private var elapsedTimeLabel: String? {
+            guard let ticks = viewModel.playButtonItem?.userData?.playbackPositionTicks,
+                  ticks > 0
+            else { return nil }
+
+            let formatter = DateComponentsFormatter()
+            formatter.allowedUnits = [.hour, .minute]
+            formatter.unitsStyle = .abbreviated
+            return formatter.string(from: Double(ticks) / 10_000_000)
         }
 
         // MARK: - Media Source

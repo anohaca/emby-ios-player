@@ -20,6 +20,8 @@ extension SeriesEpisodeSelector {
 
         private var parentIsPlayed = false
         private var episodePlayedStates: [String: Bool] = [:]
+        private var episodeProgressLabels: [String: String] = [:]
+        private var episodePlayedPercentages: [String: Double] = [:]
 
         func update(parentIsPlayed: Bool, episodes: [BaseItemDto]) {
             let newEpisodePlayedStates = Dictionary(
@@ -29,11 +31,35 @@ extension SeriesEpisodeSelector {
                 },
                 uniquingKeysWith: { _, new in new }
             )
+            let newEpisodeProgressLabels = Dictionary(
+                episodes.compactMap { episode -> (String, String)? in
+                    guard let id = episode.id,
+                          let playbackPositionTicks = episode.userData?.playbackPositionTicks,
+                          playbackPositionTicks > 0,
+                          let progressLabel = Self.elapsedTimeLabel(ticks: playbackPositionTicks)
+                    else { return nil }
+                    return (id, progressLabel)
+                },
+                uniquingKeysWith: { _, new in new }
+            )
+            let newEpisodePlayedPercentages = Dictionary(
+                episodes.compactMap { episode -> (String, Double)? in
+                    guard let id = episode.id, let percentage = episode.userData?.playedPercentage else { return nil }
+                    return (id, percentage)
+                },
+                uniquingKeysWith: { _, new in new }
+            )
 
-            guard self.parentIsPlayed != parentIsPlayed || episodePlayedStates != newEpisodePlayedStates else { return }
+            guard self.parentIsPlayed != parentIsPlayed ||
+                episodePlayedStates != newEpisodePlayedStates ||
+                episodeProgressLabels != newEpisodeProgressLabels ||
+                episodePlayedPercentages != newEpisodePlayedPercentages
+            else { return }
 
             self.parentIsPlayed = parentIsPlayed
             self.episodePlayedStates = newEpisodePlayedStates
+            self.episodeProgressLabels = newEpisodeProgressLabels
+            self.episodePlayedPercentages = newEpisodePlayedPercentages
             revision += 1
         }
 
@@ -43,6 +69,25 @@ extension SeriesEpisodeSelector {
             }
 
             return episode.id.flatMap { episodePlayedStates[$0] } ?? episode.userData?.isPlayed == true
+        }
+
+        func progressLabel(_ episode: BaseItemDto) -> String? {
+            if let label = episode.id.flatMap({ episodeProgressLabels[$0] }) {
+                return label
+            }
+            guard let ticks = episode.userData?.playbackPositionTicks, ticks > 0 else { return nil }
+            return Self.elapsedTimeLabel(ticks: ticks)
+        }
+
+        func playedPercentage(_ episode: BaseItemDto) -> Double {
+            episode.id.flatMap { episodePlayedPercentages[$0] } ?? episode.userData?.playedPercentage ?? 0
+        }
+
+        private static func elapsedTimeLabel(ticks: Int) -> String? {
+            let formatter = DateComponentsFormatter()
+            formatter.allowedUnits = [.hour, .minute]
+            formatter.unitsStyle = .abbreviated
+            return formatter.string(from: Double(ticks) / 10_000_000)
         }
     }
 
@@ -77,7 +122,7 @@ extension SeriesEpisodeSelector {
         }
 
         private var progressLabelForDisplay: String? {
-            isPlayedForDisplay ? nil : episode.progressLabel
+            isPlayedForDisplay ? nil : playbackDisplayState.progressLabel(episode)
         }
 
         @ViewBuilder
@@ -85,7 +130,7 @@ extension SeriesEpisodeSelector {
             if let progressLabel = progressLabelForDisplay {
                 LandscapePosterProgressBar(
                     title: progressLabel,
-                    progress: (episode.userData?.playedPercentage ?? 0) / 100
+                    progress: playbackDisplayState.playedPercentage(episode) / 100
                 )
             } else if isPlayedForDisplay, showPlayed {
                 WatchedIndicator(size: 25)

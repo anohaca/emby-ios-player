@@ -27,7 +27,8 @@ extension HomeView {
                 PosterHStack(
                     title: L10n.recentlyAdded.localizedCapitalized,
                     type: recentlyAddedPosterType,
-                    items: homeSortedItems
+                    items: homeSortedItems,
+                    forcesUnplayedCount: true
                 ) { item, namespace in
                     router.route(to: .item(item: item), in: namespace)
                 }

@@ -27,7 +27,8 @@ extension HomeView {
                 PosterHStack(
                     title: L10n.latestWithString(viewModel.parent?.displayTitle ?? .emptyDash),
                     type: latestInLibraryPosterType,
-                    items: viewModel.elements
+                    items: viewModel.elements,
+                    forcesUnplayedCount: true
                 ) { item, namespace in
                     router.route(to: .item(item: item), in: namespace)
                 }

@@ -305,6 +305,7 @@ extension PosterButton {
         var displayState: BaseItemPosterOverlayState
 
         let item: BaseItemDto
+        var forcesUnplayedCount = false
 
         private var userData: BaseItemPosterOverlayState.Value {
             displayState.value(for: item)
@@ -326,7 +327,9 @@ extension PosterButton {
                         UnwatchedIndicator(
                             size: 25,
                             count:
-                            showUnplayed == .count ? userData.unplayedItemCount : nil
+                            showUnplayed == .count || forcesUnplayedCount
+                                ? (userData.unplayedItemCount ?? (forcesUnplayedCount ? 1 : nil))
+                                : nil
                         )
                         .foregroundStyle(accentColor.overlayColor, accentColor)
                     }

@@ -29,7 +29,8 @@ extension HomeView {
                 PosterHStack(
                     title: L10n.nextUp,
                     type: nextUpPosterType,
-                    items: viewModel.elements
+                    items: viewModel.elements,
+                    forcesUnplayedCount: true
                 ) { item, namespace in
                     router.route(to: .item(item: item), in: namespace)
                 } label: { item in

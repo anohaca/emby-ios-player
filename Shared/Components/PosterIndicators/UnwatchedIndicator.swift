@@ -34,7 +34,7 @@ struct UnwatchedIndicator: View {
             if let count, count > 0 {
                 Text(count.description)
                     .fontWeight(.semibold)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.white)
                     .padding(.horizontal, padding)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(height: size, alignment: .center)

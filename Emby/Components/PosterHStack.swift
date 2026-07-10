@@ -32,6 +32,7 @@ struct PosterHStack<Element: Poster, Data: Collection>: View where Data.Element 
     private var trailingContent: () -> any View
     private var action: (Element, Namespace.ID) -> Void
     private var posterAction: ((Element, Namespace.ID) -> Void)?
+    private var forcesUnplayedCount = false
 
     @StateObject
     private var baseItemOverlayState = BaseItemPosterOverlayState()
@@ -90,7 +91,8 @@ struct PosterHStack<Element: Poster, Data: Collection>: View where Data.Element 
         .posterOverlay(for: BaseItemDto.self) { item in
             PosterButton<BaseItemDto>.BaseItemOverlay(
                 displayState: baseItemOverlayState,
-                item: item
+                item: item,
+                forcesUnplayedCount: forcesUnplayedCount
             )
         }
         .frame(height: rowHeight(for: homeTransitionLockedRowWidth ?? 430))
@@ -180,6 +182,7 @@ extension PosterHStack {
         title: String? = nil,
         type: PosterDisplayType,
         items: Data,
+        forcesUnplayedCount: Bool = false,
         posterAction: ((Element, Namespace.ID) -> Void)? = nil,
         action: @escaping (Element, Namespace.ID) -> Void,
         @ViewBuilder label: @escaping (Element) -> any View = { PosterButton<Element>.TitleSubtitleContentView(item: $0) }
@@ -192,7 +195,8 @@ extension PosterHStack {
             label: label,
             trailingContent: { EmptyView() },
             action: action,
-            posterAction: posterAction
+            posterAction: posterAction,
+            forcesUnplayedCount: forcesUnplayedCount
         )
     }
 

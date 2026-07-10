@@ -100,9 +100,10 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     var onSeekBackward: (() -> Void)?
     var onSeekForward: (() -> Void)?
     var onSkipIntro: ((Double) -> Void)?
+    var onSkipIntroAdjustmentBegan: (() -> Void)?
     var onSkipIntroAdjustmentCommitted: ((Int) -> Void)?
-    var onSkipIntroReverseBegan: (() -> Void)?
-    var onSkipIntroReverseEnded: (() -> Void)?
+    var onSkipIntroAdjustmentEnded: (() -> Void)?
+    var onSkipIntroAdjustmentFinished: (() -> Void)?
     var onNextEpisode: (() -> Void)?
     var onEpisodeList: (() -> Void)?
     var onPlaybackSpeedSelected: ((Double) -> Void)?
@@ -179,10 +180,9 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private var skipIntroSeconds = 70
     private var skipIntroAdjustmentSeconds = 70
     private var skipIntroAdjustmentActive = false
-    private var skipIntroAdjustmentHasJumpedDefault = false
+    private var skipIntroAdjustmentPausedPlayback = false
     private var skipIntroAdjustmentShouldResumePlayback = false
     private var skipIntroAdjustmentCommitWorkItem: DispatchWorkItem?
-    private var skipIntroAdjustmentRepeatTimer: Timer?
     private var pausedIndicatorHideWorkItem: DispatchWorkItem?
     private var pausedIndicatorVisibilityGeneration = 0
     private var pausedIndicatorSuppressedUntil: Date?
@@ -216,7 +216,6 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     }
 
     deinit {
-        skipIntroAdjustmentRepeatTimer?.invalidate()
         skipIntroAdjustmentCommitWorkItem?.cancel()
         clockTimer?.invalidate()
         NotificationCenter.default.removeObserver(self)
@@ -283,8 +282,9 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     func setControlsHidden(_ hidden: Bool, animated: Bool) {
         controlsVisibilityGeneration += 1
         let generation = controlsVisibilityGeneration
-        areControlsHidden = hidden
-        if !hidden {
+        let effectiveHidden = hidden && !skipIntroAdjustmentActive
+        areControlsHidden = effectiveHidden
+        if !effectiveHidden {
             topBar.isHidden = false
             bottomBar.isHidden = false
             skipIntroStack.isHidden = skipIntroButtonsDismissed
@@ -294,19 +294,19 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         }
 
         let changes = {
-            self.topBar.alpha = hidden ? 0 : 1
-            self.bottomBar.alpha = hidden ? 0 : 1
-            self.skipIntroStack.alpha = (hidden && !self.skipIntroAdjustmentActive) || self.skipIntroButtonsDismissed ? 0 : 1
+            self.topBar.alpha = effectiveHidden ? 0 : 1
+            self.bottomBar.alpha = effectiveHidden ? 0 : 1
+            self.skipIntroStack.alpha = effectiveHidden || self.skipIntroButtonsDismissed ? 0 : 1
         }
 
         let completion: (Bool) -> Void = { [weak self] _ in
             guard let self, self.controlsVisibilityGeneration == generation else { return }
-            self.topBar.isHidden = hidden
-            self.bottomBar.isHidden = hidden
-            self.skipIntroStack.isHidden = (hidden && !self.skipIntroAdjustmentActive) || self.skipIntroButtonsDismissed
-            self.topBar.isUserInteractionEnabled = !hidden
-            self.bottomBar.isUserInteractionEnabled = !hidden
-            self.skipIntroStack.isUserInteractionEnabled = (!hidden || self.skipIntroAdjustmentActive) && !self.skipIntroButtonsDismissed
+            self.topBar.isHidden = effectiveHidden
+            self.bottomBar.isHidden = effectiveHidden
+            self.skipIntroStack.isHidden = effectiveHidden || self.skipIntroButtonsDismissed
+            self.topBar.isUserInteractionEnabled = !effectiveHidden
+            self.bottomBar.isUserInteractionEnabled = !effectiveHidden
+            self.skipIntroStack.isUserInteractionEnabled = !effectiveHidden && !self.skipIntroButtonsDismissed
         }
 
         if animated {
@@ -315,7 +315,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             changes()
             completion(true)
         }
-        updateRenderedSubtitlePosition(controlsHidden: hidden)
+        updateRenderedSubtitlePosition(controlsHidden: effectiveHidden)
         updatePausedIndicator(animated: animated, allowsShowing: false)
     }
 
@@ -515,6 +515,10 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         !bottomBar.isHidden && bottomBar.alpha > 0.01
     }
 
+    var isSkipIntroAdjustmentActive: Bool {
+        skipIntroAdjustmentActive
+    }
+
     var subtitleAdjustmentPanelVisibleForSmoke: Bool {
         !subtitleAdjustmentPanel.isHidden && subtitleAdjustmentPanel.alpha > 0.01
     }
@@ -709,14 +713,8 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         seekBackwardButton.addTarget(self, action: #selector(seekBackwardTapped), for: .touchUpInside)
         playPauseButton.addTarget(self, action: #selector(playPauseTapped), for: .touchUpInside)
         seekForwardButton.addTarget(self, action: #selector(seekForwardTapped), for: .touchUpInside)
-        leftSkipIntroButton.addTarget(self, action: #selector(skipIntroTapped), for: .touchUpInside)
-        rightSkipIntroButton.addTarget(self, action: #selector(skipIntroTapped), for: .touchUpInside)
-        let leftSkipIntroLongPress = UILongPressGestureRecognizer(target: self, action: #selector(skipIntroLongPressed(_:)))
-        let rightSkipIntroLongPress = UILongPressGestureRecognizer(target: self, action: #selector(skipIntroLongPressed(_:)))
-        leftSkipIntroLongPress.minimumPressDuration = 0.35
-        rightSkipIntroLongPress.minimumPressDuration = 0.35
-        leftSkipIntroButton.addGestureRecognizer(leftSkipIntroLongPress)
-        rightSkipIntroButton.addGestureRecognizer(rightSkipIntroLongPress)
+        leftSkipIntroButton.addTarget(self, action: #selector(skipIntroTapped(_:)), for: .touchUpInside)
+        rightSkipIntroButton.addTarget(self, action: #selector(skipIntroTapped(_:)), for: .touchUpInside)
         nextEpisodeButton.addTarget(self, action: #selector(nextEpisodeTapped), for: .touchUpInside)
         episodeListButton.addTarget(self, action: #selector(episodeListTapped), for: .touchUpInside)
         configureOpenMenu()
@@ -1065,8 +1063,8 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     }
 
     private func updateSkipIntroTitles(adjusting: Bool) {
-        let leftTitle = adjusting ? "-\(skipIntroAdjustmentSeconds)秒" : "跳过片头"
-        let rightTitle = adjusting ? "+\(skipIntroAdjustmentSeconds)秒" : "跳过片头"
+        let leftTitle = adjusting ? "-1秒" : "跳过片头"
+        let rightTitle = adjusting ? "+1秒" : "跳过片头"
         setSkipIntroTitle(leftTitle, for: leftSkipIntroButton)
         setSkipIntroTitle(rightTitle, for: rightSkipIntroButton)
     }
@@ -2279,63 +2277,24 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         onSeekForward?()
     }
 
-    @objc private func skipIntroTapped() {
-        guard !skipIntroAdjustmentActive else { return }
-        skipIntroButtonsDismissed = true
-        UIView.animate(withDuration: 0.16, animations: {
-            self.skipIntroStack.alpha = 0
-        }, completion: { [weak self] _ in
-            self?.skipIntroStack.isHidden = true
-            self?.skipIntroStack.isUserInteractionEnabled = false
-        })
-        onSkipIntro?(Double(skipIntroSeconds))
-        onSkipIntroAdjustmentCommitted?(skipIntroSeconds)
-    }
-
-    @objc private func skipIntroLongPressed(_ gesture: UILongPressGestureRecognizer) {
-        switch gesture.state {
-        case .began:
-            skipIntroAdjustmentCommitWorkItem?.cancel()
-            let direction = gesture.view === leftSkipIntroButton ? -1.0 : 1.0
-            beginSkipIntroAdjustmentIfNeeded()
-
-            let delta: Int
-            let jumpDirection: Double
-            if skipIntroAdjustmentHasJumpedDefault {
-                delta = 5
-                skipIntroAdjustmentSeconds = max(5, skipIntroAdjustmentSeconds + Int(direction) * delta)
-                jumpDirection = direction
-            } else {
-                delta = skipIntroAdjustmentSeconds
-                skipIntroAdjustmentHasJumpedDefault = true
-                jumpDirection = 1
-            }
-
-            skipIntroAdjustmentShouldResumePlayback = !isPaused
-            onSkipIntroReverseBegan?()
-            updateSkipIntroTitles(adjusting: true)
-            showSkipIntroButtonsForAdjustment()
-            onMenuOpened?()
-            onSkipIntro?(jumpDirection * Double(delta))
-            startSkipIntroAdjustmentRepeat(direction: direction)
-
-        case .ended, .cancelled, .failed:
-            stopSkipIntroAdjustmentRepeat()
-            if skipIntroAdjustmentShouldResumePlayback {
-                onSkipIntroReverseEnded?()
-            }
-            skipIntroAdjustmentShouldResumePlayback = false
-            scheduleSkipIntroAdjustmentCommit()
-
-        default:
-            break
+    @objc private func skipIntroTapped(_ sender: UIButton) {
+        if skipIntroAdjustmentActive {
+            adjustSkipIntroSeconds(sender === leftSkipIntroButton ? -1 : 1)
+            return
         }
+
+        beginSkipIntroAdjustmentIfNeeded()
+        updateSkipIntroTitles(adjusting: true)
+        showSkipIntroButtonsForAdjustment()
+        onSkipIntro?(Double(skipIntroAdjustmentSeconds))
+        scheduleSkipIntroAdjustmentCommit()
     }
 
     private func beginSkipIntroAdjustmentIfNeeded() {
         guard !skipIntroAdjustmentActive else { return }
         skipIntroAdjustmentActive = true
-        skipIntroAdjustmentHasJumpedDefault = false
+        skipIntroAdjustmentPausedPlayback = false
+        skipIntroAdjustmentShouldResumePlayback = false
         skipIntroAdjustmentSeconds = skipIntroSeconds
         skipIntroButtonsDismissed = false
         skipIntroStack.isHidden = false
@@ -2360,39 +2319,39 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: workItem)
     }
 
-    private func startSkipIntroAdjustmentRepeat(direction: Double) {
-        stopSkipIntroAdjustmentRepeat()
-        let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            self?.repeatSkipIntroAdjustment(direction: direction)
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        skipIntroAdjustmentRepeatTimer = timer
-    }
+    private func adjustSkipIntroSeconds(_ delta: Int) {
+        guard skipIntroAdjustmentActive else { return }
 
-    private func stopSkipIntroAdjustmentRepeat() {
-        skipIntroAdjustmentRepeatTimer?.invalidate()
-        skipIntroAdjustmentRepeatTimer = nil
-    }
-
-    private func repeatSkipIntroAdjustment(direction: Double) {
-        guard skipIntroAdjustmentActive else {
-            stopSkipIntroAdjustmentRepeat()
+        let previousSeconds = skipIntroAdjustmentSeconds
+        skipIntroAdjustmentSeconds = max(5, skipIntroAdjustmentSeconds + delta)
+        let appliedDelta = skipIntroAdjustmentSeconds - previousSeconds
+        guard appliedDelta != 0 else {
+            scheduleSkipIntroAdjustmentCommit()
             return
         }
 
-        let delta = 1
-        skipIntroAdjustmentSeconds = max(5, skipIntroAdjustmentSeconds + Int(direction) * delta)
+        pausePlaybackForSkipIntroAdjustmentIfNeeded()
         updateSkipIntroTitles(adjusting: true)
-        onSkipIntro?(direction * Double(delta))
+        onSkipIntro?(Double(appliedDelta))
+        scheduleSkipIntroAdjustmentCommit()
+    }
+
+    private func pausePlaybackForSkipIntroAdjustmentIfNeeded() {
+        guard !skipIntroAdjustmentPausedPlayback else { return }
+
+        skipIntroAdjustmentPausedPlayback = true
+        skipIntroAdjustmentShouldResumePlayback = !isPaused
+        onSkipIntroAdjustmentBegan?()
     }
 
     private func commitSkipIntroAdjustment() {
         guard skipIntroAdjustmentActive else { return }
-        stopSkipIntroAdjustmentRepeat()
         skipIntroAdjustmentActive = false
-        skipIntroAdjustmentHasJumpedDefault = false
         skipIntroSeconds = skipIntroAdjustmentSeconds
         skipIntroButtonsDismissed = true
+        let shouldResumePlayback = skipIntroAdjustmentShouldResumePlayback
+        skipIntroAdjustmentPausedPlayback = false
+        skipIntroAdjustmentShouldResumePlayback = false
         onSkipIntroAdjustmentCommitted?(skipIntroAdjustmentSeconds)
         UIView.animate(withDuration: 0.2, animations: {
             self.skipIntroStack.alpha = 0
@@ -2400,15 +2359,18 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             self?.skipIntroStack.isHidden = true
             self?.skipIntroStack.isUserInteractionEnabled = false
             self?.updateSkipIntroTitles(adjusting: false)
+            self?.onSkipIntroAdjustmentFinished?()
+            if shouldResumePlayback {
+                self?.onSkipIntroAdjustmentEnded?()
+            }
         })
     }
 
     private func cancelSkipIntroAdjustment() {
-        stopSkipIntroAdjustmentRepeat()
         skipIntroAdjustmentCommitWorkItem?.cancel()
         skipIntroAdjustmentCommitWorkItem = nil
         skipIntroAdjustmentActive = false
-        skipIntroAdjustmentHasJumpedDefault = false
+        skipIntroAdjustmentPausedPlayback = false
         skipIntroAdjustmentShouldResumePlayback = false
         skipIntroAdjustmentSeconds = skipIntroSeconds
         updateSkipIntroTitles(adjusting: false)

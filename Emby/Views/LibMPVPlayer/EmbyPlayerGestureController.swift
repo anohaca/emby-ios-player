@@ -35,9 +35,11 @@ final class PlayerGestureController: NSObject {
 
         let singleTap = UITapGestureRecognizer(target: self, action: #selector(singleTapped))
         singleTap.numberOfTapsRequired = 1
+        singleTap.delegate = self
 
         let doubleTap = UITapGestureRecognizer(target: self, action: #selector(doubleTapped))
         doubleTap.numberOfTapsRequired = 2
+        doubleTap.delegate = self
 
         singleTap.require(toFail: doubleTap)
 

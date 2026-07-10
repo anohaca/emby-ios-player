@@ -175,6 +175,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private var hideGestureHUDDeadline: Date?
     private var hideGestureHUDGeneration = 0
     private var longPressSpeedRestoreValue: Double?
+    private var skipIntroAdjustmentPauseLocked = false
     private var verticalAdjustmentInitialValue: Double?
     private var didRequestClose = false
     private var didScheduleDeferredStop = false
@@ -1856,6 +1857,12 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         player.onPausedChanged = { [weak self] paused in
             Task { @MainActor in
                 guard let self else { return }
+                if self.skipIntroAdjustmentPauseLocked && !paused {
+                    self.player.setPaused(true)
+                    self.controlsView.setPaused(true, showsIndicator: false)
+                    self.manager?.setPlaybackRequestStatus(status: .paused)
+                    return
+                }
                 if paused {
                     self.cancelLongPressSpeedIfNeeded()
                 }
@@ -2108,18 +2115,14 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             } else {
                 self.jumpBackward(.seconds(abs(seconds)))
             }
+            self.scheduleControlsHide()
         }
 
-        controlsView.onSkipIntroReverseBegan = { [weak self] in
+        controlsView.onSkipIntroAdjustmentBegan = { [weak self] in
             guard let self else { return }
+            self.skipIntroAdjustmentPauseLocked = true
             self.pause()
             self.controlsView.setPaused(true, showsIndicator: false)
-        }
-
-        controlsView.onSkipIntroReverseEnded = { [weak self] in
-            guard let self else { return }
-            self.play()
-            self.controlsView.setPaused(false)
         }
 
         controlsView.onSkipIntroAdjustmentCommitted = { [weak self] seconds in
@@ -2127,6 +2130,16 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             SkipIntroDismissalStore.setSeconds(seconds, for: self.manager?.item)
             SkipIntroDismissalStore.setDismissed(true, item: self.manager?.item)
             self.scheduleControlsHide(after: 0)
+        }
+
+        controlsView.onSkipIntroAdjustmentEnded = { [weak self] in
+            guard let self else { return }
+            self.play()
+            self.controlsView.setPaused(false)
+        }
+
+        controlsView.onSkipIntroAdjustmentFinished = { [weak self] in
+            self?.skipIntroAdjustmentPauseLocked = false
         }
 
         controlsView.onNextEpisode = { [weak self] in
@@ -3087,6 +3100,9 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         if controlsView.isSubtitleAdjustmentPanelVisible {
             return
         }
+        if controlsView.isSkipIntroAdjustmentActive {
+            return
+        }
 
         controlsHidden = true
         setNeedsStatusBarAppearanceUpdate()
@@ -3416,6 +3432,10 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         let item = DispatchWorkItem { [weak self] in
             guard let self else { return }
             if self.controlsView.isSubtitleAdjustmentPanelVisible {
+                self.hideControlsWorkItem = nil
+                return
+            }
+            if self.controlsView.isSkipIntroAdjustmentActive {
                 self.hideControlsWorkItem = nil
                 return
             }

@@ -3,13 +3,18 @@ import Foundation
 enum SkipIntroDismissalStore {
     private static let itemIDsKey = "EmbyLibMPVPlayer.skipIntroDismissedItemIDs"
     private static let generationByItemIDKey = "EmbyLibMPVPlayer.skipIntroGenerationByItemID"
+    private static let scopeByItemIDKey = "EmbyLibMPVPlayer.skipIntroScopeByItemID"
     private static let generationByScopeIDKey = "EmbyLibMPVPlayer.skipIntroGenerationByScopeID"
     private static let secondsByScopeKey = "EmbyLibMPVPlayer.skipIntroSecondsByScope"
 
     static func contains(item: BaseItemDto?) -> Bool {
         guard let itemID = item?.id, itemIDs().contains(itemID) else { return false }
         let dismissedGeneration = generationByItemID()[itemID] ?? 0
-        return dismissedGeneration == generation(for: item)
+        let storedScopeID = scopeByItemID()[itemID]
+        let currentGeneration = storedScopeID
+            .map { generation(forScopeID: $0) }
+            ?? generation(for: item)
+        return dismissedGeneration == currentGeneration
     }
 
     static func contains(itemID: String?) -> Bool {
@@ -22,12 +27,16 @@ enum SkipIntroDismissalStore {
         setDismissed(dismissed, itemID: itemID)
 
         var currentGenerationByItemID = generationByItemID()
+        var currentScopeByItemID = scopeByItemID()
         if dismissed {
             currentGenerationByItemID[itemID] = generation(for: item)
+            currentScopeByItemID[itemID] = scopeID(for: item)
         } else {
             currentGenerationByItemID.removeValue(forKey: itemID)
+            currentScopeByItemID.removeValue(forKey: itemID)
         }
         UserDefaults.standard.set(currentGenerationByItemID, forKey: generationByItemIDKey)
+        UserDefaults.standard.set(currentScopeByItemID, forKey: scopeByItemIDKey)
     }
 
     static func setDismissed(_ dismissed: Bool, itemID: String?) {
@@ -37,6 +46,14 @@ enum SkipIntroDismissalStore {
             currentItemIDs.insert(itemID)
         } else {
             currentItemIDs.remove(itemID)
+
+            var currentGenerationByItemID = generationByItemID()
+            currentGenerationByItemID.removeValue(forKey: itemID)
+            UserDefaults.standard.set(currentGenerationByItemID, forKey: generationByItemIDKey)
+
+            var currentScopeByItemID = scopeByItemID()
+            currentScopeByItemID.removeValue(forKey: itemID)
+            UserDefaults.standard.set(currentScopeByItemID, forKey: scopeByItemIDKey)
         }
         UserDefaults.standard.set(Array(currentItemIDs), forKey: itemIDsKey)
     }
@@ -80,9 +97,17 @@ enum SkipIntroDismissalStore {
         UserDefaults.standard.dictionary(forKey: generationByScopeIDKey) as? [String: Int] ?? [:]
     }
 
+    private static func scopeByItemID() -> [String: String] {
+        UserDefaults.standard.dictionary(forKey: scopeByItemIDKey) as? [String: String] ?? [:]
+    }
+
     private static func generation(for item: BaseItemDto?) -> Int {
         guard let scopeID = scopeID(for: item) else { return 0 }
-        return generationByScopeID()[scopeID] ?? 0
+        return generation(forScopeID: scopeID)
+    }
+
+    private static func generation(forScopeID scopeID: String) -> Int {
+        generationByScopeID()[scopeID] ?? 0
     }
 
     private static func secondsByScope() -> [String: Int] {

@@ -103,7 +103,6 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     var onSkipIntroAdjustmentBegan: (() -> Void)?
     var onSkipIntroAdjustmentCommitted: ((Int) -> Void)?
     var onSkipIntroAdjustmentEnded: (() -> Void)?
-    var onSkipIntroAdjustmentFinished: (() -> Void)?
     var onNextEpisode: (() -> Void)?
     var onEpisodeList: (() -> Void)?
     var onPlaybackSpeedSelected: ((Double) -> Void)?
@@ -2337,10 +2336,10 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     }
 
     private func pausePlaybackForSkipIntroAdjustmentIfNeeded() {
-        guard !skipIntroAdjustmentPausedPlayback else { return }
-
         skipIntroAdjustmentPausedPlayback = true
-        skipIntroAdjustmentShouldResumePlayback = !isPaused
+        guard !isPaused else { return }
+
+        skipIntroAdjustmentShouldResumePlayback = true
         onSkipIntroAdjustmentBegan?()
     }
 
@@ -2359,7 +2358,6 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             self?.skipIntroStack.isHidden = true
             self?.skipIntroStack.isUserInteractionEnabled = false
             self?.updateSkipIntroTitles(adjusting: false)
-            self?.onSkipIntroAdjustmentFinished?()
             if shouldResumePlayback {
                 self?.onSkipIntroAdjustmentEnded?()
             }

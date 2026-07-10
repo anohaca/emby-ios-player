@@ -300,6 +300,10 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
         guard isPlaybackNearEnd(item: baseItem, seconds: seconds) else { return }
 
         await MainActor.run {
+            if baseItem.userData?.isPlayed != true,
+               SkipIntroDismissalStore.contains(item: baseItem) {
+                SkipIntroDismissalStore.reset(for: baseItem)
+            }
             HomeItemUserDataOverrideStore.markPlayed(
                 item: baseItem,
                 isPlayed: true,

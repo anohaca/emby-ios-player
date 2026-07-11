@@ -32,13 +32,14 @@ extension NavigationRoute {
     }
 
     static func library(
-        viewModel: PagingLibraryViewModel<some Poster>
+        viewModel: PagingLibraryViewModel<some Poster>,
+        forcesUnplayedCount: Bool = false
     ) -> NavigationRoute {
         NavigationRoute(
             id: "library-(\(viewModel.parent?.id ?? "Unparented"))",
             withNamespace: { .push(.zoom(sourceID: "item", namespace: $0)) }
         ) {
-            PagingLibraryView(viewModel: viewModel)
+            PagingLibraryView(viewModel: viewModel, forcesUnplayedCount: forcesUnplayedCount)
         }
     }
 }

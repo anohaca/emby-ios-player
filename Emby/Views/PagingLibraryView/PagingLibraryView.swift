@@ -75,12 +75,14 @@ struct PagingLibraryView<Element: Poster>: View {
     private var viewModel: PagingLibraryViewModel<Element>
 
     private let showsFilterControls: Bool
+    private let forcesUnplayedCount: Bool
 
     // MARK: init
 
     init(
         viewModel: PagingLibraryViewModel<Element>,
-        showsFilterControls: Bool = true
+        showsFilterControls: Bool = true,
+        forcesUnplayedCount: Bool = false
     ) {
 
         // have to set these properties manually to get proper initial layout
@@ -91,6 +93,7 @@ struct PagingLibraryView<Element: Poster>: View {
 
         self._viewModel = StateObject(wrappedValue: viewModel)
         self.showsFilterControls = showsFilterControls
+        self.forcesUnplayedCount = forcesUnplayedCount
 
         let defaultDisplayType = Defaults[.Customization.Library.displayType]
         let defaultListColumnCount = Defaults[.Customization.Library.listColumnCount]
@@ -198,7 +201,8 @@ struct PagingLibraryView<Element: Poster>: View {
             item: item,
             type: posterType,
             imageMaxWidth: Self.gridImageMaxWidth(for: posterType),
-            usesContextMenuPreview: false
+            usesContextMenuPreview: false,
+            forcesUnplayedCount: forcesUnplayedCount
         ) { namespace in
             onSelect(item, in: namespace)
         } label: {

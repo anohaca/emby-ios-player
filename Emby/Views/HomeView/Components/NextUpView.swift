@@ -43,7 +43,7 @@ extension HomeView {
                 .trailing {
                     SeeAllButton()
                         .onSelect {
-                            router.route(to: .library(viewModel: viewModel))
+                            router.route(to: .library(viewModel: viewModel, forcesUnplayedCount: true))
                         }
                 }
                 .contextMenu(for: BaseItemDto.self) { item in

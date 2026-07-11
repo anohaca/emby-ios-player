@@ -72,6 +72,7 @@ struct PosterButton<Item: Poster>: View {
     private let item: Item
     private let imageMaxWidth: CGFloat?
     private let usesContextMenuPreview: Bool
+    private let forcesUnplayedCount: Bool
     private let type: PosterDisplayType
     private let label: any View
     private let action: (Namespace.ID) -> Void
@@ -136,7 +137,7 @@ struct PosterButton<Item: Poster>: View {
     var body: some View {
         contextMenuView(Group {
             let overlay = posterOverlayRegistry?(item) ??
-                PosterButton.DefaultOverlay(item: item)
+                PosterButton.DefaultOverlay(item: item, forcesUnplayedCount: forcesUnplayedCount)
                 .eraseToAnyView()
 
             if let posterAction {
@@ -174,6 +175,7 @@ extension PosterButton {
         type: PosterDisplayType,
         imageMaxWidth: CGFloat? = nil,
         usesContextMenuPreview: Bool = true,
+        forcesUnplayedCount: Bool = false,
         posterAction: ((Namespace.ID) -> Void)? = nil,
         action: @escaping (Namespace.ID) -> Void,
         @ViewBuilder label: @escaping () -> any View
@@ -181,6 +183,7 @@ extension PosterButton {
         self.item = item
         self.imageMaxWidth = imageMaxWidth
         self.usesContextMenuPreview = usesContextMenuPreview
+        self.forcesUnplayedCount = forcesUnplayedCount
         self.type = type
         self.action = action
         self.posterAction = posterAction
@@ -375,6 +378,21 @@ extension PosterButton {
         private var showPlayed
 
         let item: Item
+        var forcesUnplayedCount = false
+
+        private var unplayedCount: Int? {
+            guard let item = item as? BaseItemDto else { return nil }
+            if let count = item.userData?.unplayedItemCount {
+                return count > 0 ? count : nil
+            }
+            guard forcesUnplayedCount else { return nil }
+            switch item.type {
+            case .episode, .movie, .video:
+                return 1
+            default:
+                return nil
+            }
+        }
 
         var body: some View {
             ZStack {
@@ -388,12 +406,13 @@ extension PosterButton {
                                 .isVisible(showProgress)
                         } else if item.canBePlayed,
                                   !item.isLiveStream,
-                                  showUnplayed != .none
+                                  showUnplayed != .none,
+                                  !forcesUnplayedCount || unplayedCount != nil
                         {
                             UnwatchedIndicator(
                                 size: 25,
                                 count:
-                                showUnplayed == .count ? item.userData?.unplayedItemCount : nil
+                                showUnplayed == .count || forcesUnplayedCount ? unplayedCount : nil
                             )
                             .foregroundStyle(accentColor.overlayColor, accentColor)
                         }

@@ -279,6 +279,18 @@ private extension Defaults.Keys {
     static func UserKey<Value: Defaults.Serializable>(_ name: String, default: Value) -> Key<Value> {
         Key(name, default: `default`, suite: .appSuite)
     }
+
+    static func CurrentUserKey<Value: Defaults.Serializable>(_ name: String, default: Value) -> Key<Value> {
+        let ownerID: String
+        switch Defaults[.lastSignedInUserID] {
+        case .signedOut:
+            ownerID = "default"
+        case let .signedIn(userID):
+            ownerID = userID
+        }
+
+        return Key("\(ownerID).\(name)", default: `default`, suite: .appSuite)
+    }
 }
 
 // MARK: App
@@ -528,19 +540,19 @@ extension Defaults.Keys {
 
         enum Home {
             static var sectionOrder: Key<[String]> {
-                UserKey("homeSectionOrder", default: [])
+                CurrentUserKey("homeSectionOrder", default: [])
             }
 
             static var hiddenSectionIDs: Key<[String]> {
-                UserKey("homeHiddenSectionIDs", default: [])
+                CurrentUserKey("homeHiddenSectionIDs", default: [])
             }
 
             static var showRecentlyAdded: Key<Bool> {
-                UserKey("showRecentlyAdded", default: true)
+                CurrentUserKey("showRecentlyAdded", default: true)
             }
 
             static var showContinueWatching: Key<Bool> {
-                UserKey("homeShowContinueWatching", default: false)
+                CurrentUserKey("homeShowContinueWatching", default: false)
             }
 
             static var resumeNextUp: Key<Bool> {

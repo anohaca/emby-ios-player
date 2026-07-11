@@ -180,6 +180,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private var didScheduleDeferredStop = false
     private var didStopPlayback = false
     private var didShutdownForDismissal = false
+    private var isManuallyAdvancingItem = false
     private var isWaitingForFirstVideoFrame = true
     private var bufferingIndicatorVisible = false
     private var bufferingIndicatorVisibilityGeneration = 0
@@ -1797,7 +1798,8 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                 default: Defaults[.VideoPlayer.skipIntroSeconds]
             )
         )
-        let shouldHide = !Defaults[.VideoPlayer.showSkipIntroButton]
+        let shouldHide = isManuallyAdvancingItem
+            || !Defaults[.VideoPlayer.showSkipIntroButton]
             || SkipIntroDismissalStore.contains(item: item)
         controlsView.setSkipIntroDismissed(shouldHide)
     }
@@ -1912,6 +1914,11 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                 #endif
                 self.revealVideoSurfaceForPlayback()
                 self.isBuffering.value = false
+                if self.isManuallyAdvancingItem {
+                    self.isManuallyAdvancingItem = false
+                    self.hidePlaybackChromeForNewItem()
+                    self.updateSkipIntroButtonVisibility(for: self.manager?.item)
+                }
             }
         }
 
@@ -1973,6 +1980,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             Task { @MainActor in
                 guard let self else { return }
                 guard !self.didRequestClose else { return }
+                guard !self.isManuallyAdvancingItem else { return }
                 UIApplication.shared.isIdleTimerDisabled = false
                 self.controlsView.suppressPausedIndicatorTemporarily()
                 self.controlsView.setPaused(true)
@@ -2780,8 +2788,9 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         }
 
         controlsView.suppressPausedIndicatorTemporarily()
-        manager?.playNewItem(provider: provider)
+        isManuallyAdvancingItem = true
         hidePlaybackChromeForNewItem()
+        manager?.playNewItem(provider: provider)
     }
 
     private func toggleEpisodeList() {

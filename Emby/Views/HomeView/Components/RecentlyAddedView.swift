@@ -38,7 +38,7 @@ extension HomeView {
                             // Give a new view model becaues we don't want to
                             // keep paginated items on the home view model
                             let viewModel = RecentlyAddedLibraryViewModel()
-                            router.route(to: .library(viewModel: viewModel))
+                            router.route(to: .library(viewModel: viewModel, forcesUnplayedCount: true))
                         }
                 }
             }

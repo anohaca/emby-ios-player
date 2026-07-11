@@ -142,6 +142,8 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private let seekForwardButton = UIButton(type: .system)
     private let leftSkipIntroButton = UIButton(type: .system)
     private let rightSkipIntroButton = UIButton(type: .system)
+    private let leftEndNextEpisodeButton = UIButton(type: .system)
+    private let endNextEpisodeButton = UIButton(type: .system)
     private let nextEpisodeButton = UIButton(type: .system)
     private let speedButton = UIButton(type: .system)
     private let tracksButton = UIButton(type: .system)
@@ -182,6 +184,9 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private var skipIntroAdjustmentPausedPlayback = false
     private var skipIntroAdjustmentShouldResumePlayback = false
     private var skipIntroAdjustmentCommitWorkItem: DispatchWorkItem?
+    private var canShowEndNextEpisode = false
+    private var endNextEpisodeAvailable = false
+    private var endNextEpisodeVisible = false
     private var pausedIndicatorHideWorkItem: DispatchWorkItem?
     private var pausedIndicatorVisibilityGeneration = 0
     private var pausedIndicatorSuppressedUntil: Date?
@@ -266,6 +271,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         slider.maximumValue = Float(max(duration, 1))
         slider.value = Float(min(max(time, 0), max(duration, 1)))
         updateCacheProgress()
+        updateEndNextEpisodeVisibility(time: time, duration: duration)
     }
 
     private func updateCacheProgress() {
@@ -286,26 +292,36 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         if !effectiveHidden {
             topBar.isHidden = false
             bottomBar.isHidden = false
-            skipIntroStack.isHidden = skipIntroButtonsDismissed
+            skipIntroStack.isHidden = skipIntroButtonsDismissed || endNextEpisodeVisible
+            endNextEpisodeButton.isHidden = !endNextEpisodeVisible
+            leftEndNextEpisodeButton.isHidden = !endNextEpisodeVisible
             topBar.isUserInteractionEnabled = true
             bottomBar.isUserInteractionEnabled = true
-            skipIntroStack.isUserInteractionEnabled = !skipIntroButtonsDismissed
+            skipIntroStack.isUserInteractionEnabled = !skipIntroButtonsDismissed && !endNextEpisodeVisible
+            endNextEpisodeButton.isUserInteractionEnabled = endNextEpisodeVisible
+            leftEndNextEpisodeButton.isUserInteractionEnabled = endNextEpisodeVisible
         }
 
         let changes = {
             self.topBar.alpha = effectiveHidden ? 0 : 1
             self.bottomBar.alpha = effectiveHidden ? 0 : 1
-            self.skipIntroStack.alpha = effectiveHidden || self.skipIntroButtonsDismissed ? 0 : 1
+            self.skipIntroStack.alpha = effectiveHidden || self.skipIntroButtonsDismissed || self.endNextEpisodeVisible ? 0 : 1
+            self.endNextEpisodeButton.alpha = effectiveHidden || !self.endNextEpisodeVisible ? 0 : 1
+            self.leftEndNextEpisodeButton.alpha = effectiveHidden || !self.endNextEpisodeVisible ? 0 : 1
         }
 
         let completion: (Bool) -> Void = { [weak self] _ in
             guard let self, self.controlsVisibilityGeneration == generation else { return }
             self.topBar.isHidden = effectiveHidden
             self.bottomBar.isHidden = effectiveHidden
-            self.skipIntroStack.isHidden = effectiveHidden || self.skipIntroButtonsDismissed
+            self.skipIntroStack.isHidden = effectiveHidden || self.skipIntroButtonsDismissed || self.endNextEpisodeVisible
+            self.endNextEpisodeButton.isHidden = effectiveHidden || !self.endNextEpisodeVisible
+            self.leftEndNextEpisodeButton.isHidden = effectiveHidden || !self.endNextEpisodeVisible
             self.topBar.isUserInteractionEnabled = !effectiveHidden
             self.bottomBar.isUserInteractionEnabled = !effectiveHidden
-            self.skipIntroStack.isUserInteractionEnabled = !effectiveHidden && !self.skipIntroButtonsDismissed
+            self.skipIntroStack.isUserInteractionEnabled = !effectiveHidden && !self.skipIntroButtonsDismissed && !self.endNextEpisodeVisible
+            self.endNextEpisodeButton.isUserInteractionEnabled = !effectiveHidden && self.endNextEpisodeVisible
+            self.leftEndNextEpisodeButton.isUserInteractionEnabled = !effectiveHidden && self.endNextEpisodeVisible
         }
 
         if animated {
@@ -474,6 +490,31 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         setNavigationButton(previousEpisodeButton, enabled: canGoPrevious)
         setNavigationButton(nextEpisodeButton, enabled: canGoNext)
         setNavigationButton(episodeListButton, enabled: canShowEpisodeList)
+        endNextEpisodeAvailable = canGoNext
+        canShowEndNextEpisode = canShowEpisodeList
+        updateEndNextEpisodeVisibility(time: Double(slider.value), duration: mediaDuration)
+    }
+
+    private func updateEndNextEpisodeVisibility(time: Double, duration: Double) {
+        let remaining = duration - time
+        let visible = canShowEndNextEpisode &&
+            endNextEpisodeAvailable &&
+            duration > 0 &&
+            remaining >= 0 &&
+            remaining <= 180
+
+        guard endNextEpisodeVisible != visible else { return }
+        endNextEpisodeVisible = visible
+
+        skipIntroStack.alpha = areControlsHidden || skipIntroButtonsDismissed || visible ? 0 : 1
+        skipIntroStack.isHidden = areControlsHidden || skipIntroButtonsDismissed || visible
+        skipIntroStack.isUserInteractionEnabled = !areControlsHidden && !skipIntroButtonsDismissed && !visible
+        endNextEpisodeButton.alpha = areControlsHidden || !visible ? 0 : 1
+        endNextEpisodeButton.isHidden = areControlsHidden || !visible
+        endNextEpisodeButton.isUserInteractionEnabled = !areControlsHidden && visible
+        leftEndNextEpisodeButton.alpha = areControlsHidden || !visible ? 0 : 1
+        leftEndNextEpisodeButton.isHidden = areControlsHidden || !visible
+        leftEndNextEpisodeButton.isUserInteractionEnabled = !areControlsHidden && visible
     }
 
     func updateTitle(_ title: String, subtitle: String?) {
@@ -674,6 +715,16 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         )
         configureSkipIntroButton(leftSkipIntroButton)
         configureSkipIntroButton(rightSkipIntroButton)
+        configureSkipIntroButton(endNextEpisodeButton)
+        setSkipIntroTitle("下一集", for: endNextEpisodeButton)
+        endNextEpisodeButton.accessibilityLabel = "下一集"
+        endNextEpisodeButton.alpha = 0
+        endNextEpisodeButton.isHidden = true
+        configureSkipIntroButton(leftEndNextEpisodeButton)
+        setSkipIntroTitle("下一集", for: leftEndNextEpisodeButton)
+        leftEndNextEpisodeButton.accessibilityLabel = "下一集"
+        leftEndNextEpisodeButton.alpha = 0
+        leftEndNextEpisodeButton.isHidden = true
         configureButton(
             nextEpisodeButton,
             symbol: "forward.end.fill",
@@ -721,6 +772,8 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         seekForwardButton.addTarget(self, action: #selector(seekForwardTapped), for: .touchUpInside)
         leftSkipIntroButton.addTarget(self, action: #selector(skipIntroTapped(_:)), for: .touchUpInside)
         rightSkipIntroButton.addTarget(self, action: #selector(skipIntroTapped(_:)), for: .touchUpInside)
+        endNextEpisodeButton.addTarget(self, action: #selector(nextEpisodeTapped), for: .touchUpInside)
+        leftEndNextEpisodeButton.addTarget(self, action: #selector(nextEpisodeTapped), for: .touchUpInside)
         nextEpisodeButton.addTarget(self, action: #selector(nextEpisodeTapped), for: .touchUpInside)
         episodeListButton.addTarget(self, action: #selector(episodeListTapped), for: .touchUpInside)
         configureOpenMenu()
@@ -851,6 +904,10 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         bottomStack.spacing = 8
         bottomStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(skipIntroStack)
+        addSubview(endNextEpisodeButton)
+        addSubview(leftEndNextEpisodeButton)
+        endNextEpisodeButton.translatesAutoresizingMaskIntoConstraints = false
+        leftEndNextEpisodeButton.translatesAutoresizingMaskIntoConstraints = false
         bottomBar.contentView.addSubview(bottomStack)
 
         let gestureHUDCenterYConstraint = gestureHUDView.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -24)
@@ -903,6 +960,10 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             skipIntroStack.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor, constant: 12),
             skipIntroStack.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor, constant: -12),
             skipIntroStack.bottomAnchor.constraint(equalTo: bottomBar.topAnchor, constant: -8),
+            endNextEpisodeButton.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor, constant: -12),
+            endNextEpisodeButton.bottomAnchor.constraint(equalTo: bottomBar.topAnchor, constant: -8),
+            leftEndNextEpisodeButton.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor, constant: 12),
+            leftEndNextEpisodeButton.bottomAnchor.constraint(equalTo: bottomBar.topAnchor, constant: -8),
             bottomStack.leadingAnchor.constraint(equalTo: bottomBar.contentView.leadingAnchor, constant: 12),
             bottomStack.trailingAnchor.constraint(equalTo: bottomBar.contentView.trailingAnchor, constant: -12),
             bottomStack.topAnchor.constraint(equalTo: bottomBar.contentView.topAnchor, constant: 10),
@@ -912,6 +973,10 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             leftSkipIntroButton.heightAnchor.constraint(equalToConstant: 32),
             rightSkipIntroButton.widthAnchor.constraint(equalToConstant: 96),
             rightSkipIntroButton.heightAnchor.constraint(equalToConstant: 32),
+            endNextEpisodeButton.widthAnchor.constraint(equalToConstant: 96),
+            endNextEpisodeButton.heightAnchor.constraint(equalToConstant: 32),
+            leftEndNextEpisodeButton.widthAnchor.constraint(equalToConstant: 96),
+            leftEndNextEpisodeButton.heightAnchor.constraint(equalToConstant: 32),
             timelineStack.heightAnchor.constraint(equalToConstant: 30),
             sliderContainer.heightAnchor.constraint(equalToConstant: 30),
             slider.leadingAnchor.constraint(equalTo: sliderContainer.leadingAnchor),

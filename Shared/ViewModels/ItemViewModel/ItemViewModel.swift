@@ -305,6 +305,11 @@ class ItemViewModel: ViewModel, Stateful {
                 let beforeIsPlayed = item.userData?.isPlayed ?? false
                 let newIsPlayed = !beforeIsPlayed
                 SkipIntroDismissalStore.reset(for: item)
+                if let seriesViewModel = self as? SeriesItemViewModel {
+                    for season in seriesViewModel.seasons {
+                        SkipIntroDismissalStore.reset(seasonID: season.id)
+                    }
+                }
 
                 await MainActor.run {
                     item = HomeItemUserDataOverrideStore.applyingPlayedState(newIsPlayed, to: item)

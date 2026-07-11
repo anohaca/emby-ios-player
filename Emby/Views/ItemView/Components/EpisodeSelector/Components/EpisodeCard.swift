@@ -155,11 +155,21 @@ extension SeriesEpisodeSelector {
                         )
                     )
                 } label: {
-                    ImageView(episode.imageSource(.primary, maxWidth: 250))
-                        .failure {
-                            SystemImageContentView(systemName: episode.systemImage)
+                    Rectangle()
+                        .fill(.complexSecondary)
+                        .overlay {
+                            ImageView(episode.imageSource(.primary, maxWidth: 250))
+                                .image { image in
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                }
+                                .failure {
+                                    SystemImageContentView(systemName: episode.systemImage)
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .clipped()
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .overlay {
                             overlayView
                         }

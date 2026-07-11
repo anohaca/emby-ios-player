@@ -3069,6 +3069,11 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             return
         }
 
+        if controlsView.commitSkipIntroAdjustmentIfNeeded() {
+            hideControls()
+            return
+        }
+
         if isEpisodeListVisible {
             setEpisodeListVisible(false, animated: true)
             return
@@ -3532,6 +3537,10 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private func handleLongPressSpeedGesture(state: UIGestureRecognizer.State) {
         switch state {
         case .began:
+            if controlsView.commitSkipIntroAdjustmentIfNeeded() {
+                hideControls(animated: true)
+                return
+            }
             guard longPressSpeedRestoreValue == nil else { return }
             guard !player.isPaused else { return }
             let restoreSpeed = player.playbackSpeed

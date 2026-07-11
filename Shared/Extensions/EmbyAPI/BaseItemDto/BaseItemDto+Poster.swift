@@ -139,22 +139,24 @@ extension BaseItemDto: Poster {
             [imageSource(.primary, maxWidth: maxWidth, quality: quality)]
         case .video:
             [
+                imageSource(.backdrop, maxWidth: maxWidth, quality: quality),
                 imageSource(.thumb, maxWidth: maxWidth, quality: quality),
                 imageSource(.screenshot, maxWidth: maxWidth, quality: quality),
-                imageSource(.backdrop, maxWidth: maxWidth, quality: quality),
                 imageSource(.primary, maxWidth: maxWidth, quality: quality),
             ]
         case .series:
             [
-                imageSource(.thumb, maxWidth: maxWidth, quality: quality),
                 imageSource(.backdrop, maxWidth: maxWidth, quality: quality),
+                imageSource(.thumb, maxWidth: maxWidth, quality: quality),
+                imageSource(.screenshot, maxWidth: maxWidth, quality: quality),
                 parentPrimaryImageSource(maxWidth: maxWidth, quality: quality),
                 imageSource(.primary, maxWidth: maxWidth, quality: quality),
             ]
         default:
             [
-                imageSource(.thumb, maxWidth: maxWidth, quality: quality),
                 imageSource(.backdrop, maxWidth: maxWidth, quality: quality),
+                imageSource(.thumb, maxWidth: maxWidth, quality: quality),
+                imageSource(.screenshot, maxWidth: maxWidth, quality: quality),
                 imageSource(.primary, maxWidth: maxWidth, quality: quality),
             ]
         }

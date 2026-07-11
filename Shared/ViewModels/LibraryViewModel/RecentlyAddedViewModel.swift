@@ -61,10 +61,42 @@ final class RecentlyAddedLibraryViewModel: PagingLibraryViewModel<BaseItemDto> {
             items: response.items ?? [],
             limit: cumulativeLimit
         )
+        let hydratedItems = try await hydratingSeriesUserData(in: updatedItems)
 
-        guard pageStart < updatedItems.count else { return [] }
+        guard pageStart < hydratedItems.count else { return [] }
 
-        return await addingChildImageFallbacks(to: Array(updatedItems.dropFirst(pageStart).prefix(pageSize)))
+        return await addingChildImageFallbacks(to: Array(hydratedItems.dropFirst(pageStart).prefix(pageSize)))
+    }
+
+    private func hydratingSeriesUserData(in items: [BaseItemDto]) async throws -> [BaseItemDto] {
+        let seriesIDs = Array(Set(items.compactMap { item in
+            item.type == .series ? item.id : nil
+        }))
+        guard seriesIDs.isNotEmpty else { return items }
+
+        var parameters = EmbyPortItemsParameters()
+        parameters.enableUserData = true
+        parameters.fields = .MinimumFields
+        parameters.ids = seriesIDs
+        parameters.includeItemTypes = [.series]
+
+        let response: EmbyPortItemsResponse<BaseItemDto> = try await userSession.embyClient.items(
+            parameters,
+            as: EmbyPortItemsResponse<BaseItemDto>.self
+        )
+        let userDataByID: [String: UserItemDataDto] = Dictionary(
+            uniqueKeysWithValues: (response.items ?? []).compactMap { item in
+                guard let id = item.id, let userData = item.userData else { return nil }
+                return (id, userData)
+            }
+        )
+
+        return items.map { item in
+            guard let id = item.id, let userData = userDataByID[id] else { return item }
+            var hydratedItem = item
+            hydratedItem.userData = userData
+            return hydratedItem
+        }
     }
 
     private func recentlyUpdatedParameters(limit: Int) -> EmbyPortItemsParameters {

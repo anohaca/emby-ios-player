@@ -311,6 +311,21 @@ extension PosterButton {
             displayState.value(for: item)
         }
 
+        private var forcedUnplayedCount: Int? {
+            if let count = userData.unplayedItemCount {
+                return count > 0 ? count : nil
+            }
+
+            guard forcesUnplayedCount else { return nil }
+
+            switch item.type {
+            case .episode, .movie, .video:
+                return 1
+            default:
+                return nil
+            }
+        }
+
         var body: some View {
             ZStack {
                 if item.canBePlayed, !item.isLiveStream, userData.isPlayed {
@@ -322,13 +337,14 @@ extension PosterButton {
                             .isVisible(showProgress)
                     } else if item.canBePlayed,
                               !item.isLiveStream,
-                              showUnplayed != .none
+                              showUnplayed != .none,
+                              !forcesUnplayedCount || forcedUnplayedCount != nil
                     {
                         UnwatchedIndicator(
                             size: 25,
                             count:
                             showUnplayed == .count || forcesUnplayedCount
-                                ? (userData.unplayedItemCount ?? (forcesUnplayedCount ? 1 : nil))
+                                ? forcedUnplayedCount
                                 : nil
                         )
                         .foregroundStyle(accentColor.overlayColor, accentColor)

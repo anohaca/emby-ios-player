@@ -64,11 +64,21 @@ enum SkipIntroDismissalStore {
             return
         }
 
+        reset(scopeID: scopeID, itemID: item?.id)
+    }
+
+    static func reset(seasonID: String?) {
+        guard let seasonID, !seasonID.isEmpty else { return }
+        reset(scopeID: "season:\(seasonID)", itemID: nil)
+    }
+
+    private static func reset(scopeID: String, itemID: String?) {
+
         var currentGenerationByScopeID = generationByScopeID()
         currentGenerationByScopeID[scopeID] = (currentGenerationByScopeID[scopeID] ?? 0) + 1
         UserDefaults.standard.set(currentGenerationByScopeID, forKey: generationByScopeIDKey)
 
-        if let itemID = item?.id {
+        if let itemID {
             setDismissed(false, itemID: itemID)
         }
     }

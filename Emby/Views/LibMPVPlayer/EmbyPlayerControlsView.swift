@@ -518,6 +518,13 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         skipIntroAdjustmentActive
     }
 
+    @discardableResult
+    func commitSkipIntroAdjustmentIfNeeded() -> Bool {
+        guard skipIntroAdjustmentActive else { return false }
+        commitSkipIntroAdjustment()
+        return true
+    }
+
     var subtitleAdjustmentPanelVisibleForSmoke: Bool {
         !subtitleAdjustmentPanel.isHidden && subtitleAdjustmentPanel.alpha > 0.01
     }

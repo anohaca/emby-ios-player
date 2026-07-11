@@ -61,9 +61,9 @@ extension MediaView {
 
         private static func fallbackImageSources(for mediaType: MediaViewModel.MediaType) -> [ImageSource] {
             if case let MediaViewModel.MediaType.collectionFolder(item) = mediaType {
-                return [item.imageSource(.primary, maxWidth: 500)]
+                return item.cinematicImageSources(maxWidth: 500, quality: 90)
             } else if case let MediaViewModel.MediaType.liveTV(item) = mediaType {
-                return [item.imageSource(.primary, maxWidth: 500)]
+                return item.cinematicImageSources(maxWidth: 500, quality: 90)
             }
 
             return []
@@ -132,7 +132,8 @@ extension MediaView {
                         ImageView(imageSources)
                             .image { image in
                                 let croppedImage = image
-                                    .scaledToFill()
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
 
                                 if useTitleLabel {
                                     titleLabelOverlay(with: croppedImage)

@@ -62,6 +62,14 @@ extension ItemView {
                 }
 
                 ItemView.AboutView(viewModel: viewModel)
+
+                if let sources = viewModel.item.mediaSources, sources.isNotEmpty {
+                    ItemView.MediaInformationSection(
+                        sources: sources,
+                        selectedSubtitleStreamIndex: viewModel.selectedSubtitleStreamIndex,
+                        selectedSubtitleRequiredFonts: viewModel.selectedSubtitleRequiredFonts
+                    )
+                }
             }
         }
     }

@@ -149,6 +149,10 @@ struct VideoPlayerSettingsView: View {
 
             Section {
                 Toggle("繁体字幕转简体", isOn: $convertTraditionalChineseSubtitles)
+
+                ChevronButton("字幕字体") {
+                    router.route(to: .subtitleFontSettings)
+                }
             } header: {
                 Text("字幕兼容")
             } footer: {

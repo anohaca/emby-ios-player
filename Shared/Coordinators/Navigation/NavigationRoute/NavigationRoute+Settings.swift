@@ -278,4 +278,12 @@ extension NavigationRoute {
             VideoPlayerSettingsView()
         }
     }
+
+    static var subtitleFontSettings: NavigationRoute {
+        NavigationRoute(
+            id: "subtitleFontSettings"
+        ) {
+            SubtitleFontSettingsView()
+        }
+    }
 }

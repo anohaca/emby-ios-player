@@ -74,6 +74,8 @@ class ItemViewModel: ViewModel, Stateful {
     @Published
     private(set) var selectedSubtitleStreamIndex: Int?
     @Published
+    private(set) var selectedSubtitleRequiredFonts: [String] = []
+    @Published
     private(set) var similarItems: [BaseItemDto] = []
     @Published
     private(set) var specialFeatures: [BaseItemDto] = []
@@ -104,6 +106,7 @@ class ItemViewModel: ViewModel, Stateful {
     private var toggleIsFavoriteTask: AnyCancellable?
     private var toggleIsPlayedTask: AnyCancellable?
     private var refreshTask: AnyCancellable?
+    private var subtitleRequiredFontsTask: AnyCancellable?
 
     // MARK: init
 
@@ -371,6 +374,7 @@ class ItemViewModel: ViewModel, Stateful {
         case let .selectSubtitleStream(index):
 
             selectedSubtitleStreamIndex = index
+            resolveSelectedSubtitleRequiredFonts()
 
             return state
         }
@@ -384,6 +388,7 @@ class ItemViewModel: ViewModel, Stateful {
     private func applyDefaultTrackSelection() {
         selectedAudioStreamIndex = MediaTrackDefaults.selectedAudioStreamIndex(in: selectedMediaSource)
         selectedSubtitleStreamIndex = MediaTrackDefaults.selectedSubtitleStreamIndex(in: selectedMediaSource)
+        resolveSelectedSubtitleRequiredFonts()
 
         #if DEBUG
         let audioTitle = selectedMediaSource?.audioStreams?.first { $0.index == selectedAudioStreamIndex }?.displayTitle ?? "<nil>"
@@ -465,6 +470,105 @@ class ItemViewModel: ViewModel, Stateful {
         )
 
         return response?.items ?? []
+    }
+
+    private func resolveSelectedSubtitleRequiredFonts() {
+        subtitleRequiredFontsTask?.cancel()
+        selectedSubtitleRequiredFonts = []
+
+        guard let itemID = item.id,
+              let source = selectedMediaSource,
+              let sourceID = source.id,
+              let selectedSubtitleStreamIndex,
+              selectedSubtitleStreamIndex >= 0,
+              let stream = source.subtitleStreams?.first(where: { $0.index == selectedSubtitleStreamIndex }),
+              let streamIndex = stream.index,
+              ["ass", "ssa"].contains(stream.codec?.lowercased() ?? "")
+        else { return }
+
+        let client = userSession.embyClient
+        subtitleRequiredFontsTask = Task { [weak self] in
+            let urls: [URL]
+            if stream.isExternal == true,
+               let deliveryURL = stream.deliveryURL,
+               let url = client.absoluteURL(forPathOrURL: deliveryURL) {
+                urls = [url]
+            } else {
+                urls = client.subtitleStreamURLs(
+                    itemID: itemID,
+                    mediaSourceID: sourceID,
+                    streamIndex: streamIndex,
+                    format: stream.codec?.lowercased() == "ssa" ? "ssa" : "ass"
+                )
+            }
+
+            for url in urls {
+                guard !Task.isCancelled,
+                      let data = try? await client.data(from: url),
+                      let text = Self.subtitleText(from: data)
+                else { continue }
+
+                let fonts = Self.requiredFonts(in: text)
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self?.selectedSubtitleRequiredFonts = fonts
+                }
+                return
+            }
+        }
+        .asAnyCancellable()
+    }
+
+    private static func subtitleText(from data: Data) -> String? {
+        String(data: data, encoding: .utf8) ??
+            String(data: data, encoding: .utf16) ??
+            String(data: data, encoding: .unicode)
+    }
+
+    private static func requiredFonts(in subtitle: String) -> [String] {
+        var fonts: [String] = []
+        var fontNameColumn: Int?
+        var inStyleSection = false
+
+        for rawLine in subtitle.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            if line.hasPrefix("[") {
+                inStyleSection = line.caseInsensitiveCompare("[V4+ Styles]") == .orderedSame ||
+                    line.caseInsensitiveCompare("[V4 Styles]") == .orderedSame
+                fontNameColumn = nil
+                continue
+            }
+            guard inStyleSection else { continue }
+
+            if line.lowercased().hasPrefix("format:") {
+                let columns = line.dropFirst("format:".count).split(separator: ",")
+                fontNameColumn = columns.firstIndex {
+                    $0.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare("Fontname") == .orderedSame
+                }
+            } else if line.lowercased().hasPrefix("style:"), let fontNameColumn {
+                let values = line.dropFirst("style:".count).split(separator: ",", omittingEmptySubsequences: false)
+                if values.indices.contains(fontNameColumn) {
+                    appendFont(String(values[fontNameColumn]), to: &fonts)
+                }
+            }
+        }
+
+        let pattern = #"\\fn([^\\}\r\n]+)"#
+        if let regex = try? NSRegularExpression(pattern: pattern) {
+            let range = NSRange(subtitle.startIndex..., in: subtitle)
+            for match in regex.matches(in: subtitle, range: range) where match.numberOfRanges > 1 {
+                guard let matchRange = Range(match.range(at: 1), in: subtitle) else { continue }
+                appendFont(String(subtitle[matchRange]), to: &fonts)
+            }
+        }
+
+        return fonts
+    }
+
+    private static func appendFont(_ rawFont: String, to fonts: inout [String]) {
+        let font = rawFont.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !font.isEmpty, !fonts.contains(where: { $0.caseInsensitiveCompare(font) == .orderedSame }) else { return }
+        fonts.append(font)
     }
 
     private func applyingUserDataOverrides(to item: BaseItemDto) -> BaseItemDto {

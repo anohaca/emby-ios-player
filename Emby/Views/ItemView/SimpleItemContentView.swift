@@ -47,6 +47,10 @@ extension ItemView {
                     ItemView.CastAndCrewHStack(people: castAndCrew)
                 }
 
+                if viewModel.containingCollections.isNotEmpty {
+                    ItemView.ContainingCollectionsHStack(items: viewModel.containingCollections)
+                }
+
                 ItemView.AboutView(viewModel: viewModel)
             }
         }

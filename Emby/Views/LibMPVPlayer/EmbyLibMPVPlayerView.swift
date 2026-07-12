@@ -348,6 +348,10 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             backward: Defaults[.VideoPlayer.jumpBackwardInterval],
             forward: Defaults[.VideoPlayer.jumpForwardInterval]
         )
+        controlsView.updateEndNextEpisodeSettings(
+            enabled: Defaults[.VideoPlayer.showEndNextEpisodeButton],
+            countdownSeconds: Defaults[.VideoPlayer.endNextEpisodeCountdownSeconds]
+        )
         installGestures()
         updateEpisodeNavigation()
         NotificationCenter.default.addObserver(

@@ -51,6 +51,10 @@ extension ItemView {
                     ItemView.SpecialFeaturesHStack(items: viewModel.specialFeatures)
                 }
 
+                if viewModel.containingCollections.isNotEmpty {
+                    ItemView.ContainingCollectionsHStack(items: viewModel.containingCollections)
+                }
+
                 // MARK: Similar
 
                 if viewModel.similarItems.isNotEmpty {

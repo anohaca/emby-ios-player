@@ -81,6 +81,8 @@ class ItemViewModel: ViewModel, Stateful {
     private(set) var localTrailers: [BaseItemDto] = []
     @Published
     private(set) var additionalParts: [BaseItemDto] = []
+    @Published
+    private(set) var containingCollections: [BaseItemDto] = []
 
     @Published
     var backgroundStates: Set<BackgroundState> = []
@@ -159,6 +161,7 @@ class ItemViewModel: ViewModel, Stateful {
                     async let similarItems = getSimilarItems()
                     async let specialFeatures = getSpecialFeatures()
                     async let localTrailers = getLocalTrailers()
+                    async let containingCollections = getContainingCollections()
 
                     let refreshedItem = try await fullItem
                     guard !Task.isCancelled else { return }
@@ -173,7 +176,8 @@ class ItemViewModel: ViewModel, Stateful {
                     let results = try await (
                         similarItems: similarItems,
                         specialFeatures: specialFeatures,
-                        localTrailers: localTrailers
+                        localTrailers: localTrailers,
+                        containingCollections: containingCollections
                     )
                     guard !Task.isCancelled else { return }
 
@@ -189,6 +193,10 @@ class ItemViewModel: ViewModel, Stateful {
 
                         if !results.localTrailers.elementsEqual(self.localTrailers, by: { $0.id == $1.id }) {
                             self.localTrailers = results.localTrailers
+                        }
+
+                        if !results.containingCollections.elementsEqual(self.containingCollections, by: { $0.id == $1.id }) {
+                            self.containingCollections = results.containingCollections
                         }
                     }
                 } catch {
@@ -220,13 +228,15 @@ class ItemViewModel: ViewModel, Stateful {
                     async let specialFeatures = getSpecialFeatures()
                     async let localTrailers = getLocalTrailers()
                     async let additionalParts = getAdditionalParts()
+                    async let containingCollections = getContainingCollections()
 
                     let results = try await (
                         fullItem: fullItem,
                         similarItems: similarItems,
                         specialFeatures: specialFeatures,
                         localTrailers: localTrailers,
-                        additionalParts: additionalParts
+                        additionalParts: additionalParts,
+                        containingCollections: containingCollections
                     )
 
                     guard !Task.isCancelled else { return }
@@ -238,6 +248,7 @@ class ItemViewModel: ViewModel, Stateful {
                         self.specialFeatures = results.specialFeatures
                         self.localTrailers = results.localTrailers
                         self.additionalParts = results.additionalParts
+                        self.containingCollections = results.containingCollections
 
                         self.state = .content
                     }
@@ -433,6 +444,23 @@ class ItemViewModel: ViewModel, Stateful {
 
         let response: EmbyPortItemsResponse<BaseItemDto>? = try? await userSession.embyClient.additionalParts(
             itemID: itemID,
+            as: EmbyPortItemsResponse<BaseItemDto>.self
+        )
+
+        return response?.items ?? []
+    }
+
+    private func getContainingCollections() async -> [BaseItemDto] {
+        guard item.type != .boxSet, let itemID = item.id else { return [] }
+
+        let response: EmbyPortItemsResponse<BaseItemDto>? = try? await userSession.embyClient.items(
+            queryItems: [
+                URLQueryItem(name: "Recursive", value: "true"),
+                URLQueryItem(name: "IncludeItemTypes", value: BaseItemKind.boxSet.rawValue),
+                URLQueryItem(name: "ListItemIds", value: itemID),
+                URLQueryItem(name: "EnableImages", value: "true"),
+                URLQueryItem(name: "Fields", value: "PrimaryImageAspectRatio,Overview"),
+            ],
             as: EmbyPortItemsResponse<BaseItemDto>.self
         )
 

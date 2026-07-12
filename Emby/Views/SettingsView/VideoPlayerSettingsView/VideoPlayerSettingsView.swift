@@ -20,6 +20,10 @@ struct VideoPlayerSettingsView: View {
 
     @Default(.VideoPlayer.skipIntroSeconds)
     private var skipIntroSeconds
+    @Default(.VideoPlayer.showEndNextEpisodeButton)
+    private var showEndNextEpisodeButton
+    @Default(.VideoPlayer.endNextEpisodeCountdownSeconds)
+    private var endNextEpisodeCountdownSeconds
     @Default(.VideoPlayer.resumeOffset)
     private var resumeOffset
     @Default(.VideoPlayer.Playback.playbackRate)
@@ -118,6 +122,13 @@ struct VideoPlayerSettingsView: View {
                     }
                 }
                 .disabled(!showSkipIntroButton)
+                Toggle("显示片尾下一集按钮", isOn: $showEndNextEpisodeButton)
+                Stepper(value: $endNextEpisodeCountdownSeconds, in: 10 ... 600, step: 10) {
+                    LabeledContent("下一集按钮出现时间") {
+                        Text("倒数 \(endNextEpisodeCountdownSeconds) 秒")
+                    }
+                }
+                .disabled(!showEndNextEpisodeButton)
             }
 
             Section {

@@ -187,6 +187,8 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private var canShowEndNextEpisode = false
     private var endNextEpisodeAvailable = false
     private var endNextEpisodeVisible = false
+    private var endNextEpisodeEnabled = true
+    private var endNextEpisodeCountdownSeconds = 180.0
     private var pausedIndicatorHideWorkItem: DispatchWorkItem?
     private var pausedIndicatorVisibilityGeneration = 0
     private var pausedIndicatorSuppressedUntil: Date?
@@ -495,13 +497,20 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         updateEndNextEpisodeVisibility(time: Double(slider.value), duration: mediaDuration)
     }
 
+    func updateEndNextEpisodeSettings(enabled: Bool, countdownSeconds: Int) {
+        endNextEpisodeEnabled = enabled
+        endNextEpisodeCountdownSeconds = Double(min(max(countdownSeconds, 10), 600))
+        updateEndNextEpisodeVisibility(time: Double(slider.value), duration: mediaDuration)
+    }
+
     private func updateEndNextEpisodeVisibility(time: Double, duration: Double) {
         let remaining = duration - time
-        let visible = canShowEndNextEpisode &&
+        let visible = endNextEpisodeEnabled &&
+            canShowEndNextEpisode &&
             endNextEpisodeAvailable &&
             duration > 0 &&
             remaining >= 0 &&
-            remaining <= 180
+            remaining <= endNextEpisodeCountdownSeconds
 
         guard endNextEpisodeVisible != visible else { return }
         endNextEpisodeVisible = visible

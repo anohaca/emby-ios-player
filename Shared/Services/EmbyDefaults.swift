@@ -629,6 +629,14 @@ extension Defaults.Keys {
             UserKey("skipIntroSeconds", default: 70)
         }
 
+        static var showEndNextEpisodeButton: Key<Bool> {
+            UserKey("showEndNextEpisodeButton", default: true)
+        }
+
+        static var endNextEpisodeCountdownSeconds: Key<Int> {
+            UserKey("endNextEpisodeCountdownSeconds", default: 180)
+        }
+
         static var menuActionButtons: Key<[VideoPlayerActionButton]> {
             UserKey(
                 "menuActionButtons",

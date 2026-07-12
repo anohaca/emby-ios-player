@@ -154,6 +154,7 @@ extension ItemView {
         } ?? false
         let selectedAudioStreamIndex = shouldKeepSelectedTracks ? viewModel.selectedAudioStreamIndex : nil
         let selectedSubtitleStreamIndex = shouldKeepSelectedTracks ? viewModel.selectedSubtitleStreamIndex : nil
+        let requiredSubtitleFonts = shouldKeepSelectedTracks ? viewModel.selectedSubtitleRequiredFonts : []
 
         #if DEBUG
         NSLog(
@@ -175,7 +176,8 @@ extension ItemView {
         }()
 
         let provider = MediaPlayerItemProvider(item: playButtonItem) { item in
-            try await MediaPlayerItem.build(
+            await SubtitleFontManager.ensureFonts(requiredSubtitleFonts)
+            return try await MediaPlayerItem.build(
                 for: item,
                 mediaSource: playbackMediaSource,
                 selectedAudioStreamIndex: selectedAudioStreamIndex,

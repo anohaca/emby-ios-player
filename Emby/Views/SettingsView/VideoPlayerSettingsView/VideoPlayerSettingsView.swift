@@ -30,10 +30,6 @@ struct VideoPlayerSettingsView: View {
     private var playbackRate
     @Default(.VideoPlayer.Playback.defaultAudioLanguage)
     private var defaultAudioLanguage
-    @Default(.VideoPlayer.Subtitle.defaultSubtitleLanguage)
-    private var defaultSubtitleLanguage
-    @Default(.VideoPlayer.Subtitle.convertTraditionalChineseSubtitles)
-    private var convertTraditionalChineseSubtitles
     @Default(.VideoPlayer.Playback.mpvCacheEnabled)
     private var mpvCacheEnabled
     @Default(.VideoPlayer.Playback.mpvDemuxerMaxBytesMiB)
@@ -68,16 +64,10 @@ struct VideoPlayerSettingsView: View {
                     }
                 }
 
-                Picker("默认字幕语言", selection: $defaultSubtitleLanguage) {
-                    ForEach(MediaTrackLanguagePreference.allCases, id: \.self) { language in
-                        Text(language.displayTitle)
-                            .tag(language)
-                    }
-                }
             } header: {
-                Text("默认轨道")
+                Text("默认音轨")
             } footer: {
-                Text("选择“自动”时会优先日语音轨和中文字幕，找不到再使用服务器或文件默认轨道。")
+                Text("选择“自动”时会优先日语音轨，找不到再使用服务器或文件默认音轨。")
             }
 
             Section {
@@ -147,18 +137,6 @@ struct VideoPlayerSettingsView: View {
                 }
             }
 
-            Section {
-                Toggle("繁体字幕转简体", isOn: $convertTraditionalChineseSubtitles)
-
-                ChevronButton("字幕字体") {
-                    router.route(to: .subtitleFontSettings)
-                }
-            } header: {
-                Text("字幕兼容")
-            } footer: {
-                Text("仅文本字幕会转换，PGS/VobSub 等图片字幕保持原样。")
-            }
-
             ButtonSection()
                 .disabled(true)
                 .foregroundStyle(.secondary)
@@ -170,8 +148,6 @@ struct VideoPlayerSettingsView: View {
             SliderSection()
                 .disabled(true)
                 .foregroundStyle(.secondary)
-
-            SubtitleSection()
 
             TimestampSection()
                 .disabled(true)

@@ -1197,7 +1197,9 @@ enum HomeItemUserDataOverrideStore {
 
     private static let keyPrefix = "HomeItemUserDataOverride"
     private static let maxAge: TimeInterval = 30 * 24 * 60 * 60
+    private static let playedStateMaxAge: TimeInterval = 60
     private static let parentOnlyMaxAge: TimeInterval = 60
+    private static let relatedItemMaxAge: TimeInterval = 60
 
     static func markPlayed(
         itemID: String,
@@ -1480,11 +1482,13 @@ enum HomeItemUserDataOverrideStore {
 
     private static func entry(for item: BaseItemDto, in entries: [String: Entry]) -> Entry? {
         let itemID = item.id
+        let now = Date().timeIntervalSince1970
 
         return relatedIDs(for: item)
             .compactMap { id -> Entry? in
                 guard let entry = entries[id] else { return nil }
                 guard id == itemID || entry.shouldApplyToRelatedItems else { return nil }
+                guard id == itemID || now - entry.changedAt <= relatedItemMaxAge else { return nil }
                 return entry
             }
             .max { $0.changedAt < $1.changedAt }
@@ -1538,7 +1542,14 @@ enum HomeItemUserDataOverrideStore {
             .flatMap { try? JSONDecoder().decode([String: Entry].self, from: $0) } ?? [:]
 
         entries = entries.filter { _, entry in
-            let maxEntryAge = entry.shouldApplyToRelatedItems ? maxAge : parentOnlyMaxAge
+            let maxEntryAge: TimeInterval
+            if !entry.shouldApplyToRelatedItems {
+                maxEntryAge = parentOnlyMaxAge
+            } else if entry.playbackPositionTicks == nil {
+                maxEntryAge = playedStateMaxAge
+            } else {
+                maxEntryAge = maxAge
+            }
             return now - entry.changedAt <= maxEntryAge
         }
         save(entries, serverID: serverID, userID: userID)

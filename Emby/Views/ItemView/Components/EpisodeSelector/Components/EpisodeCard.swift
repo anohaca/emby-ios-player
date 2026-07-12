@@ -64,10 +64,6 @@ extension SeriesEpisodeSelector {
         }
 
         func isPlayed(_ episode: BaseItemDto) -> Bool {
-            if parentIsPlayed {
-                return true
-            }
-
             return episode.id.flatMap { episodePlayedStates[$0] } ?? episode.userData?.isPlayed == true
         }
 

@@ -513,6 +513,7 @@ class ItemViewModel: ViewModel, Stateful {
                 await MainActor.run {
                     self?.selectedSubtitleRequiredFonts = fonts
                 }
+                await SubtitleFontManager.ensureFonts(fonts)
                 return
             }
         }

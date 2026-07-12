@@ -286,4 +286,12 @@ extension NavigationRoute {
             SubtitleFontSettingsView()
         }
     }
+
+    static var subtitleSettings: NavigationRoute {
+        NavigationRoute(
+            id: "subtitleSettings"
+        ) {
+            SubtitleSettingsView()
+        }
+    }
 }

@@ -113,6 +113,11 @@ private extension ItemView.MediaInformationSection {
         let requiredFonts: [String]
         let allMediaStreams: [MediaStream]
 
+        @State
+        private var isMatchingFonts = false
+        @State
+        private var fontStatusRevision = 0
+
         private var title: String {
             switch stream.type {
             case .video: "视频"
@@ -138,14 +143,18 @@ private extension ItemView.MediaInformationSection {
         }
 
         private var properties: [(String, String)] {
-            var result = stream.mediaInformationProperties
-            if requiredFonts.isNotEmpty {
-                let fontStatuses = requiredFonts.map {
-                    "\($0)：\(SubtitleFontManager.loadStatus(for: $0, mediaStreams: allMediaStreams))"
-                }
-                result.append(("所需字体", fontStatuses.joined(separator: "\n")))
+            stream.mediaInformationProperties
+        }
+
+        private var fontStatuses: [(name: String, status: String)] {
+            _ = fontStatusRevision
+            return requiredFonts.map {
+                ($0, SubtitleFontManager.loadStatus(for: $0, mediaStreams: allMediaStreams))
             }
-            return result
+        }
+
+        private var missingFonts: [String] {
+            fontStatuses.filter { $0.status == "缺失" }.map(\.name)
         }
 
         var body: some View {
@@ -164,6 +173,32 @@ private extension ItemView.MediaInformationSection {
                     }
                     .font(.subheadline)
                 }
+
+                if requiredFonts.isNotEmpty {
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("所需字体")
+                        Text(fontStatuses.map { "\($0.name)：\($0.status)" }.joined(separator: "\n"))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .font(.subheadline)
+
+                    if missingFonts.isNotEmpty || isMatchingFonts {
+                        Button {
+                            matchMissingFonts()
+                        } label: {
+                            if isMatchingFonts {
+                                ProgressView()
+                                    .frame(maxWidth: .infinity)
+                            } else {
+                                Label("匹配缺失字体", systemImage: "arrow.down.circle")
+                                    .frame(maxWidth: .infinity)
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isMatchingFonts)
+                    }
+                }
             }
             .frame(width: 280, alignment: .topLeading)
             .padding(16)
@@ -177,6 +212,19 @@ private extension ItemView.MediaInformationSection {
             }
             .frame(height: height, alignment: .topLeading)
             .background(Color.secondarySystemFill, in: RoundedRectangle(cornerRadius: 8))
+        }
+
+        private func matchMissingFonts() {
+            let fonts = missingFonts
+            guard fonts.isNotEmpty else { return }
+            isMatchingFonts = true
+            Task {
+                await SubtitleFontManager.ensureFonts(fonts, ignoringAutomaticDownloadSetting: true)
+                await MainActor.run {
+                    fontStatusRevision += 1
+                    isMatchingFonts = false
+                }
+            }
         }
     }
 

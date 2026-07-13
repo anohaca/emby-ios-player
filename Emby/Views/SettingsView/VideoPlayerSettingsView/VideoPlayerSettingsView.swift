@@ -108,14 +108,24 @@ struct VideoPlayerSettingsView: View {
                 Toggle("显示跳过片头按钮", isOn: $showSkipIntroButton)
                 Stepper(value: $skipIntroSeconds, in: 5 ... 300, step: 5) {
                     LabeledContent("跳过片头默认时长") {
-                        Text("\(skipIntroSeconds) 秒")
+                        HStack(spacing: 4) {
+                            ClearSettingsIntegerField(value: $skipIntroSeconds)
+                            Text("秒")
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 .disabled(!showSkipIntroButton)
                 Toggle("显示片尾下一集按钮", isOn: $showEndNextEpisodeButton)
                 Stepper(value: $endNextEpisodeCountdownSeconds, in: 10 ... 600, step: 10) {
                     LabeledContent("下一集按钮出现时间") {
-                        Text("倒数 \(endNextEpisodeCountdownSeconds) 秒")
+                        HStack(spacing: 4) {
+                            Text("倒数")
+                                .foregroundStyle(.secondary)
+                            ClearSettingsIntegerField(value: $endNextEpisodeCountdownSeconds)
+                            Text("秒")
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 .disabled(!showEndNextEpisodeButton)

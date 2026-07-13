@@ -90,6 +90,8 @@ extension BaseItemKind: ItemFilter {
             L10n.series
         case .studio:
             L10n.studio
+        case .tag:
+            L10n.tags
         case .trailer:
             L10n.trailer
         case .tvChannel:
@@ -172,6 +174,8 @@ extension BaseItemKind {
             L10n.series
         case .studio:
             L10n.studios
+        case .tag:
+            L10n.tags
         case .trailer:
             L10n.trailers
         case .tvChannel:

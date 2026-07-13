@@ -25,6 +25,8 @@ struct HomeSectionSettingsView: View {
     private var viewModel = HomeViewModel()
     @State
     private var editMode: EditMode = .active
+    @State
+    private var sectionVisibilityRevision = 0
 
     @Injected(\.currentUserSession)
     private var userSession
@@ -72,6 +74,8 @@ struct HomeSectionSettingsView: View {
     }
 
     private func isHidden(_ section: HomeSectionDescriptor) -> Bool {
+        _ = sectionVisibilityRevision
+
         if section.id == HomeSectionDescriptor.continueWatchingID, !showContinueWatching {
             return true
         }
@@ -93,17 +97,20 @@ struct HomeSectionSettingsView: View {
             hiddenIDs.removeAll { $0 == section.id }
         }
 
-        hiddenSectionIDs = uniqueIDs(hiddenIDs)
+        withAnimation(.linear(duration: 0.2)) {
+            hiddenSectionIDs = uniqueIDs(hiddenIDs)
 
-        if section.id == HomeSectionDescriptor.recentlyAddedID {
-            showRecentlyAdded = !hidden
+            if section.id == HomeSectionDescriptor.recentlyAddedID {
+                showRecentlyAdded = !hidden
+            }
+
+            if section.id == HomeSectionDescriptor.continueWatchingID {
+                showContinueWatching = !hidden
+            }
+
+            sectionOrder = uniqueIDs(currentOrderIDs)
+            sectionVisibilityRevision &+= 1
         }
-
-        if section.id == HomeSectionDescriptor.continueWatchingID {
-            showContinueWatching = !hidden
-        }
-
-        sectionOrder = uniqueIDs(currentOrderIDs)
     }
 
     private func moveEnabledSections(fromOffsets source: IndexSet, toOffset destination: Int) {
@@ -164,6 +171,7 @@ struct HomeSectionSettingsView: View {
         }
         .animation(.linear(duration: 0.2), value: sectionOrder)
         .animation(.linear(duration: 0.2), value: hiddenSectionIDs)
+        .animation(.linear(duration: 0.2), value: sectionVisibilityRevision)
         .environment(\.editMode, $editMode)
         .navigationTitle("首页类别")
         .onAppear {

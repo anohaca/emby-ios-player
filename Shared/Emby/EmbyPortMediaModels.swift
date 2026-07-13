@@ -939,6 +939,7 @@ enum BaseItemKind: String, Codable, CaseIterable, Sendable {
     case season = "Season"
     case series = "Series"
     case studio = "Studio"
+    case tag = "Tag"
     case trailer = "Trailer"
     case tvChannel = "TvChannel"
     case tvProgram = "TvProgram"
@@ -1243,7 +1244,20 @@ enum MetadataField: Codable, CaseIterable, Hashable, Sendable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
-        self.init(rawValue: try container.decode(String.self))
+
+        if container.decodeNil() {
+            self = .unknown("")
+        } else if let value = try? container.decode(String.self) {
+            self.init(rawValue: value)
+        } else if let value = try? container.decode(Int.self) {
+            self = .unknown(String(value))
+        } else if let value = try? container.decode(Double.self) {
+            self = .unknown(String(value))
+        } else if let value = try? container.decode(Bool.self) {
+            self = .unknown(String(value))
+        } else {
+            self = .unknown("")
+        }
     }
 
     func encode(to encoder: Encoder) throws {

@@ -61,7 +61,7 @@ extension VideoPlayerSettingsView {
     }
 }
 
-private struct ClearSettingsIntegerField: UIViewRepresentable {
+struct ClearSettingsIntegerField: UIViewRepresentable {
     @Binding var value: Int
 
     func makeUIView(context: Context) -> UITextField {

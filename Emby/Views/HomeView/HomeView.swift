@@ -38,6 +38,10 @@ struct HomeView: View {
     @State
     private var isPullRefreshControlActive = false
     @State
+    private var pullRefreshRowResetRevision = 0
+    @State
+    private var homeHorizontalOffsetResetRevision = 0
+    @State
     private var resumeRefreshTask: Task<Void, Never>?
     @State
     private var homeViewportSize: CGSize = .zero
@@ -180,6 +184,7 @@ struct HomeView: View {
             LazyVStack(alignment: .leading, spacing: 10) {
                 ForEach(visibleSections) { section in
                     sectionView(section)
+                        .id("\(section.id)-\(pullRefreshRowResetRevision)")
                         #if DEBUG
                         .background(HomeLayoutTraceView(name: "section-\(section.id)", playerDismissTraceStart: playerDismissTraceStart))
                         #endif
@@ -220,7 +225,8 @@ struct HomeView: View {
         .background(HomeLayoutTraceView(name: "scroll-content", playerDismissTraceStart: playerDismissTraceStart))
         #endif
         .homeRefreshControl(
-            isRefreshing: viewModel.backgroundStates.contains(.refresh)
+            isRefreshing: viewModel.backgroundStates.contains(.refresh),
+            horizontalOffsetResetRevision: homeHorizontalOffsetResetRevision
         ) {
             isPullRefreshControlActive = true
             viewModel.send(.refresh)
@@ -327,6 +333,9 @@ struct HomeView: View {
             NSLog("EmbyHomeExitTrace refresh-state isRefreshing=%@", isRefreshing.description)
             #endif
             guard !isRefreshing else { return }
+            if isPullRefreshControlActive {
+                pullRefreshRowResetRevision &+= 1
+            }
             isPullRefreshControlActive = false
         }
         #if DEBUG
@@ -387,6 +396,7 @@ struct HomeView: View {
                 await MainActor.run {
                     withDisabledHomeLayoutAnimation {
                         isHomeLayoutLockedForPlayer = false
+                        homeHorizontalOffsetResetRevision &+= 1
                     }
                     #if DEBUG
                     NSLog(
@@ -588,11 +598,13 @@ private extension View {
     @MainActor
     func homeRefreshControl(
         isRefreshing: Bool,
+        horizontalOffsetResetRevision: Int,
         onRefresh: @escaping () -> Void
     ) -> some View {
         modifier(
             HomeRefreshControlModifier(
                 isRefreshing: isRefreshing,
+                horizontalOffsetResetRevision: horizontalOffsetResetRevision,
                 onRefresh: onRefresh
             )
         )
@@ -602,6 +614,7 @@ private extension View {
 private struct HomeRefreshControlModifier: ViewModifier {
 
     let isRefreshing: Bool
+    let horizontalOffsetResetRevision: Int
     let onRefresh: () -> Void
 
     @StateObject
@@ -619,6 +632,9 @@ private struct HomeRefreshControlModifier: ViewModifier {
             }
             .onChange(of: isRefreshing) { newValue in
                 coordinator.update(isRefreshing: newValue)
+            }
+            .onChange(of: horizontalOffsetResetRevision) { _ in
+                coordinator.restoreHorizontalPositionAfterPlayerDismissal()
             }
     }
 }
@@ -688,5 +704,34 @@ private final class HomeRefreshControlCoordinator: NSObject, ObservableObject {
                 animated: false
             )
         }
+    }
+
+    func restoreHorizontalPositionAfterPlayerDismissal() {
+        restoreHorizontalPosition()
+
+        DispatchQueue.main.async { [weak self] in
+            self?.restoreHorizontalPosition()
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.restoreHorizontalPosition()
+        }
+    }
+
+    private func restoreHorizontalPosition() {
+        guard let scrollView else { return }
+
+        scrollView.layoutIfNeeded()
+        let leadingOffset = -scrollView.adjustedContentInset.left
+        guard abs(scrollView.contentOffset.x - leadingOffset) > 0.5 else { return }
+
+        scrollView.setContentOffset(
+            CGPoint(x: leadingOffset, y: scrollView.contentOffset.y),
+            animated: false
+        )
+
+        #if DEBUG
+        NSLog("EmbyHomeExitTrace horizontal-offset restored x=%.1f", leadingOffset)
+        #endif
     }
 }

@@ -562,7 +562,7 @@ private struct DebugSearchSmokeView: View {
                             .font(.title2)
                             .fontWeight(.bold)
                         Text("query=\(query)")
-                        Text("seriesCount=\(items.count)")
+                        Text("itemCount=\(items.count)")
                         ForEach(items, id: \.unwrappedIDHashOrZero) { item in
                             Text(item.displayTitle)
                                 .font(.body)
@@ -592,14 +592,21 @@ private struct DebugSearchSmokeView: View {
                     return
                 }
 
-                let items = try await SearchSeriesResolver(
-                    userSession: userSession,
-                    filters: .default
+                var parameters = EmbyPortItemsParameters()
+                parameters.enableUserData = true
+                parameters.fields = .MinimumFields
+                parameters.isRecursive = true
+                parameters.limit = 50
+                parameters.searchTerm = query
+
+                let response: EmbyPortItemsResponse<BaseItemDto> = try await userSession.embyClient.items(
+                    parameters,
+                    as: EmbyPortItemsResponse<BaseItemDto>.self
                 )
-                .search(query: query)
+                let items = response.items ?? []
 
                 NSLog(
-                    "SEARCH_SMOKE_OK query=%@ seriesCount=%d names=%@",
+                    "SEARCH_SMOKE_OK query=%@ itemCount=%d names=%@",
                     query,
                     items.count,
                     items.map(\.displayTitle).joined(separator: " | ")
@@ -607,8 +614,9 @@ private struct DebugSearchSmokeView: View {
 
                 state = .content(query: query, items: items)
             } catch {
-                NSLog("SEARCH_SMOKE_FAIL %@", error.localizedDescription)
-                state = .failed(error.localizedDescription)
+                let diagnostic = String(reflecting: error)
+                NSLog("SEARCH_SMOKE_FAIL %@", diagnostic)
+                state = .failed(diagnostic)
             }
         }
     }

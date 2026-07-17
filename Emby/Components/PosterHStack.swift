@@ -13,10 +13,19 @@ private struct HomeTransitionLockedRowWidthKey: EnvironmentKey {
     static let defaultValue: CGFloat? = nil
 }
 
+private struct HomeRowResetRevisionKey: EnvironmentKey {
+    static let defaultValue = 0
+}
+
 extension EnvironmentValues {
     var homeTransitionLockedRowWidth: CGFloat? {
         get { self[HomeTransitionLockedRowWidthKey.self] }
         set { self[HomeTransitionLockedRowWidthKey.self] = newValue }
+    }
+
+    var homeRowResetRevision: Int {
+        get { self[HomeRowResetRevisionKey.self] }
+        set { self[HomeRowResetRevisionKey.self] = newValue }
     }
 }
 
@@ -36,8 +45,12 @@ struct PosterHStack<Element: Poster, Data: Collection>: View where Data.Element 
 
     @StateObject
     private var baseItemOverlayState = BaseItemPosterOverlayState()
+    @StateObject
+    private var collectionHStackProxy = CollectionHStackProxy()
     @Environment(\.homeTransitionLockedRowWidth)
     private var homeTransitionLockedRowWidth
+    @Environment(\.homeRowResetRevision)
+    private var homeRowResetRevision
 
     private var baseItems: [BaseItemDto] {
         data.compactMap { $0 as? BaseItemDto }
@@ -82,6 +95,7 @@ struct PosterHStack<Element: Poster, Data: Collection>: View where Data.Element 
                 }
             }
             .clipsToBounds(false)
+            .proxy(collectionHStackProxy)
             .dataPrefix(20)
             .insets(horizontal: EdgeInsets.edgePadding)
             .itemSpacing(itemSpacing)
@@ -101,6 +115,16 @@ struct PosterHStack<Element: Poster, Data: Collection>: View where Data.Element 
         }
         .onChange(of: baseItemOverlaySignature) { _ in
             refreshBaseItemOverlayState()
+        }
+        .onChange(of: homeRowResetRevision) { _ in
+            resetHorizontalPosition()
+        }
+    }
+
+    private func resetHorizontalPosition() {
+        collectionHStackProxy.scrollTo(index: 0, animated: false)
+        DispatchQueue.main.async {
+            collectionHStackProxy.scrollTo(index: 0, animated: false)
         }
     }
 

@@ -29,8 +29,12 @@ extension HomeView {
 
         @StateObject
         private var overlayState = BaseItemPosterOverlayState()
+        @StateObject
+        private var collectionHStackProxy = CollectionHStackProxy()
         @Environment(\.homeTransitionLockedRowWidth)
         private var homeTransitionLockedRowWidth
+        @Environment(\.homeRowResetRevision)
+        private var homeRowResetRevision
 
         // TODO: see how this looks across multiple screen sizes
         //       alongside PosterHStack + landscape
@@ -207,6 +211,7 @@ extension HomeView {
                         }
                     }
                     .clipsToBounds(false)
+                    .proxy(collectionHStackProxy)
                     .scrollBehavior(.continuousLeadingEdge)
                     .frame(width: width, height: rowHeight(for: width), alignment: .leading)
                 }
@@ -230,6 +235,16 @@ extension HomeView {
                     )
                 }
                 .frame(height: rowHeight(for: homeTransitionLockedRowWidth ?? 430))
+                .onChange(of: homeRowResetRevision) { _ in
+                    resetHorizontalPosition()
+                }
+            }
+        }
+
+        private func resetHorizontalPosition() {
+            collectionHStackProxy.scrollTo(index: 0, animated: false)
+            DispatchQueue.main.async {
+                collectionHStackProxy.scrollTo(index: 0, animated: false)
             }
         }
 

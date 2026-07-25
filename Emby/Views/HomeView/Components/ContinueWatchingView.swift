@@ -85,6 +85,7 @@ extension HomeView {
             let candidates = Array(viewModel.nextEpisodeAfterPlayedItems)
 
             let items = Self.uniqueItems(candidates).filter { item in
+                guard Self.isUnplayedWithoutProgress(item) else { return false }
                 guard let id = item.id else { return true }
                 return !startedIDs.contains(id)
             }
@@ -266,7 +267,7 @@ extension HomeView {
             let nextAfterPlayedCount = viewModel.nextEpisodeAfterPlayedItems.count
             let unstartedTitles = unstartedContinueItems.prefix(6).map(Self.debugEpisodeTitle).joined(separator: " | ")
 
-            NSLog(
+            AppLog.event(
                 "EmbyHomeContinueSplit kind=%@ resume=%d started=%d unstartedResume=%d nextUp=%d nextUpUnstarted=%d nextAfterPlayed=%d finalUnstarted=%d allUnstarted=%d titles=%@",
                 String(describing: kind),
                 viewModel.resumeItems.count,

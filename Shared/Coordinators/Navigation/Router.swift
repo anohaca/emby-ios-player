@@ -47,7 +47,7 @@ extension NavigationCoordinator {
             if navigationCoordinator.presentedNativeFullScreen != nil {
                 navigationCoordinator.presentedNativeFullScreen = nil
                 #if DEBUG
-                NSLog("EmbyNavigation dismiss target=native-fullscreen")
+                AppLog.event("EmbyNavigation dismiss target=native-fullscreen")
                 #endif
                 return true
             }
@@ -55,7 +55,7 @@ extension NavigationCoordinator {
             if navigationCoordinator.presentedFullScreen != nil {
                 navigationCoordinator.presentedFullScreen = nil
                 #if DEBUG
-                NSLog("EmbyNavigation dismiss target=fullscreen")
+                AppLog.event("EmbyNavigation dismiss target=fullscreen")
                 #endif
                 return true
             }
@@ -63,7 +63,7 @@ extension NavigationCoordinator {
             if navigationCoordinator.presentedSheet != nil {
                 navigationCoordinator.presentedSheet = nil
                 #if DEBUG
-                NSLog("EmbyNavigation dismiss target=sheet")
+                AppLog.event("EmbyNavigation dismiss target=sheet")
                 #endif
                 return true
             }
@@ -72,7 +72,7 @@ extension NavigationCoordinator {
                 let routeID = navigationCoordinator.path.last?.id ?? "unknown"
                 navigationCoordinator.path.removeLast()
                 #if DEBUG
-                NSLog("EmbyNavigation dismiss target=path route=%@ remaining=%d", routeID, navigationCoordinator.path.count)
+                AppLog.event("EmbyNavigation dismiss target=path route=%@ remaining=%d", routeID, navigationCoordinator.path.count)
                 #endif
                 return true
             }
@@ -150,14 +150,14 @@ struct Router: DynamicProperty {
 
             if let presentationDismiss {
                 #if DEBUG
-                NSLog("EmbyNavigation dismiss target=presentation")
+                AppLog.event("EmbyNavigation dismiss target=presentation")
                 #endif
                 presentationDismiss(nil)
                 return
             }
 
             #if DEBUG
-            NSLog("EmbyNavigation dismiss target=system")
+            AppLog.event("EmbyNavigation dismiss target=system")
             #endif
             systemDismiss()
         }
@@ -172,14 +172,14 @@ struct Router: DynamicProperty {
 
             if let presentationDismiss {
                 #if DEBUG
-                NSLog("EmbyNavigation dismiss target=presentation completion=deferred")
+                AppLog.event("EmbyNavigation dismiss target=presentation completion=deferred")
                 #endif
                 presentationDismiss(completion)
                 return
             }
 
             #if DEBUG
-            NSLog("EmbyNavigation dismiss target=system completion=immediate")
+            AppLog.event("EmbyNavigation dismiss target=system completion=immediate")
             #endif
             systemDismiss()
 

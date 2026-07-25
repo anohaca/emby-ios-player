@@ -64,12 +64,12 @@ struct UserSignInView: View {
         case let .connected(user):
             guard let authenticationAction else {
                 #if DEBUG
-                NSLog("EmbySignIn connected user=%@ but missing local authentication action", user.state.state.id)
+                AppLog.event("EmbySignIn connected user=%@ but missing local authentication action", user.state.state.id)
                 #endif
                 return
             }
             #if DEBUG
-            NSLog("EmbySignIn connected user=%@ server=%@", user.state.state.id, user.state.state.serverID)
+            AppLog.event("EmbySignIn connected user=%@ server=%@", user.state.state.id, user.state.state.serverID)
             #endif
             viewModel.save(
                 user: user,
@@ -106,7 +106,7 @@ struct UserSignInView: View {
             }
 
             #if DEBUG
-            NSLog("EmbySignIn existing user=%@ presenting duplicate prompt", existingUser.state.state.id)
+            AppLog.event("EmbySignIn existing user=%@ presenting duplicate prompt", existingUser.state.state.id)
             #endif
             self.existingUser = existingUser
             self.isPresentingExistingUser = true
@@ -114,7 +114,7 @@ struct UserSignInView: View {
             UIDevice.feedback(.success)
 
             #if DEBUG
-            NSLog("EmbySignIn saved user=%@ server=%@", user.id, user.serverID)
+            AppLog.event("EmbySignIn saved user=%@ server=%@", user.id, user.serverID)
             #endif
             dismissThenCompleteSignIn(user: user)
         }
@@ -153,7 +153,7 @@ struct UserSignInView: View {
         Container.shared.currentUserSession.reset()
 
         #if DEBUG
-        NSLog("EmbySignIn completed source=%@ user=%@ server=%@", source, user.id, user.serverID)
+        AppLog.event("EmbySignIn completed source=%@ user=%@ server=%@", source, user.id, user.serverID)
         #endif
 
         Notifications[.didSignIn].post()
@@ -382,7 +382,7 @@ struct UserSignInView: View {
                     Task { @MainActor in
                         try? await Task.sleep(for: .milliseconds(350))
                         guard let user = debugSavedSignInSmokeUser() else {
-                            NSLog("USER_SIGN_IN_SAVED_DISMISS_SMOKE_FAIL missing-user")
+                            AppLog.event("USER_SIGN_IN_SAVED_DISMISS_SMOKE_FAIL missing-user")
                             return
                         }
                         dismissThenCompleteSignIn(user: user)
@@ -441,7 +441,7 @@ struct UserSignInView: View {
             #if DEBUG
             .onReceive(viewModel.$error) { error in
                 guard let error else { return }
-                NSLog("EmbySignIn error=%@", error.localizedDescription)
+                AppLog.event("EmbySignIn error=%@", error.localizedDescription)
             }
             #endif
             .errorMessage($viewModel.error)

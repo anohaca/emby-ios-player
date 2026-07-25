@@ -156,7 +156,7 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
         let positionTicks = seconds.map { Int64($0.ticks) }
 
         #if DEBUG
-        NSLog(
+        AppLog.event(
             "EmbyPlaybackProgress stop item=%@ seconds=%.3f ticks=%@",
             itemID ?? "<nil>",
             seconds?.seconds ?? -1,
@@ -211,6 +211,12 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
 
         guard lastNotifiedPlaybackSeconds.map({ abs(seconds - $0) >= .seconds(5) }) ?? true else { return }
         lastNotifiedPlaybackSeconds = seconds
+
+        ResumeItemRecencyStore.markPlayback(
+            itemID: item.baseItem.id,
+            serverID: userSession.server.id,
+            userID: userSession.user.id
+        )
 
         if let itemID = item.baseItem.id {
             Notifications[.resumeItemRecencyDidChange].post(itemID)

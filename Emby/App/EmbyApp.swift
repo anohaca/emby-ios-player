@@ -322,7 +322,7 @@ private struct DebugUserSignInDismissSmokeView: View {
                 let storedServers = StoredValues[.Server.servers]
                 guard let firstServer = storedServers.first else {
                     status = "USER_SIGN_IN_DISMISS_SMOKE_FAIL"
-                    NSLog("USER_SIGN_IN_DISMISS_SMOKE_FAIL missing-server")
+                    AppLog.event("USER_SIGN_IN_DISMISS_SMOKE_FAIL missing-server")
                     return
                 }
 
@@ -341,7 +341,7 @@ private struct DebugUserSignInDismissSmokeView: View {
                         $0.serverID == server.id && $0.username == username
                     }
                     removeRealSmokeLocalUser(username: username, server: server)
-                    NSLog(
+                    AppLog.event(
                         "USER_SIGN_IN_REAL_SMOKE_START server=%@ url=%@ username=%@ existingLocalUser=%@",
                         server.name,
                         server.currentURL.absoluteString,
@@ -377,7 +377,7 @@ private struct DebugUserSignInDismissSmokeView: View {
                     } else {
                         status = "USER_SIGN_IN_DISMISS_SMOKE_PASS"
                     }
-                    NSLog(
+                    AppLog.event(
                         "%@ presentedFullScreen=nil root=%@",
                         status,
                         rootCoordinator.root.id
@@ -390,7 +390,7 @@ private struct DebugUserSignInDismissSmokeView: View {
                     } else {
                         status = "USER_SIGN_IN_DISMISS_SMOKE_FAIL"
                     }
-                    NSLog(
+                    AppLog.event(
                         "%@ presentedNativeFullScreen=%@ presentedFullScreen=%@ root=%@",
                         status,
                         coordinator.presentedNativeFullScreen?.id ?? "nil",
@@ -400,7 +400,7 @@ private struct DebugUserSignInDismissSmokeView: View {
                 }
             } catch {
                 status = isSavedDismissSmoke ? "USER_SIGN_IN_SAVED_DISMISS_SMOKE_FAIL" : "USER_SIGN_IN_DISMISS_SMOKE_FAIL"
-                NSLog("%@ error=%@", status, error.localizedDescription)
+                AppLog.event("%@ error=%@", status, error.localizedDescription)
             }
         }
     }
@@ -498,7 +498,7 @@ private struct DebugAddServerUserCompleteSmokeView: View {
             .onAppear(perform: startIfNeeded)
             .onNotification(.didAddServerUser) { user in
                 didReceiveAddUserNotification = true
-                NSLog("ADD_SERVER_USER_COMPLETE_SMOKE_NOTIFICATION user=%@", user.id ?? "nil")
+                AppLog.event("ADD_SERVER_USER_COMPLETE_SMOKE_NOTIFICATION user=%@", user.id ?? "nil")
             }
         }
         .environmentObject(rootCoordinator)
@@ -515,10 +515,10 @@ private struct DebugAddServerUserCompleteSmokeView: View {
 
             if coordinator.presentedSheet == nil, didReceiveAddUserNotification {
                 status = "ADD_SERVER_USER_COMPLETE_SMOKE_PASS"
-                NSLog("ADD_SERVER_USER_COMPLETE_SMOKE_PASS presentedSheet=nil notification=true")
+                AppLog.event("ADD_SERVER_USER_COMPLETE_SMOKE_PASS presentedSheet=nil notification=true")
             } else {
                 status = "ADD_SERVER_USER_COMPLETE_SMOKE_FAIL"
-                NSLog(
+                AppLog.event(
                     "ADD_SERVER_USER_COMPLETE_SMOKE_FAIL presentedSheet=%@ notification=%@",
                     coordinator.presentedSheet?.id ?? "nil",
                     didReceiveAddUserNotification ? "true" : "false"
@@ -605,7 +605,7 @@ private struct DebugSearchSmokeView: View {
                 )
                 let items = response.items ?? []
 
-                NSLog(
+                AppLog.event(
                     "SEARCH_SMOKE_OK query=%@ itemCount=%d names=%@",
                     query,
                     items.count,
@@ -615,7 +615,7 @@ private struct DebugSearchSmokeView: View {
                 state = .content(query: query, items: items)
             } catch {
                 let diagnostic = String(reflecting: error)
-                NSLog("SEARCH_SMOKE_FAIL %@", diagnostic)
+                AppLog.event("SEARCH_SMOKE_FAIL %@", diagnostic)
                 state = .failed(diagnostic)
             }
         }
@@ -673,10 +673,10 @@ private struct DebugNavigationDismissSmokeView: View {
             try? await Task.sleep(for: .milliseconds(900))
             if coordinator.presentedFullScreen == nil {
                 status = "NAV_DISMISS_SMOKE_PASS"
-                NSLog("NAV_DISMISS_SMOKE_PASS presentedFullScreen=nil")
+                AppLog.event("NAV_DISMISS_SMOKE_PASS presentedFullScreen=nil")
             } else {
                 status = "NAV_DISMISS_SMOKE_FAIL"
-                NSLog("NAV_DISMISS_SMOKE_FAIL presentedFullScreen=%@", coordinator.presentedFullScreen?.id ?? "unknown")
+                AppLog.event("NAV_DISMISS_SMOKE_FAIL presentedFullScreen=%@", coordinator.presentedFullScreen?.id ?? "unknown")
             }
         }
     }

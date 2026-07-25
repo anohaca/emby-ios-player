@@ -40,6 +40,8 @@ struct VideoPlayerSettingsView: View {
     private var mpvDemuxerReadaheadSeconds
     @Default(.VideoPlayer.Playback.mpvCachePauseEnabled)
     private var mpvCachePauseEnabled
+    @Default(.VideoPlayer.Transition.continuePlayingInBackground)
+    private var continuePlayingInBackground
 
     @Router
     private var router
@@ -54,6 +56,12 @@ struct VideoPlayerSettingsView: View {
                             .tag(rate)
                     }
                 }
+            }
+
+            Section {
+                Toggle("进入后台继续播放", isOn: $continuePlayingInBackground)
+            } footer: {
+                Text("关闭时，视频进入后台会暂停，并在返回播放器后继续。开启时，进入后台仍会播放音频。")
             }
 
             Section {

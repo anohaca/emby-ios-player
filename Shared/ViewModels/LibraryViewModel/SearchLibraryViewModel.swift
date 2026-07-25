@@ -6,7 +6,53 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
+import Defaults
 import Foundation
+
+enum SearchLibraryScope {
+
+    private static let searchableCollectionTypes: Set<CollectionType> = [
+        .homevideos,
+        .movies,
+        .musicvideos,
+        .tvshows,
+    ]
+
+    static var hasHiddenLibraries: Bool {
+        Defaults[.Customization.Home.hiddenSectionIDs]
+            .contains { HomeSectionDescriptor.latestInLibrarySourceID(from: $0) != nil }
+    }
+
+    static func visibleParentIDs(userSession: UserSession) async throws -> [String]? {
+        let hiddenIDs = Set(
+            Defaults[.Customization.Home.hiddenSectionIDs]
+                .compactMap(HomeSectionDescriptor.latestInLibrarySourceID(from:))
+        )
+
+        guard hiddenIDs.isNotEmpty else { return nil }
+
+        let response: EmbyPortItemsResponse<BaseItemDto> = try await userSession.embyClient.userViews(
+            as: EmbyPortItemsResponse<BaseItemDto>.self
+        )
+
+        let visibleIDs = (response.items ?? [])
+            .filter { item in
+                guard let collectionType = item.collectionType else { return false }
+                return searchableCollectionTypes.contains(collectionType)
+            }
+            .compactMap(\.id)
+            .filter { !hiddenIDs.contains($0) }
+        return visibleIDs.isEmpty ? [] : visibleIDs
+    }
+
+    static func unique(_ items: [BaseItemDto]) -> [BaseItemDto] {
+        var seen = Set<String>()
+        return items.filter { item in
+            guard let id = item.id else { return true }
+            return seen.insert(id).inserted
+        }
+    }
+}
 
 @MainActor
 final class SearchLibraryViewModel: PagingLibraryViewModel<BaseItemDto> {
@@ -66,17 +112,49 @@ final class SearchLibraryViewModel: PagingLibraryViewModel<BaseItemDto> {
             parameters.apply(filters: filterViewModel.currentFilters)
         }
 
-        let response: EmbyPortItemsResponse<BaseItemDto> = try await userSession.embyClient.items(
-            parameters,
-            as: EmbyPortItemsResponse<BaseItemDto>.self
-        )
+        let parentIDs = try await SearchLibraryScope.visibleParentIDs(userSession: userSession)
+        let responseItems: [BaseItemDto]
+        if let parentIDs {
+            guard parentIDs.isNotEmpty else { return [] }
 
-        let sortedItems = (response.items ?? []).sortedByVideoBitRateIfNeeded(filters: filterViewModel?.currentFilters)
+            responseItems = try await withThrowingTaskGroup(of: [BaseItemDto].self) { group in
+                for parentID in parentIDs {
+                    group.addTask {
+                        var scopedParameters = parameters
+                        scopedParameters.parentID = parentID
+                        let response: EmbyPortItemsResponse<BaseItemDto> = try await self.userSession.embyClient.items(
+                            scopedParameters,
+                            as: EmbyPortItemsResponse<BaseItemDto>.self
+                        )
+                        return response.items ?? []
+                    }
+                }
+
+                var items: [BaseItemDto] = []
+                for try await pageItems in group {
+                    items.append(contentsOf: pageItems)
+                }
+                return SearchLibraryScope.unique(items)
+            }
+        } else {
+            let response: EmbyPortItemsResponse<BaseItemDto> = try await userSession.embyClient.items(
+                parameters,
+                as: EmbyPortItemsResponse<BaseItemDto>.self
+            )
+            responseItems = response.items ?? []
+        }
+
+        let sortedItems = responseItems.sortedByVideoBitRateIfNeeded(filters: filterViewModel?.currentFilters)
 
         return await addingChildImageFallbacks(to: sortedItems)
     }
 
     private func getPeople(page: Int) async throws -> [BaseItemDto] {
+        // Emby's Persons endpoint is server-global and cannot be scoped to a
+        // media library. Suppress it when libraries are hidden so people from
+        // those libraries cannot leak into search results.
+        guard !SearchLibraryScope.hasHiddenLibraries else { return [] }
+
         var parameters = EmbyPortPersonsParameters()
         parameters.limit = pageSize
         parameters.searchTerm = query
@@ -143,6 +221,39 @@ struct SearchSeriesResolver {
         itemTypes: [BaseItemKind],
         maxItems: Int
     ) async throws -> [BaseItemDto] {
+        let parentIDs = try await SearchLibraryScope.visibleParentIDs(userSession: userSession)
+        if let parentIDs {
+            guard parentIDs.isNotEmpty else { return [] }
+
+            return try await withThrowingTaskGroup(of: [BaseItemDto].self) { group in
+                for parentID in parentIDs {
+                    group.addTask {
+                        try await matchingItems(
+                            query: query,
+                            itemTypes: itemTypes,
+                            maxItems: maxItems,
+                            parentID: parentID
+                        )
+                    }
+                }
+
+                var items: [BaseItemDto] = []
+                for try await scopedItems in group {
+                    items.append(contentsOf: scopedItems)
+                }
+                return Array(SearchLibraryScope.unique(items).prefix(maxItems))
+            }
+        }
+
+        return try await matchingItems(query: query, itemTypes: itemTypes, maxItems: maxItems, parentID: nil)
+    }
+
+    private func matchingItems(
+        query: String,
+        itemTypes: [BaseItemKind],
+        maxItems: Int,
+        parentID: String?
+    ) async throws -> [BaseItemDto] {
         var items: [BaseItemDto] = []
         items.reserveCapacity(min(maxItems, pageSize))
 
@@ -156,6 +267,7 @@ struct SearchSeriesResolver {
             parameters.includeItemTypes = itemTypes
             parameters.isRecursive = true
             parameters.limit = requestLimit
+            parameters.parentID = parentID
             parameters.searchTerm = query
             parameters.startIndex = startIndex
 

@@ -328,7 +328,7 @@ private struct ItemViewDismissTransitionInterrupter: UIViewControllerRepresentab
             }
 
             #if DEBUG
-            NSLog("EmbyItemDismissTransition interrupted")
+            AppLog.event("EmbyItemDismissTransition interrupted")
             #endif
         }
 

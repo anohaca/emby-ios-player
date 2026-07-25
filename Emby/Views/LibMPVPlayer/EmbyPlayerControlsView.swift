@@ -32,6 +32,23 @@ private final class CenteredCaretTextField: UITextField {
     }
 }
 
+private final class TappableSlider: UISlider {
+    var onTrackTap: ((CGFloat) -> Void)?
+
+    override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
+        let location = touch.location(in: self)
+        let track = trackRect(forBounds: bounds)
+        let thumb = thumbRect(forBounds: bounds, trackRect: track, value: value)
+
+        if thumb.insetBy(dx: -8, dy: -8).contains(location) {
+            return super.beginTracking(touch, with: event)
+        }
+
+        onTrackTap?(location.x)
+        return false
+    }
+}
+
 final class PlayerControlsView: UIView, UITextFieldDelegate {
     enum GestureHUDPlacement: Equatable {
         case center
@@ -151,7 +168,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     private let settingsButton = UIButton(type: .system)
     private let currentTimeLabel = UILabel()
     private let durationLabel = UILabel()
-    private let slider = UISlider()
+    private let slider = TappableSlider()
     private let cacheProgressView = UIProgressView(progressViewStyle: .bar)
     private let skipIntroStack = UIStackView()
     private let seekPreviewView = UIVisualEffectView(effect: PlayerControlsView.panelEffect())
@@ -628,6 +645,10 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     }
 
     #if DEBUG
+    func beginSkipIntroAdjustmentForSmoke() {
+        beginSkipIntroAdjustmentIfNeeded()
+    }
+
     func setSubtitleAdjustmentModeForSmoke(_ mode: SubtitleAdjustmentMode) {
         setSubtitleAdjustmentMode(mode)
     }
@@ -812,6 +833,9 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         slider.addTarget(self, action: #selector(sliderTouchDown), for: .touchDown)
         slider.addTarget(self, action: #selector(sliderValueChanged), for: .valueChanged)
         slider.addTarget(self, action: #selector(sliderTouchEnded), for: [.touchUpInside, .touchUpOutside, .touchCancel])
+        slider.onTrackTap = { [weak self] locationX in
+            self?.seekToTappedSliderLocation(locationX)
+        }
         cacheProgressView.progress = 0
         cacheProgressView.trackTintColor = UIColor.white.withAlphaComponent(0.18)
         cacheProgressView.progressTintColor = UIColor.white.withAlphaComponent(0.36)
@@ -2594,6 +2618,23 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         trackingSlider = false
         setSeekPreview(time: Double(slider.value), duration: mediaDuration, visible: false)
         onSeekEnded?(Double(slider.value))
+    }
+
+    private func seekToTappedSliderLocation(_ locationX: CGFloat) {
+        let trackRect = slider.trackRect(forBounds: slider.bounds)
+        guard trackRect.width > 0 else { return }
+
+        let progress = min(max((locationX - trackRect.minX) / trackRect.width, 0), 1)
+        let valueRange = slider.maximumValue - slider.minimumValue
+        let target = slider.minimumValue + Float(progress) * valueRange
+
+        trackingSlider = true
+        onSeekBegan?()
+        slider.setValue(target, animated: false)
+        onSeekChanged?(Double(target))
+        trackingSlider = false
+        setSeekPreview(time: Double(target), duration: mediaDuration, visible: false)
+        onSeekEnded?(Double(target))
     }
 
     private static func formatSpeed(_ speed: Double) -> String {

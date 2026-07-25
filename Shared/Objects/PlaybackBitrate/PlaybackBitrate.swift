@@ -72,7 +72,7 @@ enum PlaybackBitrate: Int, CaseIterable, Displayable, Storable {
         guard self == .auto else { return rawValue }
 
         if skipAutoTest {
-            NSLog("EmbyPlaybackBitrateTest skipped reason=direct-play-auto")
+            AppLog.event("EmbyPlaybackBitrateTest skipped reason=direct-play-auto")
             return Self.max.rawValue
         }
 
@@ -80,7 +80,7 @@ enum PlaybackBitrate: Int, CaseIterable, Displayable, Storable {
         do {
             return try await testBitrate(with: bitrateTestSize.rawValue)
         } catch {
-            NSLog("EmbyPlaybackBitrateTest fallback=max error=%@", error.localizedDescription)
+            AppLog.event("EmbyPlaybackBitrateTest fallback=max error=%@", error.localizedDescription)
             return Self.max.rawValue
         }
     }

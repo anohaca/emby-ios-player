@@ -304,10 +304,10 @@ class NowPlayableObserver: ViewModel, MediaPlayerObserver {
                 try audioSession.setCategory(.playback, mode: .default)
                 try audioSession.setActive(true)
                 #if DEBUG
-                NSLog("NowPlayableAudioSession active=true")
+                AppLog.event("NowPlayableAudioSession active=true")
                 #endif
             } catch {
-                NSLog("NowPlayableAudioSession active=false error=%@", error.localizedDescription)
+                AppLog.event("NowPlayableAudioSession active=false error=%@", error.localizedDescription)
             }
         }
     }

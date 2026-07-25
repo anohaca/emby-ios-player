@@ -9,7 +9,6 @@
 import Defaults
 import SwiftUI
 import UIKit
-@_spi(Advanced) import SwiftUIIntrospect
 
 // TODO: implement search view result type between `PosterHStack`
 //       and `ListHStack` (3 row list columns)? (iOS only)
@@ -19,11 +18,13 @@ struct SearchView: View {
 
     @Default(.Customization.Search.enabledDrawerFilters)
     private var enabledDrawerFilters
+    @Default(.Customization.Home.hiddenSectionIDs)
+    private var hiddenHomeSectionIDs
     @Default(.Customization.searchPosterType)
     private var searchPosterType
 
-    @FocusState
-    private var isSearchFocused: Bool
+    @State
+    private var isSearchFocused = false
 
     @Router
     private var router
@@ -38,13 +39,70 @@ struct SearchView: View {
     private var viewModel = SearchViewModel(filterViewModel: .init())
 
     @ViewBuilder
+    private var searchHeader: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: "magnifyingglass")
+                    .font(.title2)
+
+                ClearSearchTextField(
+                    text: $searchQuery,
+                    placeholder: L10n.search,
+                    isFocused: $isSearchFocused
+                )
+            }
+            .padding(.horizontal, 18)
+            .frame(height: 50)
+            .background(.thinMaterial, in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(.quaternary, lineWidth: 1)
+            }
+            .padding(.horizontal, 22)
+
+            if enabledDrawerFilters.isNotEmpty {
+                NavigationBarFilterDrawer(
+                    viewModel: viewModel.filterViewModel,
+                    types: enabledDrawerFilters
+                )
+            }
+        }
+        .padding(.top, 8)
+        .background(.ultraThinMaterial)
+    }
+
+    @ViewBuilder
     private var suggestionsView: some View {
-        VStack(spacing: 20) {
-            ForEach(viewModel.suggestions) { item in
-                Button(item.displayTitle) {
-                    searchQuery = item.displayTitle
+        ScrollView(showsIndicators: false) {
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3),
+                spacing: 20
+            ) {
+                ForEach(viewModel.suggestions) { item in
+                    Button {
+                        searchQuery = item.displayTitle
+                    } label: {
+                        VStack(alignment: .leading, spacing: 8) {
+                            PosterImage(
+                                item: item,
+                                type: .portrait,
+                                maxWidth: 180
+                            )
+                            .posterCornerRadius(.portrait)
+
+                            Text(item.displayTitle)
+                                .font(.footnote)
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .buttonStyle(.plain)
                 }
             }
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
+            .padding(.bottom, 24)
         }
     }
 
@@ -240,41 +298,22 @@ struct SearchView: View {
         .animation(.linear(duration: 0.2), value: viewModel.items)
         .animation(.linear(duration: 0.2), value: viewModel.state)
         .ignoresSafeArea(.keyboard, edges: .bottom)
-        .navigationTitle(L10n.search)
-        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            searchHeader
+        }
+        .toolbar(.hidden, for: .navigationBar)
         .refreshable {
             viewModel.search(query: searchQuery)
         }
-        .navigationBarFilterDrawer(
-            viewModel: viewModel.filterViewModel,
-            types: enabledDrawerFilters
-        )
         .onFirstAppear {
             viewModel.getSuggestions()
         }
         .onChange(of: searchQuery) { newValue in
             viewModel.search(query: newValue)
         }
-        .onChange(of: isSearchFocused) { _ in
-            SearchBarChrome.applyToActiveSearchBar()
+        .onChange(of: hiddenHomeSectionIDs) { _ in
+            viewModel.getSuggestions()
         }
-        .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)) { notification in
-            SearchBarChrome.applyIfActiveSearchField(notification.object)
-        }
-        .searchable(
-            text: $searchQuery,
-            placement: .navigationBarDrawer(displayMode: .always),
-            prompt: L10n.search
-        )
-        .introspect(
-            .searchField,
-            on: .iOS(.v16, .v17, .v18, .v26),
-            scope: .ancestor
-        ) { searchBar in
-            SearchBarChrome.apply(to: searchBar)
-        }
-        .backport
-        .searchFocused($isSearchFocused)
         .onReceive(tabItemSelected) { event in
             if event.isRepeat, event.isRoot {
                 isSearchFocused = true
@@ -283,64 +322,106 @@ struct SearchView: View {
     }
 }
 
-private enum SearchBarChrome {
+private struct ClearSearchTextField: UIViewRepresentable {
 
-    private static weak var activeSearchBar: UISearchBar?
-    private static weak var activeTextField: UITextField?
+    @Binding var text: String
+    let placeholder: String
+    @Binding var isFocused: Bool
 
-    static func apply(to searchBar: UISearchBar) {
-        activeSearchBar = searchBar
-        activeTextField = searchBar.searchTextField
-        applyAfterLayout(to: searchBar)
-
-        DispatchQueue.main.async {
-            applyAfterLayout(to: searchBar)
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            applyAfterLayout(to: searchBar)
-        }
-    }
-
-    static func applyToActiveSearchBar() {
-        guard let activeSearchBar else { return }
-        apply(to: activeSearchBar)
-    }
-
-    static func applyIfActiveSearchField(_ object: Any?) {
-        guard
-            let textField = object as? UITextField,
-            textField === activeTextField
-        else { return }
-
-        applyToActiveSearchBar()
-    }
-
-    private static func applyAfterLayout(to searchBar: UISearchBar) {
-        let textField = searchBar.searchTextField
+    func makeUIView(context: Context) -> UITextField {
+        let textField = ClearSearchUITextField()
+        textField.delegate = context.coordinator
+        textField.placeholder = placeholder
+        textField.textColor = .label
+        textField.tintColor = .systemPurple
+        textField.font = .preferredFont(forTextStyle: .title3)
+        textField.adjustsFontForContentSizeCategory = true
+        textField.borderStyle = .none
         textField.backgroundColor = .clear
-        textField.layer.backgroundColor = UIColor.clear.cgColor
-
-        textField.subviews.forEach { subview in
-            clearRectangularInputBackgrounds(in: subview, root: textField)
-        }
+        textField.returnKeyType = .search
+        textField.clearButtonMode = .never
+        textField.addTarget(
+            context.coordinator,
+            action: #selector(Coordinator.editingChanged(_:)),
+            for: .editingChanged
+        )
+        textField.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        return textField
     }
 
-    private static func clearRectangularInputBackgrounds(in view: UIView, root: UIView) {
-        let frame = view.convert(view.bounds, to: root)
-        let preservesSystemFieldShape =
-            abs(frame.minX) <= 2 &&
-            abs(frame.minY) <= 2 &&
-            abs(frame.width - root.bounds.width) <= 4 &&
-            abs(frame.height - root.bounds.height) <= 4
+    func updateUIView(_ textField: UITextField, context: Context) {
+        context.coordinator.text = $text
+        context.coordinator.isFocused = $isFocused
 
-        if !preservesSystemFieldShape {
-            view.backgroundColor = .clear
-            view.layer.backgroundColor = UIColor.clear.cgColor
+        if textField.text != text {
+            textField.text = text
         }
 
-        view.subviews.forEach { subview in
-            clearRectangularInputBackgrounds(in: subview, root: root)
+        if isFocused, !textField.isFirstResponder {
+            textField.becomeFirstResponder()
+        } else if !isFocused, textField.isFirstResponder {
+            textField.resignFirstResponder()
         }
+
+        (textField as? ClearSearchUITextField)?.clearEditingBackgrounds()
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, isFocused: $isFocused)
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var text: Binding<String>
+        var isFocused: Binding<Bool>
+
+        init(text: Binding<String>, isFocused: Binding<Bool>) {
+            self.text = text
+            self.isFocused = isFocused
+        }
+
+        @objc
+        func editingChanged(_ textField: UITextField) {
+            text.wrappedValue = textField.text ?? ""
+            (textField as? ClearSearchUITextField)?.clearEditingBackgrounds()
+        }
+
+        func textFieldDidBeginEditing(_ textField: UITextField) {
+            isFocused.wrappedValue = true
+            (textField as? ClearSearchUITextField)?.clearEditingBackgrounds()
+        }
+
+        func textFieldDidEndEditing(_ textField: UITextField) {
+            isFocused.wrappedValue = false
+            (textField as? ClearSearchUITextField)?.clearEditingBackgrounds()
+        }
+
+        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            textField.resignFirstResponder()
+            return true
+        }
+    }
+}
+
+private final class ClearSearchUITextField: UITextField {
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        clearEditingBackgrounds()
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let result = super.becomeFirstResponder()
+        clearEditingBackgrounds()
+        return result
+    }
+
+    func clearEditingBackgrounds() {
+        clearBackground(in: self)
+    }
+
+    private func clearBackground(in view: UIView) {
+        view.backgroundColor = .clear
+        view.layer.backgroundColor = UIColor.clear.cgColor
+        view.subviews.forEach(clearBackground)
     }
 }

@@ -122,7 +122,7 @@ struct NavigationInjectionView: View {
                 presentedNativeFullScreenDismissCompletion = nil
 
                 #if DEBUG
-                NSLog("EmbyNavigation dismiss completed target=native-fullscreen-host")
+                AppLog.event("EmbyNavigation dismiss completed target=native-fullscreen-host")
                 #endif
 
                 completion()
@@ -134,7 +134,7 @@ struct NavigationInjectionView: View {
                         .environment(\.presentationControllerShouldDismiss, $isPresentationInteractive)
                         .environment(\.dismissPresentedNavigationRoute) { completion in
                             #if DEBUG
-                            NSLog("EmbyNavigation dismiss target=direct-native-fullscreen-binding route=%@", coordinator.presentedNativeFullScreen?.id ?? "nil")
+                            AppLog.event("EmbyNavigation dismiss target=direct-native-fullscreen-binding route=%@", coordinator.presentedNativeFullScreen?.id ?? "nil")
                             #endif
                             presentedNativeFullScreenDismissCompletion = completion
                             coordinator.presentedNativeFullScreen = nil
@@ -167,7 +167,7 @@ struct NavigationInjectionView: View {
                             .environment(\.presentationControllerShouldDismiss, $isPresentationInteractive)
                             .environment(\.dismissPresentedNavigationRoute) { completion in
                             #if DEBUG
-                            NSLog("EmbyNavigation dismiss target=direct-fullscreen-binding route=%@", coordinator.presentedFullScreen?.id ?? "nil")
+                            AppLog.event("EmbyNavigation dismiss target=direct-fullscreen-binding route=%@", coordinator.presentedFullScreen?.id ?? "nil")
                             #endif
                             presentedFullScreenDismissStartedAt = CACurrentMediaTime()
                             presentedFullScreenDismissCompletion = completion
@@ -183,7 +183,7 @@ struct NavigationInjectionView: View {
 
                                     #if DEBUG
                                     let elapsed = presentedFullScreenDismissStartedAt.map { CACurrentMediaTime() - $0 } ?? -1
-                                    NSLog(
+                                    AppLog.event(
                                         "EmbyNavigation dismiss completed target=direct-fullscreen-host source=fallback elapsed=%.3f",
                                         elapsed
                                     )
@@ -203,7 +203,7 @@ struct NavigationInjectionView: View {
 
                     #if DEBUG
                     let elapsed = presentedFullScreenDismissStartedAt.map { CACurrentMediaTime() - $0 } ?? -1
-                    NSLog(
+                    AppLog.event(
                         "EmbyNavigation dismiss completed target=direct-fullscreen-host source=viewDidDisappear elapsed=%.3f",
                         elapsed
                     )
@@ -259,7 +259,7 @@ struct NavigationInjectionView: View {
         }
 
         #if DEBUG
-        NSLog("EmbyNavigation fullscreen-residue-reset reason=%@", reason)
+        AppLog.event("EmbyNavigation fullscreen-residue-reset reason=%@", reason)
         #endif
     }
     #endif

@@ -319,7 +319,7 @@ final class DebugCompatibilitySmokeRunner: ObservableObject {
                 stateTitle = "COMPATIBILITY_SMOKE_SESSION_EXPORTED"
                 stateDetail = "Session: \(exportURL.path)"
                 writeRunState("exported_session file=\(exportURL.lastPathComponent)")
-                NSLog("COMPATIBILITY_SMOKE_SESSION_EXPORTED %@", exportURL.path)
+                AppLog.event("COMPATIBILITY_SMOKE_SESSION_EXPORTED %@", exportURL.path)
                 return
             }
 
@@ -366,14 +366,14 @@ final class DebugCompatibilitySmokeRunner: ObservableObject {
 
             stateTitle = passedCount == reports.count ? "COMPATIBILITY_SMOKE_PASS" : "COMPATIBILITY_SMOKE_DONE_WITH_FAILURES"
             stateDetail = "Report: \(reportURL.path)"
-            NSLog("COMPATIBILITY_SMOKE_REPORT %@", reportURL.path)
+            AppLog.event("COMPATIBILITY_SMOKE_REPORT %@", reportURL.path)
         } catch {
             controller.shutdown()
             stateTitle = "COMPATIBILITY_SMOKE_FAIL"
             stateDetail = error.localizedDescription
             writeRunState("failed source=\(configuration.source.rawValue) error=\(error.localizedDescription)")
             writeError(error)
-            NSLog("COMPATIBILITY_SMOKE_FAIL %@", error.localizedDescription)
+            AppLog.event("COMPATIBILITY_SMOKE_FAIL %@", error.localizedDescription)
         }
     }
 
@@ -571,7 +571,7 @@ final class DebugCompatibilitySmokeRunner: ObservableObject {
                     userSession: userSession
                 ))
             } catch {
-                NSLog("COMPATIBILITY_SMOKE_EMBY_SKIP item=%@ error=%@",
+                AppLog.event("COMPATIBILITY_SMOKE_EMBY_SKIP item=%@ error=%@",
                       item.id ?? "<nil>",
                       error.localizedDescription)
             }
@@ -593,7 +593,7 @@ final class DebugCompatibilitySmokeRunner: ObservableObject {
                 as: BaseItemDto.self
             )
             guard item.isPlayable else {
-                NSLog("COMPATIBILITY_SMOKE_EMBY_SKIP item=%@ error=not-playable", itemID)
+                AppLog.event("COMPATIBILITY_SMOKE_EMBY_SKIP item=%@ error=not-playable", itemID)
                 continue
             }
             items.append(item)
@@ -919,7 +919,7 @@ final class DebugCompatibilitySmokeRunner: ObservableObject {
         let fileName = mediaCase.displayName
         stateTitle = "COMPATIBILITY_SMOKE_RUNNING"
         stateDetail = "\(mediaCase.index): \(fileName)"
-        NSLog("COMPATIBILITY_SMOKE_CASE_START %d %@", mediaCase.index, fileName)
+        AppLog.event("COMPATIBILITY_SMOKE_CASE_START %d %@", mediaCase.index, fileName)
 
         controller.load(url: mediaCase.url, headers: mediaCase.headers, startSeconds: mediaCase.startSeconds)
         for subtitle in mediaCase.subtitleURLs {
@@ -947,7 +947,7 @@ final class DebugCompatibilitySmokeRunner: ObservableObject {
         controller.stop()
         try? await Task.sleep(for: .milliseconds(350))
 
-        NSLog("COMPATIBILITY_SMOKE_CASE_%@ %d %@ time=%.3f duration=%.3f subtitles=%d errors=%d",
+        AppLog.event("COMPATIBILITY_SMOKE_CASE_%@ %d %@ time=%.3f duration=%.3f subtitles=%d errors=%d",
               report.passed ? "PASS" : "FAIL",
               mediaCase.index,
               fileName,

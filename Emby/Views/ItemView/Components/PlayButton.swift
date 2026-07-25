@@ -157,7 +157,7 @@ extension ItemView {
         let requiredSubtitleFonts = shouldKeepSelectedTracks ? viewModel.selectedSubtitleRequiredFonts : []
 
         #if DEBUG
-        NSLog(
+        AppLog.event(
             "EmbyPlayButton target=%@ title=%@ source=%@ selectedSource=%@ audio=%d subtitle=%d",
             playButtonItem.id ?? "<nil>",
             playButtonItem.seasonEpisodeLabel ?? playButtonItem.displayTitle,

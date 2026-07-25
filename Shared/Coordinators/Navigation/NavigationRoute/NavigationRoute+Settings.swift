@@ -223,7 +223,7 @@ extension NavigationRoute {
         NavigationRoute(
             id: "log"
         ) {
-            ConsoleView()
+            GroupedLogView()
         }
     }
 

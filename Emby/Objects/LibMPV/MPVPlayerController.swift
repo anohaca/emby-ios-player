@@ -207,7 +207,7 @@ enum MPVSubtitleFileConverter {
                                      isTextSubtitle: Bool?) -> URL? {
         guard canConvert(url: url, codec: codec, isTextSubtitle: isTextSubtitle) else {
             #if DEBUG
-            NSLog("EmbyPlayerSubtitleConvert result=skip path=%@ codec=%@ text=%@",
+            AppLog.event("EmbyPlayerSubtitleConvert result=skip path=%@ codec=%@ text=%@",
                   safeLogPath(for: url),
                   codec ?? "<nil>",
                   isTextSubtitle.map(\.description) ?? "<nil>")
@@ -217,14 +217,14 @@ enum MPVSubtitleFileConverter {
 
         guard let data = loadData(from: url, headers: headers) else {
             #if DEBUG
-            NSLog("EmbyPlayerSubtitleConvert result=load-failed path=%@", safeLogPath(for: url))
+            AppLog.event("EmbyPlayerSubtitleConvert result=load-failed path=%@", safeLogPath(for: url))
             #endif
             return nil
         }
 
         guard let text = decodeSubtitle(data) else {
             #if DEBUG
-            NSLog("EmbyPlayerSubtitleConvert result=decode-failed path=%@ bytes=%d",
+            AppLog.event("EmbyPlayerSubtitleConvert result=decode-failed path=%@ bytes=%d",
                   safeLogPath(for: url),
                   data.count)
             #endif
@@ -242,7 +242,7 @@ enum MPVSubtitleFileConverter {
                 .appendingPathExtension(outputExtension(for: url, codec: codec))
             try convertedText.data(using: .utf8)?.write(to: outputURL, options: .atomic)
             #if DEBUG
-            NSLog("EmbyPlayerSubtitleConvert result=success path=%@ output=%@ bytes=%d",
+            AppLog.event("EmbyPlayerSubtitleConvert result=success path=%@ output=%@ bytes=%d",
                   safeLogPath(for: url),
                   outputURL.lastPathComponent,
                   data.count)
@@ -250,7 +250,7 @@ enum MPVSubtitleFileConverter {
             return outputURL
         } catch {
             #if DEBUG
-            NSLog("EmbyPlayerSubtitleConvert result=write-failed path=%@ error=%@",
+            AppLog.event("EmbyPlayerSubtitleConvert result=write-failed path=%@ error=%@",
                   safeLogPath(for: url),
                   error.localizedDescription)
             #endif
@@ -264,7 +264,7 @@ enum MPVSubtitleFileConverter {
                                      isTextSubtitle: Bool?) -> URL? {
         for (index, url) in urls.enumerated() {
             #if DEBUG
-            NSLog("EmbyPlayerSubtitleConvert candidate=%d path=%@", index, safeLogPath(for: url))
+            AppLog.event("EmbyPlayerSubtitleConvert candidate=%d path=%@", index, safeLogPath(for: url))
             #endif
             if let convertedURL = convertedSubtitleURL(for: url,
                                                        headers: headers,
@@ -686,10 +686,10 @@ final class MPVPlayerController: NSObject {
                 }
                 try session.setActive(true)
                 #if DEBUG
-                NSLog("MPVPlayerAudioSession active=true")
+                AppLog.event("MPVPlayerAudioSession active=true")
                 #endif
             } catch {
-                NSLog("MPVPlayerAudioSession active=false error=%@", error.localizedDescription)
+                AppLog.event("MPVPlayerAudioSession active=false error=%@", error.localizedDescription)
             }
         }
     }

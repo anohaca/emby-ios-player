@@ -288,7 +288,7 @@ final class SeriesItemViewModel: ItemViewModel {
         refreshSeason(for: earlierVisibleUnplayed)
 
         #if DEBUG
-        NSLog(
+        AppLog.event(
             "EmbySeriesPlayButton align candidate=%@ visible-unplayed=%@",
             candidate.seasonEpisodeLabel ?? candidate.displayTitle,
             earlierVisibleUnplayed.seasonEpisodeLabel ?? earlierVisibleUnplayed.displayTitle

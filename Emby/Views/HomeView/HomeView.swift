@@ -202,7 +202,7 @@ struct HomeView: View {
                         isHomeSnapshotOverlayVisible = false
                     }
                     #if DEBUG
-                    NSLog(
+                    AppLog.event(
                         "EmbyHomeExitTrace transition-cover hidden-by-layout sectionsHeight=%.1f expected=%.1f",
                         size.height,
                         expectedHomeSectionsStackHeightAfterPlayerDismiss
@@ -228,8 +228,7 @@ struct HomeView: View {
             isRefreshing: viewModel.backgroundStates.contains(.refresh),
             horizontalOffsetResetRevision: homeHorizontalOffsetResetRevision
         ) {
-            isPullRefreshControlActive = true
-            viewModel.send(.refresh)
+            handlePullRefresh()
         }
     }
 
@@ -264,7 +263,7 @@ struct HomeView: View {
         }
         .onAppear {
             #if DEBUG
-            NSLog(
+            AppLog.event(
                 "EmbyHomeExitTrace home-onAppear t=%.3f state=%@ sections=%d resume=%d libraries=%d refreshing=%@ orientation=%d",
                 playerDismissTraceStart.map { CACurrentMediaTime() - $0 } ?? -1,
                 String(describing: viewModel.state),
@@ -331,23 +330,20 @@ struct HomeView: View {
         }
         .onChange(of: viewModel.backgroundStates.contains(.refresh)) { isRefreshing in
             #if DEBUG
-            NSLog("EmbyHomeExitTrace refresh-state isRefreshing=%@", isRefreshing.description)
+            AppLog.event("EmbyHomeExitTrace refresh-state isRefreshing=%@", isRefreshing.description)
             #endif
             guard !isRefreshing else { return }
-            if isPullRefreshControlActive {
-                pullRefreshRowResetRevision &+= 1
-            }
             isPullRefreshControlActive = false
         }
         #if DEBUG
         .onChange(of: viewModel.state) { state in
-            NSLog("EmbyHomeExitTrace state-change state=%@", String(describing: state))
+            AppLog.event("EmbyHomeExitTrace state-change state=%@", String(describing: state))
         }
         .onChange(of: visibleSections.map(\.id)) { sectionIDs in
-            NSLog("EmbyHomeExitTrace sections-change ids=%@", sectionIDs.joined(separator: ","))
+            AppLog.event("EmbyHomeExitTrace sections-change ids=%@", sectionIDs.joined(separator: ","))
         }
         .onChange(of: viewModel.resumeItems.count) { count in
-            NSLog("EmbyHomeExitTrace resume-count-change count=%d", count)
+            AppLog.event("EmbyHomeExitTrace resume-count-change count=%d", count)
         }
         #endif
         .onChange(of: hiddenSectionIDs) { _ in
@@ -368,7 +364,7 @@ struct HomeView: View {
                 isHomeSnapshotOverlayVisible = false
             }
             #if DEBUG
-            NSLog(
+            AppLog.event(
                 "EmbyHomeExitTrace layout-lock enabled width=%.1f height=%.1f current=%.1fx%.1f cover=false",
                 lockedHomeViewportSize?.width ?? 0,
                 lockedHomeViewportSize?.height ?? 0,
@@ -384,7 +380,7 @@ struct HomeView: View {
                 isHomeSnapshotOverlayVisible = false
             }
             #if DEBUG
-            NSLog(
+            AppLog.event(
                 "EmbyHomeExitTrace layout-lock cover-hidden-immediate stableSize=%.1fx%.1f orientation=%d",
                 homeViewportSize.width,
                 homeViewportSize.height,
@@ -400,7 +396,7 @@ struct HomeView: View {
                         homeHorizontalOffsetResetRevision &+= 1
                     }
                     #if DEBUG
-                    NSLog(
+                    AppLog.event(
                         "EmbyHomeExitTrace layout-lock disabled-after-portrait stableSize=%.1fx%.1f orientation=%d",
                         homeViewportSize.width,
                         homeViewportSize.height,
@@ -413,7 +409,7 @@ struct HomeView: View {
         #if DEBUG
         .onReceive(Notifications[.willDismissVideoPlayer].publisher) {
             playerDismissTraceStart = CACurrentMediaTime()
-            NSLog("EmbyHomeExitTrace player-dismiss-start")
+            AppLog.event("EmbyHomeExitTrace player-dismiss-start")
         }
         #endif
         #if DEBUG
@@ -421,6 +417,16 @@ struct HomeView: View {
             await runPlaybackExitLayoutSmokeIfNeeded()
         }
         #endif
+    }
+
+    private func handlePullRefresh() {
+        resumeRefreshTask?.cancel()
+        resumeRefreshTask = nil
+        isInNavigationTransition = false
+        isPullRefreshControlActive = true
+        pullRefreshRowResetRevision &+= 1
+        viewModel.send(.setRefreshSuspended(false))
+        viewModel.send(.refresh)
     }
 
     @MainActor
@@ -517,7 +523,7 @@ struct HomeView: View {
             try? await Task.sleep(for: .milliseconds(250))
         }
 
-        NSLog("EmbyHomePlaybackExitLayoutSmoke route=failed reason=no-resume-item")
+        AppLog.event("EmbyHomePlaybackExitLayoutSmoke route=failed reason=no-resume-item")
     }
 
     @MainActor
@@ -532,7 +538,7 @@ struct HomeView: View {
             ? EpisodeMediaPlayerQueue(episode: item)
             : nil
 
-        NSLog(
+        AppLog.event(
             "EmbyHomePlaybackExitLayoutSmoke route=requested item=%@ title=%@",
             item.id ?? "<nil>",
             item.displayTitle
@@ -546,7 +552,7 @@ struct HomeView: View {
         )
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(3))
-            NSLog("EmbyHomePlaybackExitLayoutSmoke close=requested")
+            AppLog.event("EmbyHomePlaybackExitLayoutSmoke close=requested")
             NotificationCenter.default.post(name: .debugPlaybackSmokeCloseRequested, object: nil)
         }
         return true
@@ -570,7 +576,7 @@ private struct HomeLayoutTraceView: View {
         }
         .onPreferenceChange(HomeLayoutTraceSizePreferenceKey.self) { sizes in
             guard let size = sizes[name] else { return }
-            NSLog(
+            AppLog.event(
                 "EmbyHomeExitTrace layout t=%.3f name=%@ size=%.1fx%.1f orientation=%d",
                 playerDismissTraceStart.map { CACurrentMediaTime() - $0 } ?? -1,
                 name,
@@ -732,7 +738,7 @@ private final class HomeRefreshControlCoordinator: NSObject, ObservableObject {
         )
 
         #if DEBUG
-        NSLog("EmbyHomeExitTrace horizontal-offset restored x=%.1f", leadingOffset)
+        AppLog.event("EmbyHomeExitTrace horizontal-offset restored x=%.1f", leadingOffset)
         #endif
     }
 }

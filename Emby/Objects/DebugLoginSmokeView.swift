@@ -158,7 +158,7 @@ struct DebugPlaybackSmokeView: View {
 
             let reopenManager = runner.makeFreshLocalPlaybackManagerForSmoke() ?? manager
             didRouteToPlayer = false
-            NSLog("PLAYBACK_SMOKE_REOPEN_ROUTE_AFTER_CLOSE delayMs=%d", delayMilliseconds)
+            AppLog.event("PLAYBACK_SMOKE_REOPEN_ROUTE_AFTER_CLOSE delayMs=%d", delayMilliseconds)
             navigationCoordinator.push(.videoPlayer(manager: reopenManager))
         }
     }
@@ -313,7 +313,7 @@ struct DebugSubtitleLanguageSmokeView: View {
             chineseMatchesTraditionalTitle
 
         status = passed ? "SUBTITLE_LANGUAGE_SMOKE_PASS" : "SUBTITLE_LANGUAGE_SMOKE_FAIL"
-        NSLog(
+        AppLog.event(
             "EmbySubtitleLanguageSmoke passed=%@ titleSelected=%d codeSelected=%d titleMatches=%@",
             passed.description,
             selectedByTitle?.index ?? -1,
@@ -379,7 +379,7 @@ struct DebugSelectUserInitialServerSmokeView: View {
                 viewModel.servers.keys.contains { $0.id == server.id }
 
             status = passed ? "SELECT_USER_INITIAL_SERVER_SMOKE_PASS" : "SELECT_USER_INITIAL_SERVER_SMOKE_FAIL"
-            NSLog(
+            AppLog.event(
                 "EmbySelectUserInitialServerSmoke passed=%@ hasLoadedServers=%@ serverCount=%ld",
                 passed.description,
                 viewModel.hasLoadedServers.description,
@@ -388,7 +388,7 @@ struct DebugSelectUserInitialServerSmokeView: View {
             precondition(passed, "Select user initial server load failed")
         } catch {
             status = "SELECT_USER_INITIAL_SERVER_SMOKE_FAIL \(error.localizedDescription)"
-            NSLog("EmbySelectUserInitialServerSmoke failed error=%@", error.localizedDescription)
+            AppLog.event("EmbySelectUserInitialServerSmoke failed error=%@", error.localizedDescription)
             preconditionFailure("Select user initial server smoke failed: \(error.localizedDescription)")
         }
     }
@@ -497,7 +497,7 @@ private struct DebugPlayerLocalizationSmokeRepresentable: UIViewRepresentable {
             label.widthAnchor.constraint(lessThanOrEqualToConstant: 330),
         ])
 
-        NSLog("EmbyPlayerLocalizationSmoke hud=%@ subtitles=%@ passed=%@",
+        AppLog.event("EmbyPlayerLocalizationSmoke hud=%@ subtitles=%@ passed=%@",
               showsVolume ? "音量 50%" : "亮度 50%",
               (localizedTitles + ["subtitleMenu=\(subtitleMenuTitles.joined(separator: " | "))",
                                   "settingsMenu=\(settingsMenuTitles.joined(separator: " | "))",
@@ -590,7 +590,7 @@ private struct DebugSubtitleAdjustmentSmokeRepresentable: UIViewRepresentable {
             label.widthAnchor.constraint(lessThanOrEqualTo: controlsView.safeAreaLayoutGuide.widthAnchor, constant: -32),
             label.heightAnchor.constraint(equalToConstant: 36),
         ])
-        NSLog("EmbySubtitleAdjustmentSmokeExitState passed=%@ keptHiddenAfterExit=%@ canShowMainControlsAfterExit=%@ panelVisible=%@",
+        AppLog.event("EmbySubtitleAdjustmentSmokeExitState passed=%@ keptHiddenAfterExit=%@ canShowMainControlsAfterExit=%@ panelVisible=%@",
               passed.description,
               keptHiddenAfterExit.description,
               canShowMainControlsAfterExit.description,
@@ -721,7 +721,7 @@ private struct DebugSubtitleAdjustmentSmokeRepresentable: UIViewRepresentable {
             label.widthAnchor.constraint(lessThanOrEqualTo: controlsView.safeAreaLayoutGuide.widthAnchor, constant: -32),
             label.heightAnchor.constraint(equalToConstant: 36),
         ])
-        NSLog("EmbySubtitleAdjustmentSmokeSeparated passed=%@ menu=%@ position=%@ scale=%@ border=%@ delay=%@",
+        AppLog.event("EmbySubtitleAdjustmentSmokeSeparated passed=%@ menu=%@ position=%@ scale=%@ border=%@ delay=%@",
               passed.description,
               "\(menuTitles.joined(separator: " | ")) root=\(rootMenuTitles.joined(separator: " | "))",
               positionSeparated.description,
@@ -1090,7 +1090,7 @@ final class DebugPlaybackSmokeRunner: ObservableObject {
         self.manager = manager
         scheduleForceCloseIfNeeded(configuration: configuration)
 
-        NSLog("PLAYBACK_SMOKE_OPEN_LOCAL %@", url.path)
+        AppLog.event("PLAYBACK_SMOKE_OPEN_LOCAL %@", url.path)
         logger.info("PLAYBACK_SMOKE_OPEN_LOCAL \(url.path)")
         Task { [weak self, weak manager] in
             await self?.verifyLocalPlaybackProgress(
@@ -1110,7 +1110,7 @@ final class DebugPlaybackSmokeRunner: ObservableObject {
         let delayMilliseconds = max(100, Int((seconds * 1000).rounded()))
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(delayMilliseconds))
-            NSLog("PLAYBACK_SMOKE_FORCE_CLOSE_REQUEST seconds=%.2f", seconds)
+            AppLog.event("PLAYBACK_SMOKE_FORCE_CLOSE_REQUEST seconds=%.2f", seconds)
             self?.logger.info("PLAYBACK_SMOKE_FORCE_CLOSE_REQUEST seconds=\(String(format: "%.2f", seconds))")
             NotificationCenter.default.post(name: .debugPlaybackSmokeCloseRequested, object: nil)
         }
@@ -1126,7 +1126,7 @@ final class DebugPlaybackSmokeRunner: ObservableObject {
 
             guard let manager else {
                 state = .failed("Local playback manager released")
-                NSLog("PLAYBACK_SMOKE_FAIL local manager released")
+                AppLog.event("PLAYBACK_SMOKE_FAIL local manager released")
                 logger.error("PLAYBACK_SMOKE_FAIL local manager released")
                 return
             }
@@ -1134,7 +1134,7 @@ final class DebugPlaybackSmokeRunner: ObservableObject {
             if let error = manager.error {
                 let detail = "Local player error: \(error.localizedDescription)"
                 state = .failed(detail)
-                NSLog("PLAYBACK_SMOKE_FAIL %@", detail)
+                AppLog.event("PLAYBACK_SMOKE_FAIL %@", detail)
                 logger.error("PLAYBACK_SMOKE_FAIL \(detail)")
                 return
             }
@@ -1143,11 +1143,11 @@ final class DebugPlaybackSmokeRunner: ObservableObject {
             if observedSeconds >= 0.5 {
                 let detail = "Local progress \(String(format: "%.2f", observedSeconds))s for \(title)"
                 state = .passed(detail)
-                NSLog("PLAYBACK_SMOKE_PASS %@", detail)
+                AppLog.event("PLAYBACK_SMOKE_PASS %@", detail)
                 logger.info("PLAYBACK_SMOKE_PASS \(detail)")
                 if closeAfterPass {
                     try? await Task.sleep(for: .milliseconds(350))
-                    NSLog("PLAYBACK_SMOKE_CLOSE_REQUEST")
+                    AppLog.event("PLAYBACK_SMOKE_CLOSE_REQUEST")
                     logger.info("PLAYBACK_SMOKE_CLOSE_REQUEST")
                     NotificationCenter.default.post(name: .debugPlaybackSmokeCloseRequested, object: nil)
                 }
@@ -1157,7 +1157,7 @@ final class DebugPlaybackSmokeRunner: ObservableObject {
 
         let detail = "No local playback progress after 10s for \(title)"
         state = .failed(detail)
-        NSLog("PLAYBACK_SMOKE_FAIL %@", detail)
+        AppLog.event("PLAYBACK_SMOKE_FAIL %@", detail)
         logger.error("PLAYBACK_SMOKE_FAIL \(detail)")
     }
 
@@ -1167,7 +1167,7 @@ final class DebugPlaybackSmokeRunner: ObservableObject {
         do {
             return try makeLocalFilePlayback(url: url).manager
         } catch {
-            NSLog("PLAYBACK_SMOKE_REOPEN_LOCAL_MANAGER_FAIL %@", error.localizedDescription)
+            AppLog.event("PLAYBACK_SMOKE_REOPEN_LOCAL_MANAGER_FAIL %@", error.localizedDescription)
             logger.error("PLAYBACK_SMOKE_REOPEN_LOCAL_MANAGER_FAIL \(error.localizedDescription)")
             return nil
         }
@@ -1368,18 +1368,18 @@ final class DebugPlaybackSmokeRunner: ObservableObject {
             guard retainedItem != nil, retainedTicks > 0 else {
                 let detail = "Resume item disappeared after close item=\(itemID) ticks=\(retainedTicks)"
                 state = .failed(detail)
-                NSLog("PLAYBACK_SMOKE_FAIL %@", detail)
+                AppLog.event("PLAYBACK_SMOKE_FAIL %@", detail)
                 logger.error("PLAYBACK_SMOKE_FAIL \(detail)")
                 return
             }
 
             state = .passed("Resume retained after close item=\(itemID) ticks=\(retainedTicks)")
-            NSLog("PLAYBACK_SMOKE_RESUME_RETAINED item=%@ ticks=%d", itemID, retainedTicks)
+            AppLog.event("PLAYBACK_SMOKE_RESUME_RETAINED item=%@ ticks=%d", itemID, retainedTicks)
             logger.info("PLAYBACK_SMOKE_RESUME_RETAINED item=\(itemID) ticks=\(retainedTicks)")
         } catch {
             let detail = "Resume retention check failed: \(error.embyDiagnosticDescription)"
             state = .failed(detail)
-            NSLog("PLAYBACK_SMOKE_FAIL %@", detail)
+            AppLog.event("PLAYBACK_SMOKE_FAIL %@", detail)
             logger.error("PLAYBACK_SMOKE_FAIL \(detail)")
         }
     }
@@ -1940,7 +1940,7 @@ final class DebugPlaybackSmokeRunner: ObservableObject {
         let streams = item.subtitleStreams.filter { stream in
             !isExternalSubtitle(stream) && isTextSubtitle(stream)
         }
-        NSLog(
+        AppLog.event(
             "PLAYBACK_SMOKE_EMBEDDED_SUBTITLE_PROBE item=%@ mediaSource=%@ streams=%d",
             itemID,
             mediaSourceID,
@@ -1949,7 +1949,7 @@ final class DebugPlaybackSmokeRunner: ObservableObject {
 
         for stream in streams {
             guard let originalIndex = stream.originalIndex ?? stream.index else {
-                NSLog("PLAYBACK_SMOKE_EMBEDDED_SUBTITLE_PROBE_SKIP reason=missing-index title=%@", stream.displayTitle ?? stream.title ?? "<nil>")
+                AppLog.event("PLAYBACK_SMOKE_EMBEDDED_SUBTITLE_PROBE_SKIP reason=missing-index title=%@", stream.displayTitle ?? stream.title ?? "<nil>")
                 continue
             }
 
@@ -1961,7 +1961,7 @@ final class DebugPlaybackSmokeRunner: ObservableObject {
                 client: session.embyClient
             )
             guard !urls.isEmpty else {
-                NSLog("PLAYBACK_SMOKE_EMBEDDED_SUBTITLE_PROBE_SKIP reason=no-urls index=%d", originalIndex)
+                AppLog.event("PLAYBACK_SMOKE_EMBEDDED_SUBTITLE_PROBE_SKIP reason=no-urls index=%d", originalIndex)
                 continue
             }
 
@@ -1975,7 +1975,7 @@ final class DebugPlaybackSmokeRunner: ObservableObject {
             }.value
 
             if let convertedURL {
-                NSLog(
+                AppLog.event(
                     "PLAYBACK_SMOKE_EMBEDDED_SUBTITLE_CONVERT_PASS index=%d codec=%@ output=%@",
                     originalIndex,
                     stream.codec ?? "<nil>",
@@ -1985,7 +1985,7 @@ final class DebugPlaybackSmokeRunner: ObservableObject {
                 return
             }
 
-            NSLog(
+            AppLog.event(
                 "PLAYBACK_SMOKE_EMBEDDED_SUBTITLE_CONVERT_FAIL index=%d codec=%@ candidates=%d",
                 originalIndex,
                 stream.codec ?? "<nil>",

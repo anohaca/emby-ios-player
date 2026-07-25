@@ -135,14 +135,6 @@ final class SearchViewModel: ViewModel {
                 }
             }
 
-            // The /Persons endpoint cannot honor item filters like Tags or Years.
-            if searchFilters.hasQueryableFilters == false {
-                group.addTask {
-                    let items = try await self._getPeople(query: query)
-                    return (BaseItemKind.person, items)
-                }
-            }
-
             var result: [BaseItemKind: [BaseItemDto]] = [:]
 
             while let items = try await group.next() {
@@ -157,7 +149,7 @@ final class SearchViewModel: ViewModel {
         let resolvedAllResults = try await allResults
 
         guard !Task.isCancelled else { return }
-        self.allItems = resolvedAllResults.items
+        self.allItems = await addingChildImageFallbacks(to: resolvedAllResults.items)
         self.allResultCount = resolvedAllResults.totalRecordCount
         self.items = newItems
     }
@@ -188,19 +180,14 @@ final class SearchViewModel: ViewModel {
                 .first
         }
 
-        let response: EmbyPortItemsResponse<BaseItemDto> = try await userSession.embyClient.items(
-            parameters,
-            as: EmbyPortItemsResponse<BaseItemDto>.self
-        )
-
-        let responseItems = response.items ?? []
+        let responseItems = try await getVisibleLibraryItems(parameters: parameters)
         logger.info(
             """
-            Search all results: query='\(query)' returned=\(responseItems.count) total=\(response.totalRecordCount ?? -1) startIndex=\(response.startIndex ?? -1)
+            Search all results: query='\(query)' returned=\(responseItems.count)
             """
         )
 
-        return (responseItems, response.totalRecordCount)
+        return (responseItems, responseItems.count)
     }
 
     private func _getItems(query: String, itemType: BaseItemKind, filters: ItemFilterCollection) async throws -> [BaseItemDto] {
@@ -211,7 +198,9 @@ final class SearchViewModel: ViewModel {
             )
             .search(query: query, limit: 50)
 
-            return results.sortedByVideoBitRateIfNeeded(filters: filters)
+            return await addingChildImageFallbacks(
+                to: results.sortedByVideoBitRateIfNeeded(filters: filters)
+            )
         }
 
         var parameters = EmbyPortItemsParameters()
@@ -225,15 +214,15 @@ final class SearchViewModel: ViewModel {
         // Filters
         parameters.apply(filters: filters)
 
-        let response: EmbyPortItemsResponse<BaseItemDto> = try await userSession.embyClient.items(
-            parameters,
-            as: EmbyPortItemsResponse<BaseItemDto>.self
-        )
-
-        return (response.items ?? []).sortedByVideoBitRateIfNeeded(filters: filters)
+        let items = try await getVisibleLibraryItems(parameters: parameters)
+            .sortedByVideoBitRateIfNeeded(filters: filters)
+        return await addingChildImageFallbacks(to: items)
     }
 
     private func _getPeople(query: String) async throws -> [BaseItemDto] {
+
+        // Emby's Persons endpoint has no parent-library filter.
+        guard !SearchLibraryScope.hasHiddenLibraries else { return [] }
 
         var parameters = EmbyPortPersonsParameters()
         parameters.limit = 20
@@ -257,14 +246,146 @@ final class SearchViewModel: ViewModel {
         var parameters = EmbyPortItemsParameters()
         parameters.includeItemTypes = [.movie, .series]
         parameters.isRecursive = true
-        parameters.limit = 10
+        parameters.limit = 9
         parameters.sortBy = [ItemSortBy.random]
+
+        let suggestionLimit = parameters.limit ?? 10
+        let items = Array(
+            try await getVisibleLibraryItems(parameters: parameters)
+                .filter { $0.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines).isNotEmpty }
+                .prefix(suggestionLimit)
+        )
+        self.suggestions = await addingChildImageFallbacks(to: items)
+    }
+
+    private func getVisibleLibraryItems(parameters: EmbyPortItemsParameters) async throws -> [BaseItemDto] {
+        guard let parentIDs = try await SearchLibraryScope.visibleParentIDs(userSession: userSession) else {
+            let response: EmbyPortItemsResponse<BaseItemDto> = try await userSession.embyClient.items(
+                parameters,
+                as: EmbyPortItemsResponse<BaseItemDto>.self
+            )
+            return response.items ?? []
+        }
+
+        guard parentIDs.isNotEmpty else { return [] }
+
+        return try await withThrowingTaskGroup(of: [BaseItemDto].self) { group in
+            for parentID in parentIDs {
+                group.addTask {
+                    var scopedParameters = parameters
+                    scopedParameters.parentID = parentID
+                    let response: EmbyPortItemsResponse<BaseItemDto> = try await self.userSession.embyClient.items(
+                        scopedParameters,
+                        as: EmbyPortItemsResponse<BaseItemDto>.self
+                    )
+                    return response.items ?? []
+                }
+            }
+
+            var items: [BaseItemDto] = []
+            for try await scopedItems in group {
+                items.append(contentsOf: scopedItems)
+            }
+            return SearchLibraryScope.unique(items)
+        }
+    }
+
+    private func addingChildImageFallbacks(to items: [BaseItemDto]) async -> [BaseItemDto] {
+        let items = await hydratingEpisodeSeriesImages(in: items)
+
+        return await withTaskGroup(of: (Int, BaseItemDto).self) { group in
+            for (index, item) in items.enumerated() {
+                group.addTask {
+                    guard item.needsSearchChildImageFallback,
+                          let fallback = try? await self.firstChildImageFallback(for: item) else {
+                        return (index, item)
+                    }
+                    return (index, fallback)
+                }
+            }
+
+            var resolved = Array<BaseItemDto?>(repeating: nil, count: items.count)
+            for await (index, item) in group {
+                resolved[index] = item
+            }
+            return resolved.compactMap { $0 }
+        }
+    }
+
+    private func hydratingEpisodeSeriesImages(in items: [BaseItemDto]) async -> [BaseItemDto] {
+        let seriesIDs: [String] = Array(Set(items.compactMap { item -> String? in
+            guard item.type == .episode,
+                  item.seriesPrimaryImageTag == nil else { return nil }
+            return item.seriesID
+        }))
+        guard seriesIDs.isNotEmpty else { return items }
+
+        var parameters = EmbyPortItemsParameters()
+        parameters.fields = .MinimumFields
+        parameters.ids = seriesIDs
+        parameters.includeItemTypes = [.series]
+
+        guard let response: EmbyPortItemsResponse<BaseItemDto> = try? await userSession.embyClient.items(
+            parameters,
+            as: EmbyPortItemsResponse<BaseItemDto>.self
+        ) else {
+            return items
+        }
+
+        let imageTagsBySeriesID = Dictionary(
+            uniqueKeysWithValues: (response.items ?? []).compactMap { series -> (String, String)? in
+                guard let id = series.id,
+                      let tag = series.imageTags?[ImageType.primary.rawValue] else { return nil }
+                return (id, tag)
+            }
+        )
+
+        return items.map { item in
+            guard item.type == .episode,
+                  let seriesID = item.seriesID,
+                  let imageTag = imageTagsBySeriesID[seriesID] else { return item }
+
+            var hydratedItem = item
+            hydratedItem.seriesPrimaryImageTag = imageTag
+            return hydratedItem
+        }
+    }
+
+    private func firstChildImageFallback(for item: BaseItemDto) async throws -> BaseItemDto? {
+        guard let itemID = item.id else { return nil }
+
+        var parameters = EmbyPortItemsParameters()
+        parameters.fields = .MinimumFields
+        parameters.includeItemTypes = [.episode, .movie, .series, .video]
+        parameters.isRecursive = true
+        parameters.limit = 10
+        parameters.parentID = itemID
+        parameters.sortBy = [.parentIndexNumber, .indexNumber, .dateCreated]
 
         let response: EmbyPortItemsResponse<BaseItemDto> = try await userSession.embyClient.items(
             parameters,
             as: EmbyPortItemsResponse<BaseItemDto>.self
         )
 
-        self.suggestions = response.items ?? []
+        guard let child = response.items?.first(where: { $0.imageTags?[ImageType.primary.rawValue] != nil }),
+              let childID = child.id,
+              let imageTag = child.imageTags?[ImageType.primary.rawValue] else {
+            return nil
+        }
+
+        return item
+            .mutating(\.parentPrimaryImageItemID, with: childID)
+            .mutating(\.parentPrimaryImageTag, with: imageTag)
+    }
+}
+
+private extension BaseItemDto {
+
+    var needsSearchChildImageFallback: Bool {
+        guard type == .folder || type == .series else { return false }
+
+        return imageTags?.isEmpty != false &&
+            backdropImageTags?.isEmpty != false &&
+            screenshotImageTags?.isEmpty != false
     }
 }

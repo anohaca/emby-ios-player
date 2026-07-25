@@ -87,7 +87,7 @@ struct MainTabView: View {
                 isVideoPlayerTransitionCoverVisible = true
             }
             #if DEBUG
-            NSLog("EmbyMainTabTransitionCover visible=true")
+            AppLog.event("EmbyMainTabTransitionCover visible=true")
             #endif
         }
         .onReceive(Notifications[.willDismissVideoPlayer].publisher) {
@@ -97,7 +97,7 @@ struct MainTabView: View {
                 isVideoPlayerTransitionCoverVisible = false
             }
             #if DEBUG
-            NSLog("EmbyMainTabTransitionCover visible=false immediate")
+            AppLog.event("EmbyMainTabTransitionCover visible=false immediate")
             #endif
         }
         .onDisappear {

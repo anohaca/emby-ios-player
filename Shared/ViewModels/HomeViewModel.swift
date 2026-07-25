@@ -167,7 +167,7 @@ final class HomeViewModel: ViewModel, Stateful {
             guard !isRefreshSuspended else {
                 markPendingHomeRefresh()
                 #if DEBUG
-                NSLog("EmbyHomeExitTrace backgroundRefresh-skipped reason=suspended")
+                AppLog.event("EmbyHomeExitTrace backgroundRefresh-skipped reason=suspended")
                 #endif
                 return state
             }
@@ -183,7 +183,7 @@ final class HomeViewModel: ViewModel, Stateful {
             guard hasPendingHomeRefresh() else { return state }
             guard !isRefreshSuspended else {
                 #if DEBUG
-                NSLog("EmbyHomeExitTrace pending-refresh-held reason=suspended")
+                AppLog.event("EmbyHomeExitTrace pending-refresh-held reason=suspended")
                 #endif
                 return state
             }
@@ -208,7 +208,7 @@ final class HomeViewModel: ViewModel, Stateful {
             isRefreshSuspended = isSuspended
             didHoldSuspendedRefreshNotification = false
             #if DEBUG
-            NSLog("EmbyHomeExitTrace refresh-suspended=%@", isSuspended.description)
+            AppLog.event("EmbyHomeExitTrace refresh-suspended=%@", isSuspended.description)
             #endif
 
             if isSuspended {
@@ -228,7 +228,7 @@ final class HomeViewModel: ViewModel, Stateful {
             guard !isRefreshSuspended else {
                 markPendingHomeRefresh()
                 #if DEBUG
-                NSLog("EmbyHomeExitTrace refresh-skipped reason=suspended")
+                AppLog.event("EmbyHomeExitTrace refresh-skipped reason=suspended")
                 #endif
                 return state == .content ? state : .refreshing
             }
@@ -251,7 +251,7 @@ final class HomeViewModel: ViewModel, Stateful {
                 markPendingHomeRefresh()
             }
             #if DEBUG
-            NSLog("EmbyHomeExitTrace refresh-coalesced background=%@", isBackground.description)
+            AppLog.event("EmbyHomeExitTrace refresh-coalesced background=%@", isBackground.description)
             #endif
             return
         }
@@ -320,7 +320,7 @@ final class HomeViewModel: ViewModel, Stateful {
     private func refresh() async throws {
         let refreshStart = CACurrentMediaTime()
         #if DEBUG
-        NSLog(
+        AppLog.event(
             "EmbyHomeExitTrace refresh-begin state=%@ background=%@ resume=%d libraries=%d",
             String(describing: state),
             backgroundStates.contains(.refresh).description,
@@ -339,29 +339,33 @@ final class HomeViewModel: ViewModel, Stateful {
         try await nextUpRefresh
         try Task.checkCancellation()
         #if DEBUG
-        NSLog("EmbyHomeExitTrace refresh-step nextUp elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, stagedNextUpViewModel.elements.count)
+        AppLog.event("EmbyHomeExitTrace refresh-step nextUp elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, stagedNextUpViewModel.elements.count)
         #endif
         try await recentlyAddedRefresh
         try Task.checkCancellation()
         #if DEBUG
-        NSLog("EmbyHomeExitTrace refresh-step recentlyAdded elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, stagedRecentlyAddedViewModel.elements.count)
+        AppLog.event("EmbyHomeExitTrace refresh-step recentlyAdded elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, stagedRecentlyAddedViewModel.elements.count)
         #endif
 
         let libraries = try await fetchedLibraries
         try Task.checkCancellation()
         #if DEBUG
-        NSLog("EmbyHomeExitTrace refresh-step libraries elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, libraries.count)
+        AppLog.event("EmbyHomeExitTrace refresh-step libraries elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, libraries.count)
         #endif
-        let resumeItems = try await getResumeItems(for: libraries)
+        async let fetchedResumeItems = getResumeItems(for: libraries)
+        async let refreshedLibraries: Void = refreshLibraries(libraries, refreshStart: refreshStart)
+        async let fetchedNextEpisodeAfterPlayedItems: [BaseItemDto] = getNextEpisodeAfterPlayedItemsIfEnabled(
+            libraries: libraries
+        )
+
+        let resumeItems = try await fetchedResumeItems
         try Task.checkCancellation()
         #if DEBUG
-        NSLog("EmbyHomeExitTrace refresh-step resume elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, resumeItems.count)
+        AppLog.event("EmbyHomeExitTrace refresh-step resume elapsed=%.3f count=%d", CACurrentMediaTime() - refreshStart, resumeItems.count)
         #endif
 
-        try await refreshLibraries(libraries, refreshStart: refreshStart)
-        let nextEpisodeAfterPlayedItems = Defaults[.Customization.Home.showContinueWatching]
-            ? try await getNextEpisodeAfterPlayedItems(libraries: libraries)
-            : []
+        let nextEpisodeAfterPlayedItems = try await fetchedNextEpisodeAfterPlayedItems
+        try await refreshedLibraries
         try Task.checkCancellation()
 
         await MainActor.run {
@@ -390,7 +394,7 @@ final class HomeViewModel: ViewModel, Stateful {
             }
             _ = self.consumePendingHomeRefresh()
             #if DEBUG
-            NSLog(
+            AppLog.event(
                 "EmbyHomeExitTrace refresh-apply elapsed=%.3f apply=%.3f resume=%d libraries=%d",
                 CACurrentMediaTime() - refreshStart,
                 CACurrentMediaTime() - applyStart,
@@ -419,7 +423,7 @@ final class HomeViewModel: ViewModel, Stateful {
         try await viewModel.refresh()
         viewModel.state = .content
         #if DEBUG
-        NSLog(
+        AppLog.event(
             "EmbyHomeExitTrace refresh-library title=%@ elapsed=%.3f count=%d",
             title,
             CACurrentMediaTime() - start,
@@ -460,7 +464,7 @@ final class HomeViewModel: ViewModel, Stateful {
             for try await (index, title, count) in group {
                 try Task.checkCancellation()
                 #if DEBUG
-                NSLog(
+                AppLog.event(
                     "EmbyHomeExitTrace refresh-step library[%d] elapsed=%.3f title=%@ count=%d",
                     index,
                     CACurrentMediaTime() - refreshStart,
@@ -501,14 +505,14 @@ final class HomeViewModel: ViewModel, Stateful {
         guard !isRefreshSuspended else {
             #if DEBUG
             if !didHoldSuspendedRefreshNotification {
-                NSLog("EmbyHomeExitTrace notification-refresh held reason=suspended pending=%@", hasPendingHomeRefresh().description)
+                AppLog.event("EmbyHomeExitTrace notification-refresh held reason=suspended pending=%@", hasPendingHomeRefresh().description)
             }
             #endif
             didHoldSuspendedRefreshNotification = true
             return
         }
         #if DEBUG
-        NSLog("EmbyHomeExitTrace notification-refresh scheduled pending=%@", hasPendingHomeRefresh().description)
+        AppLog.event("EmbyHomeExitTrace notification-refresh scheduled pending=%@", hasPendingHomeRefresh().description)
         #endif
 
         notificationRefreshTask = Task { [weak self] in
@@ -521,7 +525,7 @@ final class HomeViewModel: ViewModel, Stateful {
             await MainActor.run {
                 guard let self, self.state == .content, self.hasPendingHomeRefresh() else { return }
                 #if DEBUG
-                NSLog("EmbyHomeExitTrace notification-refresh fire")
+                AppLog.event("EmbyHomeExitTrace notification-refresh fire")
                 #endif
                 self.send(.backgroundRefresh)
             }
@@ -592,10 +596,13 @@ final class HomeViewModel: ViewModel, Stateful {
             as: EmbyPortItemsResponse<BaseItemDto>.self
         )
 
-        let items = HomeItemUserDataOverrideStore.applyingOverrides(
-            to: response.items ?? [],
+        let entries = HomeItemUserDataOverrideStore.load(
             serverID: userSession.server.id,
             userID: userSession.user.id
+        )
+        let items = HomeItemUserDataOverrideStore.applyingFreshItemOnlyOverrides(
+            to: response.items ?? [],
+            entries: entries
         )
 
         return items.filter {
@@ -672,10 +679,9 @@ final class HomeViewModel: ViewModel, Stateful {
         )
         updateItemsIfChanged(
             &nextEpisodeAfterPlayedItems.elements,
-            HomeItemUserDataOverrideStore.filteredNextUpItems(
+            HomeItemUserDataOverrideStore.filteredItemOnlyUnplayedItems(
                 Array(nextEpisodeAfterPlayedItems),
-                entries: entries,
-                playedAncestorIDs: visiblePlayedItemIDs
+                entries: entries
             )
         )
 
@@ -827,6 +833,13 @@ final class HomeViewModel: ViewModel, Stateful {
         }
     }
 
+    private func getNextEpisodeAfterPlayedItemsIfEnabled(
+        libraries: [LatestInLibraryViewModel]
+    ) async throws -> [BaseItemDto] {
+        guard Defaults[.Customization.Home.showContinueWatching] else { return [] }
+        return try await getNextEpisodeAfterPlayedItems(libraries: libraries)
+    }
+
     private func getVisibleSeriesCandidatesForNextEpisodeAfterPlayed(
         libraries: [LatestInLibraryViewModel]
     ) async throws -> [NextEpisodeSeriesCandidate] {
@@ -898,7 +911,7 @@ final class HomeViewModel: ViewModel, Stateful {
             as: EmbyPortItemsResponse<BaseItemDto>.self
         )
 
-        let episodes = HomeItemUserDataOverrideStore.applyingOverrides(
+        let episodes = HomeItemUserDataOverrideStore.applyingFreshItemOnlyOverrides(
             to: response.items ?? [],
             entries: entries
         )
@@ -1325,11 +1338,10 @@ enum HomeItemUserDataOverrideStore {
         entries: [String: Entry],
         playedAncestorIDs: Set<String> = []
     ) -> [BaseItemDto] {
-        items
-            .filter { item in
-                entry(for: item, in: entries)?.isPlayed != true && !hasPlayedAncestor(item, in: playedAncestorIDs)
-            }
-            .map { applying(entries: entries, to: $0) }
+        let visibleItems = items.filter { item in
+            entry(for: item, in: entries)?.isPlayed != true && !hasPlayedAncestor(item, in: playedAncestorIDs)
+        }
+        return applyingFreshItemOnlyOverrides(to: visibleItems, entries: entries)
     }
 
     static func filteredNextUpItems(
@@ -1397,10 +1409,42 @@ enum HomeItemUserDataOverrideStore {
         userID: String
     ) -> [BaseItemDto] {
         let entries = load(serverID: serverID, userID: userID)
+        return applyingItemOnlyOverrides(to: items, entries: entries)
+    }
+
+    static func applyingItemOnlyOverrides(
+        to items: [BaseItemDto],
+        entries: [String: Entry]
+    ) -> [BaseItemDto] {
         return items.map { item in
             guard let itemID = item.id, let entry = entries[itemID] else { return item }
-            return applyingPlayedState(entry.isPlayed, to: item)
+            return applyingPlaybackPosition(entry, to: item)
         }
+    }
+
+    /// A refreshed episode list is authoritative. Local playback positions
+    /// only bridge the brief delay before Emby reflects a progress update.
+    static func applyingFreshItemOnlyOverrides(
+        to items: [BaseItemDto],
+        entries: [String: Entry]
+    ) -> [BaseItemDto] {
+        let now = Date().timeIntervalSince1970
+
+        return items.map { item in
+            guard let itemID = item.id, let entry = entries[itemID] else { return item }
+            guard entry.playbackPositionTicks == nil || now - entry.changedAt <= playedStateMaxAge else {
+                return item
+            }
+            return applyingPlaybackPosition(entry, to: item)
+        }
+    }
+
+    static func filteredItemOnlyUnplayedItems(
+        _ items: [BaseItemDto],
+        entries: [String: Entry]
+    ) -> [BaseItemDto] {
+        applyingFreshItemOnlyOverrides(to: items, entries: entries)
+            .filter { $0.userData?.isPlayed != true }
     }
 
     static func latestChangedItemID(

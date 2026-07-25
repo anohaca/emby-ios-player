@@ -330,7 +330,7 @@ final class LibMPVMediaPlayerProxy: VideoMediaPlayerProxy,
         let mediaSourceID = item.mediaSource.id
 
         #if DEBUG
-        NSLog(
+        AppLog.event(
             "EmbyPlayerEmbeddedConvertedSubtitles proxy-enter enabled=%@ item=%@ mediaSource=%@ subtitles=%d",
             shouldConvert.description,
             itemID ?? "<nil>",

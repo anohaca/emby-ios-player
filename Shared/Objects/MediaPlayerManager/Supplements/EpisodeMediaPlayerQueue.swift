@@ -105,7 +105,7 @@ class EpisodeMediaPlayerQueue: ViewModel, MediaPlayerQueue {
         let nextItem = nextIndex.map { items[$0] }
 
         #if DEBUG
-        NSLog(
+        AppLog.event(
             "EmbyEpisodeQueue current=%@ index=%d/%d previous=%@ next=%@",
             itemID,
             currentIndex + 1,

@@ -36,7 +36,7 @@ final class NavigationCoordinator: ObservableObject {
         case .fullscreen:
             styleName = "fullscreen"
         }
-        NSLog("EmbyNavigation push route=%@ style=%@", route.id, styleName)
+        AppLog.event("EmbyNavigation push route=%@ style=%@", route.id, styleName)
         #endif
 
         #if os(tvOS)

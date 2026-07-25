@@ -794,6 +794,10 @@ extension Defaults.Keys {
                 AppKey("subtitleDelay", default: 0)
             }
 
+            static var subtitleDelayBySeason: Key<[String: Double]> {
+                AppKey("subtitleDelayBySeason", default: [:])
+            }
+
             static var convertTraditionalChineseSubtitles: Key<Bool> {
                 AppKey("convertTraditionalChineseSubtitles", default: false)
             }
@@ -804,8 +808,8 @@ extension Defaults.Keys {
         }
 
         enum Transition {
-            static var pauseOnBackground: Key<Bool> {
-                UserKey("playInBackground", default: true)
+            static var continuePlayingInBackground: Key<Bool> {
+                AppKey("continuePlayingInBackground", default: false)
             }
         }
     }

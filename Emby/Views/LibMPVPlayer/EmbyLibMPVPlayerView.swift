@@ -60,14 +60,14 @@ struct EmbyLibMPVPlayerView: View {
         }
         if let onDismiss {
             #if DEBUG
-            NSLog("EmbyPlayerDismiss route=player-window")
+            AppLog.event("EmbyPlayerDismiss route=player-window")
             #endif
             onDismiss()
             return
         }
 
         #if DEBUG
-        NSLog("EmbyPlayerDismiss route=presentation-coordinator isPresented=%@", presentationCoordinator.isPresented.description)
+        AppLog.event("EmbyPlayerDismiss route=presentation-coordinator isPresented=%@", presentationCoordinator.isPresented.description)
         #endif
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
@@ -201,6 +201,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private var subtitleScale = 1.0
     private var subtitleBorderSize = 3.0
     private var subtitleDelay = 0.0
+    private var subtitleDelaySeasonKey: String?
     private var subtitleAdjustmentSettingsDidChange = false
     private var lastSubtitleAdjustmentLogAt: Date?
     private var shouldResumeAfterSubtitlePicker = false
@@ -356,6 +357,12 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         updateEpisodeNavigation()
         NotificationCenter.default.addObserver(
             self,
+            selector: #selector(appWillResignActiveNotification),
+            name: UIApplication.willResignActiveNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
             selector: #selector(appDidEnterBackgroundNotification),
             name: UIApplication.didEnterBackgroundNotification,
             object: nil
@@ -479,7 +486,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                     UIApplication.shared.beginReceivingRemoteControlEvents()
                 }
                 #if DEBUG
-                NSLog(
+                AppLog.event(
                     "EmbyPlayerAudioSession active=true reason=%@ category=%@ mode=%@",
                     reason,
                     audioSession.category.rawValue,
@@ -487,7 +494,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                 )
                 #endif
             } catch {
-                NSLog("EmbyPlayerAudioSession active=false reason=%@ error=%@", reason, error.localizedDescription)
+                AppLog.event("EmbyPlayerAudioSession active=false reason=%@ error=%@", reason, error.localizedDescription)
             }
         }
     }
@@ -558,7 +565,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         }
 
         guard scenes.isNotEmpty else {
-            NSLog("EmbyPlayerOrientation request=landscape result=missing-window-scene")
+            AppLog.event("EmbyPlayerOrientation request=landscape result=missing-window-scene")
             return
         }
 
@@ -608,7 +615,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             }
         }
         #if DEBUG
-        NSLog(
+        AppLog.event(
             "EmbyPlayerOrientation prepare=landscape generation=%d requestScene=%@",
             generation,
             requestSceneImmediately.description
@@ -675,7 +682,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         orientationOverrideGeneration += 1
 
         #if DEBUG
-        NSLog("EmbyPlayerOrientation begin=portrait-dismiss generation=%d", orientationOverrideGeneration)
+        AppLog.event("EmbyPlayerOrientation begin=portrait-dismiss generation=%d", orientationOverrideGeneration)
         #endif
 
         preparePortraitOrientationForDismissal(requestSceneImmediately: true, logName: "portrait-dismiss")
@@ -798,7 +805,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     ) {
         #if DEBUG
         let requestStart = CACurrentMediaTime()
-        NSLog(
+        AppLog.event(
             "EmbyPlayerExitTrace orientation-request-begin name=%@ mask=%@ current=%d",
             logName,
             String(describing: mask),
@@ -807,7 +814,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         #endif
         if #available(iOS 16.0, *) {
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { error in
-                NSLog("EmbyPlayerOrientation request=%@ result=fail error=%@", logName, error.localizedDescription)
+                AppLog.event("EmbyPlayerOrientation request=%@ result=fail error=%@", logName, error.localizedDescription)
             }
         } else {
             let orientation: UIInterfaceOrientation = mask == .portrait ? .portrait : .landscapeRight
@@ -815,9 +822,9 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             UIViewController.attemptRotationToDeviceOrientation()
         }
 
-        NSLog("EmbyPlayerOrientation request=%@ result=sent sceneOrientation=%d", logName, scene.interfaceOrientation.rawValue)
+        AppLog.event("EmbyPlayerOrientation request=%@ result=sent sceneOrientation=%d", logName, scene.interfaceOrientation.rawValue)
         #if DEBUG
-        NSLog(
+        AppLog.event(
             "EmbyPlayerExitTrace orientation-request-sent name=%@ elapsed=%.3f current=%d",
             logName,
             CACurrentMediaTime() - requestStart,
@@ -841,7 +848,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         let now = CACurrentMediaTime()
         exitTraceStartTime = now
         exitTraceLastTickTime = now
-        NSLog("EmbyPlayerExitTrace start reason=%@", reason)
+        AppLog.event("EmbyPlayerExitTrace start reason=%@", reason)
         tracePlayerExitLayerState("start")
         schedulePlayerExitTraceTick(generation: generation)
         #endif
@@ -877,7 +884,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         #if DEBUG
         let elapsed = exitTraceStartTime.map { CACurrentMediaTime() - $0 } ?? -1
         let sceneOrientation = view.window?.windowScene?.interfaceOrientation.rawValue ?? 0
-        NSLog(
+        AppLog.event(
             "EmbyPlayerExitTrace t=%.3f %@ window=%@ sceneOrientation=%d appState=%ld",
             elapsed,
             message,
@@ -918,7 +925,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         let playerAnimations = playerView.layer.animationKeys()?.joined(separator: ",") ?? "<none>"
         let metalAnimations = playerView.metalLayer.animationKeys()?.joined(separator: ",") ?? "<none>"
         let root = view.window?.rootViewController
-        NSLog(
+        AppLog.event(
             "EmbyPlayerExitTrace layer source=%@ isBeingDismissed=%@ movingFromParent=%@ presenting=%@ presented=%@ rootPresented=%@ viewAnim=%@ playerAnim=%@ metalAnim=%@",
             source,
             isBeingDismissed.description,
@@ -1009,6 +1016,12 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         tracePlayerExit("preparePortrait end")
     }
 
+    @objc private nonisolated func appWillResignActiveNotification() {
+        MainActor.assumeIsolated { [weak self] in
+            self?.handleAppWillResignActive()
+        }
+    }
+
     @objc private nonisolated func appDidEnterBackgroundNotification() {
         Task { @MainActor [weak self] in
             self?.handleAppDidEnterBackground()
@@ -1027,23 +1040,44 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         }
     }
 
+    private func handleAppWillResignActive() {
+        guard !didRequestClose else { return }
+        guard !Defaults[.VideoPlayer.Transition.continuePlayingInBackground] else { return }
+
+        let wasPlaying = !player.isPaused
+        shouldResumeAfterForeground = shouldResumeAfterForeground || wasPlaying
+        UIApplication.shared.isIdleTimerDisabled = false
+        if wasPlaying {
+            player.setPaused(true)
+        }
+
+        #if DEBUG
+        AppLog.event("EmbyPlayerBackground willResign pause=%@ resume=%@ time=%.3f",
+              wasPlaying.description,
+              shouldResumeAfterForeground.description,
+              player.currentTime)
+        #endif
+    }
+
     private func handleAppDidEnterBackground() {
         isInBackground = true
         UIApplication.shared.isIdleTimerDisabled = false
 
-        let playsInBackground = Defaults[.VideoPlayer.Transition.pauseOnBackground]
+        let playsInBackground = Defaults[.VideoPlayer.Transition.continuePlayingInBackground]
         let shouldPause = !playsInBackground
-        shouldResumeAfterForeground = shouldPause && !player.isPaused
+        shouldResumeAfterForeground = shouldResumeAfterForeground || (shouldPause && !player.isPaused)
         if shouldPause {
             beginBackgroundPauseTaskIfNeeded()
-            player.setPaused(true)
+            if !player.isPaused {
+                player.setPaused(true)
+            }
         } else {
             activatePlaybackAudioSession(reason: "didEnterBackground")
             endBackgroundPauseTask()
         }
 
         #if DEBUG
-        NSLog("EmbyPlayerBackground didEnter playInBackground=%@ pause=%@ resume=%@ time=%.3f remaining=%.1f",
+        AppLog.event("EmbyPlayerBackground didEnter playInBackground=%@ pause=%@ resume=%@ time=%.3f remaining=%.1f",
               playsInBackground.description,
               shouldPause.description,
               shouldResumeAfterForeground.description,
@@ -1075,7 +1109,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         }
 
         #if DEBUG
-        NSLog("EmbyPlayerBackground willEnterForeground resumed=%@ time=%.3f drawable=%@",
+        AppLog.event("EmbyPlayerBackground willEnterForeground resumed=%@ time=%.3f drawable=%@",
               (!player.isPaused).description,
               player.currentTime,
               NSCoder.string(for: playerView.metalLayer.drawableSize))
@@ -1087,13 +1121,21 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         guard !didRequestClose else { return }
         isInBackground = false
         scheduleForegroundRenderRefreshBurst(nudgeVideoOutput: false)
+        resumeAfterForegroundIfNeeded()
 
         #if DEBUG
-        NSLog("EmbyPlayerBackground didBecomeActive bounds=%@ drawable=%@",
+        AppLog.event("EmbyPlayerBackground didBecomeActive bounds=%@ drawable=%@",
               NSCoder.string(for: playerView.bounds),
               NSCoder.string(for: playerView.metalLayer.drawableSize))
         logForegroundGeometry(reason: "didBecomeActive")
         #endif
+    }
+
+    private func resumeAfterForegroundIfNeeded() {
+        guard shouldResumeAfterForeground else { return }
+        shouldResumeAfterForeground = false
+        player.setPaused(false)
+        UIApplication.shared.isIdleTimerDisabled = true
     }
 
     #if DEBUG
@@ -1114,6 +1156,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
     @objc private func debugPlaybackSmokeVerifyLongPressHUDRequested() {
         showControls()
+        controlsView.beginSkipIntroAdjustmentForSmoke()
         let initialSpeed = player.playbackSpeed
         handleLongPressSpeedGesture(state: .began)
         let controlsVisibleImmediatelyAfterBegin = controlsView.controlsVisibleForSmoke
@@ -1139,7 +1182,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                     abs(currentSpeed - initialSpeed) < 0.001
                 let detail = "visibleAfterBegin=\(visibleAfterBegin) text=\(textAfterBegin) controlsVisibleImmediatelyAfterBegin=\(controlsVisibleImmediatelyAfterBegin) controlsVisibleAfterBegin=\(controlsVisibleAfterBegin) visibleWhileHeldAfterDelay=\(visibleWhileHeldAfterDelay) controlsVisibleWhileHeldAfterDelay=\(controlsVisibleWhileHeldAfterDelay) speed=\(String(format: "%.2f", currentSpeed))"
 
-                NSLog("EmbyPlayerGestureHUDSmoke %@", detail)
+                AppLog.event("EmbyPlayerGestureHUDSmoke %@", detail)
                 NotificationCenter.default.post(
                     name: .debugPlaybackSmokeLongPressHUDVerified,
                     object: nil,
@@ -1163,7 +1206,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             let passed = !progressVisibleAfterDelay && !controlsVisibleAfterDelay
             let detail = "target=\(String(format: "%.2f", target)) progressVisibleAfterDelay=\(progressVisibleAfterDelay) controlsVisibleAfterDelay=\(controlsVisibleAfterDelay)"
 
-            NSLog("EmbyPlayerProgressBarAutoHideSmoke %@", detail)
+            AppLog.event("EmbyPlayerProgressBarAutoHideSmoke %@", detail)
             NotificationCenter.default.post(
                 name: .debugPlaybackSmokeProgressBarAutoHideVerified,
                 object: nil,
@@ -1202,7 +1245,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                     !visibleAfterDelay
                 let detail = "visibleAfterChange=\(visibleAfterChange) text=\(textAfterChange) usesPlainTopStyle=\(usesPlainTopStyle) legacySeekPreviewVisible=\(legacySeekPreviewVisible) timelineValueAfterChange=\(String(format: "%.2f", timelineValueAfterChange)) expectedTimelineValue=\(String(format: "%.2f", expectedTimelineValue)) timelineTracksTarget=\(timelineTracksTarget) visibleAfterDelay=\(visibleAfterDelay)"
 
-                NSLog("EmbyPlayerSeekGestureHUDSmoke %@", detail)
+                AppLog.event("EmbyPlayerSeekGestureHUDSmoke %@", detail)
                 NotificationCenter.default.post(
                     name: .debugPlaybackSmokeSeekGestureHUDVerified,
                     object: nil,
@@ -1223,7 +1266,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             DispatchQueue.main.asyncAfter(deadline: .now() + 3.0 + Double(index) * 0.45) { [weak self] in
                 guard let self else { return }
                 self.setSubtitleBorderSize(value)
-                NSLog("EmbyPlayerSubtitleBorderExercise value=%.2f", value)
+                AppLog.event("EmbyPlayerSubtitleBorderExercise value=%.2f", value)
             }
         }
     }
@@ -1236,7 +1279,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             DispatchQueue.main.asyncAfter(deadline: .now() + 3.0 + Double(index) * 0.45) { [weak self] in
                 guard let self else { return }
                 self.setSubtitleScale(value)
-                NSLog("EmbyPlayerSubtitleScaleExercise value=%.2f position=%.2f", value, self.subtitlePosition)
+                AppLog.event("EmbyPlayerSubtitleScaleExercise value=%.2f position=%.2f", value, self.subtitlePosition)
             }
         }
     }
@@ -1288,7 +1331,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         UIApplication.shared.endReceivingRemoteControlEvents()
 
         #if DEBUG
-        NSLog("EmbyPlayerTransportStop reason=%@", reason)
+        AppLog.event("EmbyPlayerTransportStop reason=%@", reason)
         #endif
     }
 
@@ -1314,7 +1357,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         UIApplication.shared.endReceivingRemoteControlEvents()
 
         #if DEBUG
-        NSLog("EmbyPlayerTeardown shutdown reason=%@", reason)
+        AppLog.event("EmbyPlayerTeardown shutdown reason=%@", reason)
         #endif
     }
 
@@ -1324,13 +1367,13 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
         let retainedManager = manager
         #if DEBUG
-        NSLog("EmbyPlayerDeferredStop schedule reason=%@", reason)
+        AppLog.event("EmbyPlayerDeferredStop schedule reason=%@", reason)
         #endif
 
         let delay: TimeInterval = didRequestClose ? 0 : 1.15
         let stopAction = {
             #if DEBUG
-            NSLog("EmbyPlayerDeferredStop fire reason=%@", reason)
+            AppLog.event("EmbyPlayerDeferredStop fire reason=%@", reason)
             #endif
             if let retainedManager {
                 retainedManager.stop()
@@ -1383,7 +1426,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     func setAudioStream(_ stream: MediaStream) {
         guard let trackID = mpvTrackID(for: stream, in: manager?.playbackItem?.audioStreams ?? []) else { return }
         #if DEBUG
-        NSLog("EmbyPlayerAudioSelect embyIndex=%d originalIndex=%d mpvID=%@",
+        AppLog.event("EmbyPlayerAudioSelect embyIndex=%d originalIndex=%d mpvID=%@",
               stream.index ?? -1,
               stream.originalIndex ?? -1,
               trackID)
@@ -1400,7 +1443,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
         guard let trackID = mpvTrackID(for: stream, in: manager?.playbackItem?.subtitleStreams ?? []) else { return }
         #if DEBUG
-        NSLog("EmbyPlayerSubtitleSelect embyIndex=%d originalIndex=%d mpvID=%@",
+        AppLog.event("EmbyPlayerSubtitleSelect embyIndex=%d originalIndex=%d mpvID=%@",
               stream.index ?? -1,
               stream.originalIndex ?? -1,
               trackID)
@@ -1689,7 +1732,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         }
 
         #if DEBUG
-        NSLog("EmbyPlayerBufferingIndicator visible=%@ animated=%@", visible.description, animated.description)
+        AppLog.event("EmbyPlayerBufferingIndicator visible=%@ animated=%@", visible.description, animated.description)
         #endif
 
         if animated {
@@ -1726,7 +1769,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                         self.pendingPlaybackItemForPresentation = playbackItem
                         self.isBuffering.value = true
                         #if DEBUG
-                        NSLog("EmbyPlayerPresentation deferPlaybackUntilVisible")
+                        AppLog.event("EmbyPlayerPresentation deferPlaybackUntilVisible")
                         #endif
                         return
                     }
@@ -1767,7 +1810,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         pendingPlaybackItemForPresentation = nil
         isBuffering.value = true
         #if DEBUG
-        NSLog("EmbyPlayerPresentation startDeferredPlayback")
+        AppLog.event("EmbyPlayerPresentation startDeferredPlayback")
         #endif
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isReadyToStartPlayback, !self.didRequestClose else { return }
@@ -1791,7 +1834,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         updateSkipIntroButtonVisibility(for: item)
 
         #if DEBUG
-        NSLog("EmbyPlayerTitle title=%@ subtitle=%@", title, subtitle ?? "<nil>")
+        AppLog.event("EmbyPlayerTitle title=%@ subtitle=%@", title, subtitle ?? "<nil>")
         #endif
     }
 
@@ -1835,7 +1878,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                 #if DEBUG
                 if let beganAt = self.foregroundResumeBeganAt, !self.didLogForegroundTimeAdvance, time > 0 {
                     self.didLogForegroundTimeAdvance = true
-                    NSLog(
+                    AppLog.event(
                         "EmbyPlayerBackground foregroundTimeAdvance elapsed=%.3f time=%.3f duration=%.3f",
                         Date().timeIntervalSince(beganAt),
                         time,
@@ -1845,7 +1888,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                 if let resume = self.pendingResumeObservation, duration > 0, time > 0 {
                     let reachedResumePoint = resume.expectedSeconds < 3 || time >= resume.expectedSeconds - 2
                     if reachedResumePoint {
-                        NSLog(
+                        AppLog.event(
                             "EmbyPlayerResumeObserved item=%@ expected=%.3f observed=%.3f duration=%.3f",
                             resume.itemID,
                             resume.expectedSeconds,
@@ -1909,7 +1952,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                 guard let self else { return }
                 #if DEBUG
                 if let beganAt = self.foregroundResumeBeganAt {
-                    NSLog(
+                    AppLog.event(
                         "EmbyPlayerBackground foregroundFirstFrame elapsed=%.3f",
                         Date().timeIntervalSince(beganAt)
                     )
@@ -1936,7 +1979,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                 let trackSummary = tracks
                     .map { "\($0.id):\($0.isSelected ? "*" : "-")\($0.title):\($0.codec ?? "<codec>")" }
                     .joined(separator: " | ")
-                NSLog(
+                AppLog.event(
                     "EmbyPlayerSubtitleTracks count=%d selected=%@ tracks=%@",
                     tracks.count,
                     selectedID ?? "<nil>",
@@ -1950,7 +1993,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                             self.player.selectSubtitleTrack(id: track.id)
                             self.reapplySubtitleAdjustmentSettings(reason: "pending-default-subtitle-select")
                             #if DEBUG
-                            NSLog("EmbyPlayerDefaultExternalSubtitleSelected id=%@ title=%@", track.id, track.title)
+                            AppLog.event("EmbyPlayerDefaultExternalSubtitleSelected id=%@ title=%@", track.id, track.title)
                             #endif
                         }
                         self.schedulePendingDefaultExternalSubtitleClear(title: pendingTitle)
@@ -1958,7 +2001,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                         self.player.disableSubtitle()
                         self.updateRenderedSubtitle(nil)
                         #if DEBUG
-                        NSLog("EmbyPlayerDefaultExternalSubtitlePending title=%@ action=disable-current", pendingTitle)
+                        AppLog.event("EmbyPlayerDefaultExternalSubtitlePending title=%@ action=disable-current", pendingTitle)
                         #endif
                     }
                 }
@@ -2010,13 +2053,13 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             let line = message.trimmingCharacters(in: .whitespacesAndNewlines)
             #if DEBUG
             if self?.logsAllMPVDiagnosticsForSmoke == true {
-                NSLog("mpv: %@", line)
+                AppLog.event("mpv: %@", line)
             } else if line.contains("level=warn") || line.contains("level=error") || line.contains("level=fatal") {
-                NSLog("mpv: %@", line)
+                AppLog.event("mpv: %@", line)
             }
             #else
             if line.contains("level=warn") || line.contains("level=error") || line.contains("level=fatal") {
-                NSLog("mpv: %@", line)
+                AppLog.event("mpv: %@", line)
             }
             #endif
         }
@@ -2160,7 +2203,17 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             let rate = Float(speed)
             self.manager?.setRate(rate: rate)
             self.setRate(rate)
-            self.scheduleControlsHide()
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.hideControls()
+                self.presentGestureHUD(
+                    symbol: "speedometer",
+                    text: Self.formatSpeed(speed),
+                    placement: .top,
+                    style: .plainText,
+                    autoHideAfter: 1.0
+                )
+            }
         }
 
         controlsView.onMenuOpened = { [weak self] in
@@ -2261,7 +2314,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         let addedSubtitleCount = addedEmbeddedConvertedSubtitleCount + addedExternalSubtitleCount + addedLocalSubtitleCount
 
         #if DEBUG
-        NSLog("EmbyPlayerResume item=%@ startSeconds=%.3f", item.baseItem.id ?? "<nil>", startSeconds.seconds)
+        AppLog.event("EmbyPlayerResume item=%@ startSeconds=%.3f", item.baseItem.id ?? "<nil>", startSeconds.seconds)
         pendingResumeObservation = (item.baseItem.id ?? "<nil>", startSeconds.seconds)
         #endif
 
@@ -2275,20 +2328,20 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             player.disableSubtitle()
             updateRenderedSubtitle(nil)
             #if DEBUG
-            NSLog("EmbyPlayerSubtitleSetup default=off")
+            AppLog.event("EmbyPlayerSubtitleSetup default=off")
             #endif
         } else if let defaultSubtitleStreamIndex = item.mediaSource.defaultSubtitleStreamIndex,
                   let subtitle = item.subtitleStreams.first(where: { subtitleStream($0, matchesOriginalOrAdjustedIndex: defaultSubtitleStreamIndex) }) {
             applyDefaultSubtitleStream(subtitle, addedSubtitleCount: addedSubtitleCount, reason: "server")
         } else if addedSubtitleCount > 0 {
             #if DEBUG
-            NSLog("EmbyPlayerSubtitleSetup default=auto added=%d", addedSubtitleCount)
+            AppLog.event("EmbyPlayerSubtitleSetup default=auto added=%d", addedSubtitleCount)
             #endif
         } else {
             player.disableSubtitle()
             updateRenderedSubtitle(nil)
             #if DEBUG
-            NSLog("EmbyPlayerSubtitleSetup default=none added=0")
+            AppLog.event("EmbyPlayerSubtitleSetup default=none added=0")
             #endif
         }
     }
@@ -2305,7 +2358,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         player.setPreferredSubtitleLanguages(mpvSubtitleLanguages)
 
         #if DEBUG
-        NSLog(
+        AppLog.event(
             "EmbyPlayerDefaultTrackLanguages audio=%@ subtitle=%@ mpvAudio=%@ mpvSubtitle=%@",
             audio.displayTitle,
             subtitle.displayTitle,
@@ -2319,7 +2372,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         let preference = Defaults[.VideoPlayer.Playback.defaultAudioLanguage]
         if let stream = preference.preferredStream(in: item.audioStreams) {
             #if DEBUG
-            NSLog("EmbyPlayerAudioSetup default=language language=%@ index=%d title=%@",
+            AppLog.event("EmbyPlayerAudioSetup default=language language=%@ index=%d title=%@",
                   preference.displayTitle,
                   stream.index ?? -1,
                   stream.displayTitle ?? stream.title ?? stream.language ?? "<nil>")
@@ -2330,7 +2383,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         if preference == .automatic,
            let stream = MediaTrackLanguagePreference.automaticAudioStream(in: item.audioStreams) {
             #if DEBUG
-            NSLog("EmbyPlayerAudioSetup default=auto language=%@ index=%d title=%@",
+            AppLog.event("EmbyPlayerAudioSetup default=auto language=%@ index=%d title=%@",
                   stream.language ?? "<nil>",
                   stream.index ?? -1,
                   stream.displayTitle ?? stream.title ?? stream.language ?? "<nil>")
@@ -2350,7 +2403,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         }
 
         #if DEBUG
-        NSLog("EmbyPlayerSubtitleSetup default=language language=%@ index=%d title=%@",
+        AppLog.event("EmbyPlayerSubtitleSetup default=language language=%@ index=%d title=%@",
               preference == .automatic ? "自动" : preference.displayTitle,
               stream.index ?? -1,
               stream.displayTitle ?? stream.title ?? stream.language ?? "<nil>")
@@ -2365,7 +2418,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             updateRenderedSubtitle(nil)
             pendingDefaultExternalSubtitleTitle = externalSubtitleTitle(for: subtitle, url: url)
             #if DEBUG
-            NSLog(
+            AppLog.event(
                 "EmbyPlayerSubtitleSetup default=%@-external pendingTitle=%@ added=%d",
                 reason,
                 pendingDefaultExternalSubtitleTitle ?? url.lastPathComponent,
@@ -2379,7 +2432,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                 updateRenderedSubtitle(nil)
                 pendingDefaultExternalSubtitleTitle = convertedTitle
                 #if DEBUG
-                NSLog(
+                AppLog.event(
                     "EmbyPlayerSubtitleSetup default=%@-embedded-converted pendingTitle=%@ sourceIndex=%d added=%d",
                     reason,
                     convertedTitle,
@@ -2391,7 +2444,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             }
             setSubtitleStream(subtitle)
             #if DEBUG
-            NSLog("EmbyPlayerSubtitleSetup default=%@-embedded index=%d", reason, subtitle.index ?? -1)
+            AppLog.event("EmbyPlayerSubtitleSetup default=%@-embedded index=%d", reason, subtitle.index ?? -1)
             #endif
         }
     }
@@ -2425,7 +2478,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         let mediaSourceID = item.mediaSource.id
 
         #if DEBUG
-        NSLog(
+        AppLog.event(
             "EmbyPlayerEmbeddedConvertedSubtitles enter enabled=%@ item=%@ mediaSource=%@ subtitles=%d",
             shouldConvert.description,
             itemID ?? "<nil>",
@@ -2440,7 +2493,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
               let mediaSourceID
         else {
             #if DEBUG
-            NSLog(
+            AppLog.event(
                 "EmbyPlayerEmbeddedConvertedSubtitles skipped enabled=%@ hasClient=%@ item=%@ mediaSource=%@",
                 shouldConvert.description,
                 (client != nil).description,
@@ -2457,7 +2510,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             candidateCount += 1
             guard shouldConvertStreamSubtitle(stream) else {
                 #if DEBUG
-                NSLog("EmbyPlayerEmbeddedSubtitleSkip reason=non-chinese index=%d title=%@ language=%@",
+                AppLog.event("EmbyPlayerEmbeddedSubtitleSkip reason=non-chinese index=%d title=%@ language=%@",
                       stream.index ?? -1,
                       stream.displayTitle ?? stream.title ?? "<nil>",
                       stream.language ?? "<nil>")
@@ -2467,7 +2520,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
             guard let originalIndex = subtitleOriginalIndex(stream) else {
                 #if DEBUG
-                NSLog("EmbyPlayerEmbeddedSubtitleSkip reason=missing-index title=%@", stream.displayTitle ?? stream.title ?? "<nil>")
+                AppLog.event("EmbyPlayerEmbeddedSubtitleSkip reason=missing-index title=%@", stream.displayTitle ?? stream.title ?? "<nil>")
                 #endif
                 continue
             }
@@ -2483,7 +2536,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                                                       isTextSubtitle: stream.isTextSubtitleStream)
             else {
                 #if DEBUG
-                NSLog("EmbyPlayerEmbeddedSubtitleSkip reason=not-text index=%d codec=%@ text=%@",
+                AppLog.event("EmbyPlayerEmbeddedSubtitleSkip reason=not-text index=%d codec=%@ text=%@",
                       originalIndex,
                       stream.codec ?? "<nil>",
                       stream.isTextSubtitleStream.map(\.description) ?? "<nil>")
@@ -2507,7 +2560,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         }
 
         #if DEBUG
-        NSLog(
+        AppLog.event(
             "EmbyPlayerEmbeddedConvertedSubtitles candidates=%d added=%d",
             candidateCount,
             addedCount
@@ -2527,7 +2580,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             candidateCount += 1
             guard let url = externalSubtitleURL(for: stream, client: client) else {
                 #if DEBUG
-                NSLog("EmbyPlayerExternalSubtitleSkip reason=missing-url index=%d title=%@", stream.index ?? -1, stream.displayTitle ?? stream.title ?? "<nil>")
+                AppLog.event("EmbyPlayerExternalSubtitleSkip reason=missing-url index=%d title=%@", stream.index ?? -1, stream.displayTitle ?? stream.title ?? "<nil>")
                 #endif
                 continue
             }
@@ -2543,7 +2596,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         }
 
         #if DEBUG
-        NSLog(
+        AppLog.event(
             "EmbyPlayerExternalSubtitles candidates=%d added=%d",
             candidateCount,
             addedSubtitles.count
@@ -2560,7 +2613,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         do {
             let urls = try MPVSubtitleAutoLoader.matchingSubtitleURLs(for: mediaURL)
             #if DEBUG
-            NSLog("EmbyPlayerLocalSubtitleScan media=%@ count=%d", mediaURL.lastPathComponent, urls.count)
+            AppLog.event("EmbyPlayerLocalSubtitleScan media=%@ count=%d", mediaURL.lastPathComponent, urls.count)
             #endif
 
             return urls.reduce(0) { count, url in
@@ -2568,7 +2621,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             }
         } catch {
             #if DEBUG
-            NSLog("EmbyPlayerLocalSubtitleScan media=%@ error=%@", mediaURL.lastPathComponent, error.localizedDescription)
+            AppLog.event("EmbyPlayerLocalSubtitleScan media=%@ error=%@", mediaURL.lastPathComponent, error.localizedDescription)
             #endif
             return 0
         }
@@ -2586,7 +2639,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         let identifier = explicitIdentifier ?? MPVSubtitleAutoLoader.normalizedIdentifier(for: url)
         guard currentSubtitleIdentifiers.insert(identifier).inserted else {
             #if DEBUG
-            NSLog("EmbyPlayerSubtitleAdd reason=%@ result=duplicate path=%@", reason, identifier)
+            AppLog.event("EmbyPlayerSubtitleAdd reason=%@ result=duplicate path=%@", reason, identifier)
             #endif
             return false
         }
@@ -2594,7 +2647,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         let shouldConvert = shouldConvertSubtitle(url: url, stream: stream)
 
         #if DEBUG
-        NSLog("EmbyPlayerSubtitleAdd reason=%@ path=%@ title=%@ convertTraditionalChinese=%@",
+        AppLog.event("EmbyPlayerSubtitleAdd reason=%@ path=%@ title=%@ convertTraditionalChinese=%@",
               reason,
               identifier,
               title ?? "<nil>",
@@ -2917,7 +2970,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                     self.episodeListLoadingIndicator.stopAnimating()
                     self.episodeListTableView.reloadData()
                     #if DEBUG
-                    NSLog("EmbyPlayerEpisodeList load failed error=%@", error.localizedDescription)
+                    AppLog.event("EmbyPlayerEpisodeList load failed error=%@", error.localizedDescription)
                     #endif
                 }
             }
@@ -3089,6 +3142,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
         if isEpisodeListVisible {
             setEpisodeListVisible(false, animated: true)
+            hideControls()
             return
         }
 
@@ -3137,7 +3191,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         guard let displayText else {
             hideRenderedSubtitle()
             #if DEBUG
-            NSLog("EmbyPlayerRenderedSubtitle visible=false")
+            AppLog.event("EmbyPlayerRenderedSubtitle visible=false")
             #endif
             return
         }
@@ -3164,7 +3218,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
         #if DEBUG
         view.layoutIfNeeded()
-        NSLog(
+        AppLog.event(
             "EmbyPlayerRenderedSubtitle visible=true text=%@ frame=%@",
             displayText.replacingOccurrences(of: "\n", with: "\\n"),
             "\(renderedSubtitleLabel.frame)"
@@ -3332,7 +3386,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         updateRenderedSubtitleOutline()
         updateRenderedSubtitleTransform()
         #if DEBUG
-        NSLog(
+        AppLog.event(
             "EmbyPlayerSubtitleAdjustmentReapply reason=%@ position=%.2f scale=%.2f border=%.2f delay=%.2f",
             reason,
             subtitlePosition,
@@ -3368,7 +3422,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             return
         }
         lastSubtitleAdjustmentLogAt = now
-        NSLog(
+        AppLog.event(
             "EmbyPlayerSubtitleAdjustment position=%.2f scale=%.2f border=%.2f delay=%.2f",
             subtitlePosition,
             subtitleScale,
@@ -3395,7 +3449,13 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         Defaults[.VideoPlayer.Subtitle.subtitlePosition] = subtitlePosition
         Defaults[.VideoPlayer.Subtitle.subtitleScale] = subtitleScale
         Defaults[.VideoPlayer.Subtitle.subtitleBorderSize] = subtitleBorderSize
-        Defaults[.VideoPlayer.Subtitle.subtitleDelay] = subtitleDelay
+        if let subtitleDelaySeasonKey {
+            var delays = Defaults[.VideoPlayer.Subtitle.subtitleDelayBySeason]
+            delays[subtitleDelaySeasonKey] = subtitleDelay
+            Defaults[.VideoPlayer.Subtitle.subtitleDelayBySeason] = delays
+        } else {
+            Defaults[.VideoPlayer.Subtitle.subtitleDelay] = subtitleDelay
+        }
     }
 
     private func loadSubtitleAdjustmentSettings(for item: BaseItemDto?) {
@@ -3408,8 +3468,25 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         subtitleBorderSize = Self.clampedSubtitleBorderSize(
             Defaults[.VideoPlayer.Subtitle.subtitleBorderSize]
         )
-        subtitleDelay = Defaults[.VideoPlayer.Subtitle.subtitleDelay]
+        subtitleDelaySeasonKey = Self.subtitleDelaySeasonKey(for: item)
+        if let subtitleDelaySeasonKey,
+           let seasonDelay = Defaults[.VideoPlayer.Subtitle.subtitleDelayBySeason][subtitleDelaySeasonKey]
+        {
+            subtitleDelay = seasonDelay
+        } else {
+            subtitleDelay = Defaults[.VideoPlayer.Subtitle.subtitleDelay]
+        }
         subtitleAdjustmentSettingsDidChange = false
+    }
+
+    private static func subtitleDelaySeasonKey(for item: BaseItemDto?) -> String? {
+        guard let item,
+              let seasonComponent = item.seasonID ?? item.parentIndexNumber.map({ "season-\($0)" }),
+              let seriesComponent = item.seriesID ?? item.parentID
+        else { return nil }
+
+        let serverComponent = Container.shared.currentUserSession()?.server.id ?? "unknown-server"
+        return "\(serverComponent)|\(seriesComponent)|\(seasonComponent)"
     }
 
     private static func clampedSubtitlePosition(_ position: Double) -> Double {
@@ -3489,7 +3566,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                 self.player.refreshVideoRect()
 
                 #if DEBUG
-                NSLog("EmbyPlayerBackground renderRefresh delay=%.2f bounds=%@ layer=%@ drawable=%@",
+                AppLog.event("EmbyPlayerBackground renderRefresh delay=%.2f bounds=%@ layer=%@ drawable=%@",
                       delay,
                       NSCoder.string(for: self.playerView.bounds),
                       NSCoder.string(for: self.playerView.metalLayer.frame),
@@ -3526,7 +3603,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         let scale = playerView.window?.screen.scale ?? UIScreen.main.scale
         let expectedDrawable = CGSize(width: viewBounds.width * scale, height: viewBounds.height * scale)
 
-        NSLog(
+        AppLog.event(
             "EmbyPlayerGeometry reason=%@ view=%@ layer=%@ drawable=%@ expectedDrawable=%@ mpvRect={x=%.1f y=%.1f w=%.1f h=%.1f osd=%.1fx%.1f margins=%.1f/%.1f/%.1f/%.1f}",
             reason,
             NSCoder.string(for: viewBounds),
@@ -3552,7 +3629,6 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         case .began:
             if controlsView.commitSkipIntroAdjustmentIfNeeded() {
                 hideControls(animated: true)
-                return
             }
             guard longPressSpeedRestoreValue == nil else { return }
             guard !player.isPaused else { return }
@@ -3844,7 +3920,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private func mpvTrackID(for stream: MediaStream, in streams: [MediaStream]) -> String? {
         guard let position = streams.firstIndex(where: { mediaStream($0, matchesOriginalOrAdjustedIndexesOf: stream) }) else {
             #if DEBUG
-            NSLog("EmbyPlayerTrackMapMissing embyIndex=%d originalIndex=%d title=%@",
+            AppLog.event("EmbyPlayerTrackMapMissing embyIndex=%d originalIndex=%d title=%@",
                   stream.index ?? -1,
                   stream.originalIndex ?? -1,
                   stream.displayTitle ?? stream.title ?? stream.language ?? "<nil>")

@@ -28,7 +28,7 @@ final class EmbyPlayerWindowPresenter {
 
         guard let scene = scene ?? Self.foregroundWindowScene else {
             #if DEBUG
-            NSLog("EmbyPlayerWindow present=failed reason=missing-scene")
+            AppLog.event("EmbyPlayerWindow present=failed reason=missing-scene")
             #endif
             return
         }
@@ -50,7 +50,7 @@ final class EmbyPlayerWindowPresenter {
         self.window = window
 
         #if DEBUG
-        NSLog("EmbyPlayerWindow present=success sceneOrientation=%d", scene.interfaceOrientation.rawValue)
+        AppLog.event("EmbyPlayerWindow present=success sceneOrientation=%d", scene.interfaceOrientation.rawValue)
         #endif
     }
 
@@ -58,7 +58,7 @@ final class EmbyPlayerWindowPresenter {
         guard let window else { return }
 
         #if DEBUG
-        NSLog("EmbyPlayerWindow dismiss")
+        AppLog.event("EmbyPlayerWindow dismiss")
         #endif
 
         window.isHidden = true

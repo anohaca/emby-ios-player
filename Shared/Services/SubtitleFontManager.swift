@@ -202,7 +202,7 @@ enum SubtitleFontManager {
             }
         } catch {
             #if DEBUG
-            NSLog("SubtitleFontAutoDownload failed: %@", error.localizedDescription)
+            AppLog.event("SubtitleFontAutoDownload failed: %@", error.localizedDescription)
             #endif
         }
     }

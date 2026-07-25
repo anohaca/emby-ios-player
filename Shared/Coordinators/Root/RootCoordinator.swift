@@ -26,7 +26,7 @@ final class RootCoordinator: ObservableObject {
 
                 if Container.shared.currentUserSession() != nil, !Defaults[.signOutOnClose] {
                     #if DEBUG
-                    NSLog("EmbyRoot setup session=present signOutOnClose=false")
+                    AppLog.event("EmbyRoot setup session=present signOutOnClose=false")
                     #endif
                     #if os(tvOS)
                     await MainActor.run {
@@ -39,7 +39,7 @@ final class RootCoordinator: ObservableObject {
                     #endif
                 } else {
                     #if DEBUG
-                    NSLog("EmbyRoot setup session=missing-or-signed-out")
+                    AppLog.event("EmbyRoot setup session=missing-or-signed-out")
                     #endif
                     await MainActor.run {
                         root(.selectUser)
@@ -48,7 +48,7 @@ final class RootCoordinator: ObservableObject {
 
             } catch {
                 #if DEBUG
-                NSLog("EmbyRoot setup failed error=%@", error.localizedDescription)
+                AppLog.event("EmbyRoot setup failed error=%@", error.localizedDescription)
                 #endif
                 await MainActor.run {
                     Notifications[.didFailMigration].post()
@@ -65,7 +65,7 @@ final class RootCoordinator: ObservableObject {
     func root(_ newRoot: RootItem) {
         guard root.id != newRoot.id else { return }
         #if DEBUG
-        NSLog("EmbyRoot change %@ -> %@", root.id, newRoot.id)
+        AppLog.event("EmbyRoot change %@ -> %@", root.id, newRoot.id)
         #endif
 
         var transaction = Transaction(animation: nil)

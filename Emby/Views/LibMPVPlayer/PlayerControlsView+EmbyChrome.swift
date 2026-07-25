@@ -6,7 +6,7 @@ extension PlayerControlsView {
 
         #if DEBUG
         if #available(iOS 26.0, *) {
-            NSLog("EmbyPlayerChrome liquid-glass=enabled api=iOS26")
+            AppLog.event("EmbyPlayerChrome liquid-glass=enabled api=iOS26")
         }
         #endif
     }

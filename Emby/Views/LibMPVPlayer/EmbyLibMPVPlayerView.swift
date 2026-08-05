@@ -183,6 +183,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     private var isManuallyAdvancingItem = false
     private var isWaitingForFirstVideoFrame = true
     private var bufferingIndicatorVisible = false
+    private var currentPlaybackIsTranscoding = false
     private var bufferingIndicatorVisibilityGeneration = 0
     private var isInBackground = false
     private var shouldResumeAfterForeground = false
@@ -414,6 +415,12 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             self,
             selector: #selector(debugPlaybackSmokeVerifySeekGestureHUDRequested),
             name: .debugPlaybackSmokeVerifySeekGestureHUDRequested,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(debugPlaybackSmokeTimelineDragRequested(_:)),
+            name: .debugPlaybackSmokeTimelineDragRequested,
             object: nil
         )
         #endif
@@ -1154,6 +1161,11 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         controlsView.onPreviousEpisode?()
     }
 
+    @objc private func debugPlaybackSmokeTimelineDragRequested(_ notification: Notification) {
+        guard let target = (notification.object as? NSNumber)?.doubleValue else { return }
+        controlsView.dragTimelineForSmoke(to: target)
+    }
+
     @objc private func debugPlaybackSmokeVerifyLongPressHUDRequested() {
         showControls()
         controlsView.beginSkipIntroAdjustmentForSmoke()
@@ -1873,7 +1885,8 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                 if !self.isWaitingForFirstVideoFrame {
                     self.isBuffering.value = false
                 }
-                self.controlsView.update(time: time, duration: duration)
+                let stableDuration = self.manager?.item.runtime?.seconds ?? duration
+                self.controlsView.update(time: time, duration: max(stableDuration, time))
 
                 #if DEBUG
                 if let beganAt = self.foregroundResumeBeganAt, !self.didLogForegroundTimeAdvance, time > 0 {
@@ -1957,6 +1970,15 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                         Date().timeIntervalSince(beganAt)
                     )
                     self.foregroundResumeBeganAt = nil
+                }
+                if ProcessInfo.processInfo.arguments.contains("-EmbyPlaybackInformationSmoke") {
+                    self.player.requestPlaybackInformation { information in
+                        let summary = information
+                            .sorted { $0.key < $1.key }
+                            .map { "\($0.key)=\($0.value)" }
+                            .joined(separator: " ")
+                        AppLog.event("PLAYBACK_INFORMATION_SMOKE %@", summary)
+                    }
                 }
                 #endif
                 self.revealVideoSurfaceForPlayback()
@@ -2142,12 +2164,14 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
         controlsView.onSeekChanged = { [weak self] seconds in
             guard let self else { return }
-            self.controlsView.update(time: seconds, duration: max(self.player.duration, seconds))
+            let stableDuration = self.manager?.item.runtime?.seconds ?? self.player.duration
+            self.controlsView.update(time: seconds, duration: max(stableDuration, seconds))
         }
 
         controlsView.onSeekEnded = { [weak self] seconds in
-            self?.player.seek(to: seconds)
-            self?.scheduleControlsHide(after: 1.0)
+            guard let self else { return }
+            self.player.seek(to: seconds)
+            self.scheduleControlsHide(after: 1.0)
         }
 
         controlsView.onSeekBackward = { [weak self] in
@@ -2169,6 +2193,10 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                 self.jumpBackward(.seconds(abs(seconds)))
             }
             self.scheduleControlsHide()
+        }
+
+        controlsView.onSkipIntroInitialTriggered = { [weak self] in
+            self?.hideControlsAfterSkipIntroTrigger()
         }
 
         controlsView.onSkipIntroAdjustmentBegan = { [weak self] in
@@ -2214,6 +2242,10 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                     autoHideAfter: 1.0
                 )
             }
+        }
+
+        controlsView.onPlaybackInformation = { [weak self] in
+            self?.presentPlaybackInformation()
         }
 
         controlsView.onMenuOpened = { [weak self] in
@@ -2276,6 +2308,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     }
 
     private func playNew(item: MediaPlayerItem) {
+        currentPlaybackIsTranscoding = item.mediaSource.transcodingURL != nil
         hidePlaybackChromeForNewItem()
         loadSubtitleAdjustmentSettings(for: item.baseItem)
         prepareVideoSurfaceForLoading()
@@ -2303,7 +2336,22 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         updateRenderedSubtitle(nil)
 
         applyDefaultTrackLanguageOptions()
-        player.load(url: item.url, headers: item.httpHeaders, startSeconds: startSeconds.seconds)
+        let useRangeCache =
+            item.mediaSource.transcodingURL == nil &&
+            ["http", "https"].contains(item.url.scheme?.lowercased() ?? "")
+        player.load(
+            url: item.url,
+            headers: item.httpHeaders,
+            startSeconds: startSeconds.seconds,
+            useRangeCache: useRangeCache
+        )
+        #if DEBUG
+        AppLog.event(
+            "EmbyPlayerRangeCache item=%@ enabled=%@",
+            item.baseItem.id ?? "<nil>",
+            useRangeCache.description
+        )
+        #endif
         activatePlaybackAudioSession(reason: "playNew")
         applySubtitleAdjustmentSettings()
         setRate(manager?.rate ?? 1)
@@ -3176,6 +3224,14 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         updateRenderedSubtitlePosition(controlsHidden: true, animated: animated)
     }
 
+    private func hideControlsAfterSkipIntroTrigger() {
+        controlsHidden = true
+        setNeedsStatusBarAppearanceUpdate()
+        cancelControlsHide()
+        controlsView.setControlsHidden(true, animated: true)
+        updateRenderedSubtitlePosition(controlsHidden: true, animated: true)
+    }
+
     private func hidePlaybackChromeForNewItem() {
         controlsView.suppressPausedIndicatorTemporarily()
         hideSeekPreviewNow()
@@ -3908,6 +3964,105 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         case .volume:
             return "音量"
         }
+    }
+
+    private func presentPlaybackInformation() {
+        player.requestPlaybackInformation { [weak self] information in
+            guard let self else { return }
+
+            let value: (String) -> String = { information[$0] ?? "—" }
+            let width = value("video-params/w")
+            let height = value("video-params/h")
+            let resolution = width == "—" || height == "—" ? "—" : "\(width) × \(height)"
+            let hardwareDecoder = information["hwdec-current"]?.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            let decodeMode = hardwareDecoder?.isEmpty == false
+                ? "硬件解码（\(hardwareDecoder!)）"
+                : "软件解码（FFmpeg）"
+            let playbackMode = self.currentPlaybackIsTranscoding ? "服务器转码" : "原画直放"
+            let dynamicRange = Self.dynamicRangeDescription(from: information)
+            let rangeDescription = information["range-cache"] == "yes" ? "启用" : "未启用"
+            let networkSpeed = Self.formatByteRate(self.player.cacheSpeed)
+            let cacheDuration = Self.formatDecimal(value("demuxer-cache-duration"), suffix: " 秒")
+            let frameRate = Self.formatDecimal(value("estimated-vf-fps"), suffix: " fps")
+            let sampleRate = Self.formatSampleRate(value("audio-params/samplerate"))
+            let avSync = Self.formatDecimal(value("avsync"), suffix: " 秒")
+
+            let rows = [
+                "播放方式：\(playbackMode)",
+                "容器：\(value("container-format"))",
+                "视频编码：\(value("video-codec"))",
+                "解码方式：\(decodeMode)",
+                "分辨率：\(resolution)",
+                "帧率：\(frameRate)",
+                "像素格式：\(value("video-params/pixelformat"))",
+                "动态范围：\(dynamicRange)",
+                "色彩原色：\(value("video-params/primaries"))",
+                "色彩矩阵：\(value("video-params/colormatrix"))",
+                "音频编码：\(value("audio-codec-name"))",
+                "音频声道：\(value("audio-params/channel-count"))",
+                "采样率：\(sampleRate)",
+                "实时网速：\(networkSpeed)",
+                "缓存时长：\(cacheDuration)",
+                "Range 缓存：\(rangeDescription)",
+                "解码丢帧：\(value("decoder-frame-drop-count"))",
+                "影音同步差：\(avSync)",
+            ]
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                guard let self,
+                      self.viewIfLoaded?.window != nil,
+                      self.presentedViewController == nil
+                else {
+                    return
+                }
+                let alert = UIAlertController(
+                    title: "播放信息",
+                    message: rows.joined(separator: "\n"),
+                    preferredStyle: .alert
+                )
+                alert.addAction(UIAlertAction(title: "刷新", style: .default) { [weak self] _ in
+                    self?.presentPlaybackInformation()
+                })
+                alert.addAction(UIAlertAction(title: "关闭", style: .cancel))
+                self.present(alert, animated: true)
+            }
+        }
+    }
+
+    private static func dynamicRangeDescription(from information: [String: String]) -> String {
+        if let profile = information["video-params/dolby-vision-profile"], !profile.isEmpty {
+            return "Dolby Vision（Profile \(profile)）"
+        }
+        let gamma = information["video-params/gamma"]?.lowercased() ?? ""
+        if gamma.contains("hlg") {
+            return "HLG"
+        }
+        if gamma.contains("pq") || gamma.contains("smpte2084") {
+            return "HDR10 / HDR10+"
+        }
+        return gamma.isEmpty ? "—" : "SDR（\(gamma)）"
+    }
+
+    private static func formatByteRate(_ bytesPerSecond: Double) -> String {
+        guard bytesPerSecond.isFinite, bytesPerSecond > 0 else { return "0 KB/s" }
+        if bytesPerSecond < 1024 * 1024 {
+            return String(format: "%.0f KB/s", bytesPerSecond / 1024)
+        }
+        return String(format: "%.1f MB/s", bytesPerSecond / 1024 / 1024)
+    }
+
+    private static func formatDecimal(_ rawValue: String, suffix: String) -> String {
+        guard let value = Double(rawValue), value.isFinite else { return "—" }
+        return String(format: "%.3f%@", value, suffix)
+    }
+
+    private static func formatSampleRate(_ rawValue: String) -> String {
+        guard let value = Double(rawValue), value.isFinite else { return "—" }
+        return value >= 1000
+            ? String(format: "%.1f kHz", value / 1000)
+            : String(format: "%.0f Hz", value)
     }
 
     private func presentError(_ message: String) {

@@ -104,6 +104,7 @@ struct VideoPlayerSettingsView: View {
 
                 Toggle("缓存不足时暂停", isOn: $mpvCachePauseEnabled)
                     .disabled(!mpvCacheEnabled)
+
             } header: {
                 Text("mpv 缓存")
             } footer: {

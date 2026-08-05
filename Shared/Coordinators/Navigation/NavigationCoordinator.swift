@@ -26,7 +26,6 @@ final class NavigationCoordinator: ObservableObject {
     ) {
         let style = route.transitionStyle
 
-        #if DEBUG
         let styleName: String
         switch style {
         case .push:
@@ -37,7 +36,6 @@ final class NavigationCoordinator: ObservableObject {
             styleName = "fullscreen"
         }
         AppLog.event("EmbyNavigation push route=%@ style=%@", route.id, styleName)
-        #endif
 
         #if os(tvOS)
         switch style {

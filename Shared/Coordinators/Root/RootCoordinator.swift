@@ -64,9 +64,7 @@ final class RootCoordinator: ObservableObject {
 
     func root(_ newRoot: RootItem) {
         guard root.id != newRoot.id else { return }
-        #if DEBUG
         AppLog.event("EmbyRoot change %@ -> %@", root.id, newRoot.id)
-        #endif
 
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true

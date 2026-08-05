@@ -33,6 +33,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, weak, nullable) id<MPVClientBridgeDelegate> delegate;
 @property (nonatomic, readonly) BOOL isInitialized;
 
++ (NSSet<NSString *> *)softwareVideoDecoderCodecs;
++ (NSSet<NSString *> *)softwareVideoRangeProcessingCapabilities;
 - (instancetype)initWithLayer:(CALayer *)layer;
 - (BOOL)initializePlayer:(NSError **)error;
 - (void)loadURL:(NSURL *)url;
@@ -40,6 +42,10 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)loadURL:(NSURL *)url
         headers:(NSDictionary<NSString *, NSString *> *)headers
    startSeconds:(double)startSeconds;
+- (void)loadURL:(NSURL *)url
+        headers:(NSDictionary<NSString *, NSString *> *)headers
+   startSeconds:(double)startSeconds
+  useRangeCache:(BOOL)useRangeCache;
 - (void)setPaused:(BOOL)paused;
 - (void)setMuted:(BOOL)muted;
 - (void)setPlaybackSpeed:(double)speed;
@@ -62,6 +68,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)selectSubtitleTrackID:(NSString *)trackID;
 - (void)disableSubtitle;
 - (void)logPerformanceSnapshotWithReason:(NSString *)reason;
+- (void)requestPlaybackInformation:
+    (void (^)(NSDictionary<NSString *, NSString *> *information))completion;
 - (void)shutdown;
 
 @end

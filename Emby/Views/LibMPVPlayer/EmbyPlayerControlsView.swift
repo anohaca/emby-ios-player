@@ -117,12 +117,14 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     var onSeekBackward: (() -> Void)?
     var onSeekForward: (() -> Void)?
     var onSkipIntro: ((Double) -> Void)?
+    var onSkipIntroInitialTriggered: (() -> Void)?
     var onSkipIntroAdjustmentBegan: (() -> Void)?
     var onSkipIntroAdjustmentCommitted: ((Int) -> Void)?
     var onSkipIntroAdjustmentEnded: (() -> Void)?
     var onNextEpisode: (() -> Void)?
     var onEpisodeList: (() -> Void)?
     var onPlaybackSpeedSelected: ((Double) -> Void)?
+    var onPlaybackInformation: (() -> Void)?
     var onMenuOpened: (() -> Void)?
     var onMenuSelectionFinished: (() -> Void)?
     var onOpenSubtitle: (() -> Void)? {
@@ -264,6 +266,15 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         updateTimeline(time: time, duration: duration)
     }
 
+    #if DEBUG
+    func dragTimelineForSmoke(to seconds: Double) {
+        sliderTouchDown()
+        slider.setValue(Float(seconds), animated: false)
+        sliderValueChanged()
+        sliderTouchEnded()
+    }
+    #endif
+
     func updateCachedTime(_ cachedTime: Double) {
         self.cachedTime = cachedTime
         updateCacheProgress()
@@ -306,7 +317,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     func setControlsHidden(_ hidden: Bool, animated: Bool) {
         controlsVisibilityGeneration += 1
         let generation = controlsVisibilityGeneration
-        let effectiveHidden = hidden && !skipIntroAdjustmentActive
+        let effectiveHidden = hidden
         areControlsHidden = effectiveHidden
         if !effectiveHidden {
             topBar.isHidden = false
@@ -488,6 +499,9 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
     }
 
     func setSkipIntroDismissed(_ dismissed: Bool) {
+        if dismissed, skipIntroAdjustmentActive {
+            return
+        }
         skipIntroButtonsDismissed = dismissed
         if dismissed {
             cancelSkipIntroAdjustment()
@@ -2110,7 +2124,16 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             border,
             delay,
         ])
+        let playbackInformation = UIAction(
+            title: "播放信息",
+            image: UIImage(systemName: "info.circle")
+        ) { [weak self] _ in
+            self?.onMenuOpened?()
+            self?.onPlaybackInformation?()
+            self?.onMenuSelectionFinished?()
+        }
         settingsButton.menu = UIMenu(title: "设置", children: [
+            playbackInformation,
             subtitleSettings,
         ])
         updateSettingsAccessibilityActions()
@@ -2391,6 +2414,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         updateSkipIntroTitles(adjusting: true)
         showSkipIntroButtonsForAdjustment()
         onSkipIntro?(Double(skipIntroAdjustmentSeconds))
+        onSkipIntroInitialTriggered?()
         scheduleSkipIntroAdjustmentCommit()
     }
 
@@ -2420,7 +2444,7 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             self?.commitSkipIntroAdjustment()
         }
         skipIntroAdjustmentCommitWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: workItem)
     }
 
     private func adjustSkipIntroSeconds(_ delta: Int) {

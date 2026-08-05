@@ -23,6 +23,22 @@ struct CustomizeSettingsView: View {
 
     @Default(.Customization.Home.showRecentlyAdded)
     private var showRecentlyAdded
+    @Default(.Customization.Home.showLogButton)
+    private var showHomeLogButton
+    @State
+    private var weeklyScheduleEnabledDraft: Bool
+    @State
+    private var aniRSSURLDraft: String
+    @State
+    private var weeklySettingsSaveTask: Task<Void, Never>?
+    @State
+    private var isPresentingAniRSSURL = false
+    @State
+    private var aniRSSURLPrompt = ""
+    @State
+    private var isPresentingAniRSSValidationError = false
+    @State
+    private var aniRSSValidationError = ""
     @Default(.Customization.Home.resumeNextUp)
     private var resumeNextUp
     @Default(.Customization.Home.maxNextUp)
@@ -125,6 +141,17 @@ struct CustomizeSettingsView: View {
     @Router
     private var router
 
+    init() {
+        let savedURL = Defaults[.Customization.Home.aniRSSURL]
+        let hasSavedURL = !savedURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        self._weeklyScheduleEnabledDraft = State(
+            initialValue: Defaults[.Customization.Home.weeklyScheduleEnabled] && hasSavedURL
+        )
+        self._aniRSSURLDraft = State(
+            initialValue: savedURL
+        )
+    }
+
     var body: some View {
         Form(systemImage: "gearshape") {
             homeSettings
@@ -144,6 +171,50 @@ struct CustomizeSettingsView: View {
             itemManagementSettings
         }
         .navigationTitle(L10n.customize)
+        #if os(iOS)
+        .background(
+            AlertTextFieldPresenter(
+                title: "ANI-RSS 地址",
+                message: "确定后会检查该地址是否能返回星期表内容。",
+                placeholder: "例如：http://192.168.1.2:7789",
+                text: aniRSSURLPrompt,
+                keyboardType: .URL,
+                showsCancel: true,
+                textContentType: .URL,
+                forcesLeftToRight: true,
+                isPresented: $isPresentingAniRSSURL
+            ) { text in
+                aniRSSURLPrompt = text
+                validateAndEnableWeeklySchedule(
+                    url: text.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+            }
+        )
+        #else
+        .alert("ANI-RSS 地址", isPresented: $isPresentingAniRSSURL) {
+            TextField("例如：http://192.168.1.2:7789", text: $aniRSSURLPrompt)
+            Button(L10n.cancel, role: .cancel) {}
+            Button(L10n.confirm) {
+                validateAndEnableWeeklySchedule(
+                    url: aniRSSURLPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+            }
+        }
+        #endif
+        .alert("无法开启星期表", isPresented: $isPresentingAniRSSValidationError) {
+            Button(L10n.confirm) {
+                isPresentingAniRSSURL = true
+            }
+        } message: {
+            Text(aniRSSValidationError)
+        }
+        .onChange(of: aniRSSURLDraft) { _ in
+            scheduleWeeklySettingsSave()
+        }
+        .onDisappear {
+            weeklySettingsSaveTask?.cancel()
+            saveWeeklySettings()
+        }
     }
 
     // MARK: - Home Settings
@@ -153,6 +224,24 @@ struct CustomizeSettingsView: View {
         Section(L10n.home) {
             ChevronButton("首页类别") {
                 router.route(to: .homeSectionSettings)
+            }
+
+            Toggle("首页显示查看日志按钮", isOn: $showHomeLogButton)
+
+            Toggle(
+                isOn: Binding(
+                    get: { weeklyScheduleEnabledDraft },
+                    set: setWeeklyScheduleEnabled
+                )
+            ) {
+                Text("首页显示星期表")
+            }
+
+            if weeklyScheduleEnabledDraft {
+                ChevronButton("ANI-RSS 地址", subtitle: aniRSSURLDraft) {
+                    aniRSSURLPrompt = normalizedAniRSSAddress(aniRSSURLDraft)
+                    isPresentingAniRSSURL = true
+                }
             }
 
             Toggle(L10n.nextUpRewatch, isOn: $resumeNextUp)
@@ -186,6 +275,109 @@ struct CustomizeSettingsView: View {
             }
         }
     }
+
+    private func scheduleWeeklySettingsSave() {
+        weeklySettingsSaveTask?.cancel()
+        let enabled = weeklyScheduleEnabledDraft
+        let url = aniRSSURLDraft
+        weeklySettingsSaveTask = Task {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            Defaults[.Customization.Home.aniRSSURL] = url
+            Defaults[.Customization.Home.weeklyScheduleEnabled] = enabled
+            Notifications[.weeklyScheduleConfigurationDidChange].post()
+        }
+    }
+
+    private func setWeeklyScheduleEnabled(_ enabled: Bool) {
+        guard enabled else {
+            applyWeeklySettings(enabled: false, url: aniRSSURLDraft)
+            return
+        }
+
+        if aniRSSURLDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            aniRSSURLPrompt = "http://"
+            isPresentingAniRSSURL = true
+        } else {
+            applyWeeklySettings(enabled: true, url: aniRSSURLDraft)
+        }
+    }
+
+    private func applyWeeklySettings(enabled: Bool, url: String) {
+        weeklySettingsSaveTask?.cancel()
+        aniRSSURLDraft = url
+        weeklyScheduleEnabledDraft = enabled
+        saveWeeklySettings()
+    }
+
+    private func validateAndEnableWeeklySchedule(url: String) {
+        Task {
+            do {
+                let normalizedURL = try await validateAniRSSURL(url)
+                applyWeeklySettings(enabled: true, url: normalizedURL)
+            } catch {
+                aniRSSValidationError = error.localizedDescription
+                isPresentingAniRSSValidationError = true
+            }
+        }
+    }
+
+    private func validateAniRSSURL(_ value: String) async throws -> String {
+        let normalized = normalizedAniRSSAddress(value)
+        guard var components = URLComponents(string: normalized),
+              components.host != nil
+        else {
+            throw AniRSSValidationError.invalidAddress
+        }
+        components.path = components.path.isEmpty ? "/" : components.path
+        guard let baseURL = components.url else {
+            throw AniRSSValidationError.invalidAddress
+        }
+
+        var request = URLRequest(url: baseURL.appending(path: "api/listAni"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 12
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let response = response as? HTTPURLResponse,
+                  (200 ..< 300).contains(response.statusCode)
+            else {
+                throw AniRSSValidationError.unreachable
+            }
+            guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let code = object["code"] as? Int,
+                  (200 ..< 300).contains(code),
+                  let payload = object["data"] as? [String: Any],
+                  let weeks = payload["weekList"] as? [[String: Any]]
+            else {
+                throw AniRSSValidationError.invalidResponse
+            }
+            let itemCount = weeks.reduce(0) { count, week in
+                count + ((week["items"] as? [Any])?.count ?? 0)
+            }
+            guard itemCount > 0 else {
+                throw AniRSSValidationError.noContent
+            }
+            return normalized
+        } catch let error as AniRSSValidationError {
+            throw error
+        } catch {
+            throw AniRSSValidationError.connectionFailed(error.localizedDescription)
+        }
+    }
+
+    private func normalizedAniRSSAddress(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.contains("://") ? trimmed : "http://\(trimmed)"
+    }
+
+    private func saveWeeklySettings() {
+        Defaults[.Customization.Home.aniRSSURL] = aniRSSURLDraft
+        Defaults[.Customization.Home.weeklyScheduleEnabled] = weeklyScheduleEnabledDraft
+        Notifications[.weeklyScheduleConfigurationDidChange].post()
+    }
+
 
     // MARK: - Media Settings
 
@@ -432,6 +624,29 @@ struct CustomizeSettingsView: View {
                     }
                 }
             }
+        }
+    }
+}
+
+private enum AniRSSValidationError: LocalizedError {
+    case invalidAddress
+    case unreachable
+    case invalidResponse
+    case noContent
+    case connectionFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidAddress:
+            "地址格式不正确。"
+        case .unreachable:
+            "服务器未返回成功状态，请检查地址和服务是否已启动。"
+        case .invalidResponse:
+            "该地址没有返回可识别的 ANI-RSS 数据。"
+        case .noContent:
+            "连接成功，但星期表中没有任何番剧信息。"
+        case let .connectionFailed(message):
+            "连接失败：\(message)"
         }
     }
 }

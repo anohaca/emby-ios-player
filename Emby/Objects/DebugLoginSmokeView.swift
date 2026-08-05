@@ -403,6 +403,52 @@ struct DebugPlayerLocalizationSmokeView: View {
     }
 }
 
+struct DebugPlaybackInformationQuerySmokeView: UIViewRepresentable {
+    final class SmokeView: UIView {
+        var bridge: MPVClientBridge?
+
+        deinit {
+            bridge?.shutdown()
+        }
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = SmokeView()
+        view.backgroundColor = .black
+        let label = UILabel()
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.textColor = .white
+        label.font = .monospacedSystemFont(ofSize: 24, weight: .bold)
+        label.numberOfLines = 0
+        label.textAlignment = .center
+        label.text = "PLAYBACK INFORMATION\nRUNNING"
+        view.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+        ])
+
+        let bridge = MPVClientBridge(layer: view.layer)
+        view.bridge = bridge
+        do {
+            try bridge.initializePlayer()
+        } catch {
+            label.text = "PLAYBACK INFORMATION\nFAIL\n\(error.localizedDescription)"
+            return view
+        }
+        bridge.requestPlaybackInformation { information in
+            let passed = information["range-cache"] != nil
+            label.text = passed
+                ? "PLAYBACK INFORMATION\nPASS"
+                : "PLAYBACK INFORMATION\nFAIL"
+            AppLog.event("PLAYBACK_INFORMATION_QUERY_SMOKE passed=%@", passed ? "true" : "false")
+        }
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {}
+}
+
 private struct DebugPlayerLocalizationSmokeRepresentable: UIViewRepresentable {
     func makeUIView(context: Context) -> UIView {
         let arguments = ProcessInfo.processInfo.arguments
@@ -458,12 +504,13 @@ private struct DebugPlayerLocalizationSmokeRepresentable: UIViewRepresentable {
         let expectedSubtitleMenuTitles = ["字幕"] + expectedTitles + ["打开字幕文件...", "关闭字幕"]
         let hasSubtitleActionsAtBottom = subtitleMenuTitles == expectedSubtitleMenuTitles
         let settingsRootMenuTitles = controlsView.settingsMenuRootChildTitlesForSmoke
-        let hasSubtitleSettingsSubmenu = settingsRootMenuTitles == ["字幕设置"]
+        let hasSubtitleSettingsSubmenu = settingsRootMenuTitles == ["播放信息", "字幕设置"]
         let passed = localizedTitles == expectedTitles &&
             !subtitleMenuTitles.contains("调整位置/大小/轮廓") &&
             hasSubtitleActionsAtBottom &&
             hasSubtitleSettingsSubmenu &&
             settingsMenuTitles.contains("设置") &&
+            settingsMenuTitles.contains("播放信息") &&
             settingsMenuTitles.contains("字幕设置") &&
             settingsMenuTitles.contains("调整字幕位置") &&
             settingsMenuTitles.contains("调整字幕大小") &&
@@ -486,6 +533,7 @@ private struct DebugPlayerLocalizationSmokeRepresentable: UIViewRepresentable {
         打开字幕文件...
         关闭字幕
         设置菜单
+        播放信息
         设置 > 字幕设置
         调整字幕位置 / 调整字幕大小 / 调整字幕轮廓
         \(passed ? "PASS" : "FAIL")
@@ -742,6 +790,7 @@ extension Notification.Name {
     static let debugPlaybackSmokeProgressBarAutoHideVerified = Notification.Name("debugPlaybackSmokeProgressBarAutoHideVerified")
     static let debugPlaybackSmokeVerifySeekGestureHUDRequested = Notification.Name("debugPlaybackSmokeVerifySeekGestureHUDRequested")
     static let debugPlaybackSmokeSeekGestureHUDVerified = Notification.Name("debugPlaybackSmokeSeekGestureHUDVerified")
+    static let debugPlaybackSmokeTimelineDragRequested = Notification.Name("debugPlaybackSmokeTimelineDragRequested")
 }
 
 @MainActor
@@ -935,7 +984,6 @@ final class DebugPlaybackSmokeRunner: ObservableObject {
     func run() async {
         guard !hasRun else { return }
         hasRun = true
-
         guard let configuration = Self.configuration else {
             state = .failed("Missing playback smoke launch arguments")
             logger.error("PLAYBACK_SMOKE_FAIL missing launch arguments")
@@ -996,10 +1044,18 @@ final class DebugPlaybackSmokeRunner: ObservableObject {
             }
 
             state = .running("Finding playable video")
-            let item = try await playableVideoItem(
+            var item = try await playableVideoItem(
                 session: session,
                 configuration: configuration
             )
+            let overrideStartSeconds = ProcessInfo.processInfo.arguments
+                .value(after: "-EmbyPlaybackSmokeStartSeconds")
+                .flatMap(Double.init)
+            if let overrideStart = overrideStartSeconds,
+               overrideStart >= 0
+            {
+                item.userData?.playbackPositionTicks = Int(overrideStart * 10_000_000)
+            }
 
             let preparedPlaybackItem: MediaPlayerItem?
             if configuration.requireEmbeddedTextSubtitle,
@@ -1027,7 +1083,12 @@ final class DebugPlaybackSmokeRunner: ObservableObject {
                 return try await MediaPlayerItem.build(
                     for: item,
                     mediaSource: item.mediaSources?.first,
-                    videoPlayerType: .emby
+                    videoPlayerType: .emby,
+                    modifyItem: { builtItem in
+                        if let overrideStartSeconds, overrideStartSeconds >= 0 {
+                            builtItem.userData?.playbackPositionTicks = Int(overrideStartSeconds * 10_000_000)
+                        }
+                    }
                 )
             }
 
@@ -1267,7 +1328,11 @@ final class DebugPlaybackSmokeRunner: ObservableObject {
             let storedStart = item.startSeconds?.seconds ?? 0
             return max(0, storedStart - Double(Defaults[.VideoPlayer.resumeOffset]))
         }()
-        let passSeconds = expectedStartSeconds >= 3 ? expectedStartSeconds + 1 : 3
+        var passSeconds = expectedStartSeconds >= 3 ? expectedStartSeconds + 1 : 3
+        let requestedSeekSeconds = ProcessInfo.processInfo.arguments
+            .value(after: "-EmbyPlaybackSmokeSeekToSeconds")
+            .flatMap(Double.init)
+        var didRequestSeek = false
         var lastObservedSeconds: Double = -1
         var sawTimeBeforeResumePoint = false
 
@@ -1298,6 +1363,19 @@ final class DebugPlaybackSmokeRunner: ObservableObject {
             }
 
             if observedSeconds >= passSeconds {
+                if let requestedSeekSeconds, !didRequestSeek {
+                    didRequestSeek = true
+                    passSeconds = requestedSeekSeconds + 1
+                    NotificationCenter.default.post(
+                        name: .debugPlaybackSmokeTimelineDragRequested,
+                        object: NSNumber(value: requestedSeekSeconds)
+                    )
+                    logger.info(
+                        "PLAYBACK_SMOKE_SEEK_REQUEST target=\(String(format: "%.3f", requestedSeekSeconds)) passAt=\(String(format: "%.3f", passSeconds))"
+                    )
+                    continue
+                }
+
                 if verifyLongPressGestureHUD {
                     guard await verifyLongPressGestureHUDState() else { return }
                 }

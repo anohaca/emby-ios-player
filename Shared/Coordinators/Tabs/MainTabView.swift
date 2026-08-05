@@ -81,6 +81,9 @@ struct MainTabView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(EmbyAppBackgroundView())
+        .onChange(of: tabCoordinator.selectedTabID) { selectedTabID in
+            AppLog.event("EmbyMainTabSelection tab=%@", selectedTabID)
+        }
         .onReceive(Notifications[.willPresentVideoPlayer].publisher) {
             videoPlayerTransitionCoverTask?.cancel()
             withDisabledAnimation {

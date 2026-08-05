@@ -480,7 +480,12 @@ final class MPVPlayerController: NSObject {
         self.bridge = bridge
     }
 
-    func load(url: URL, headers: [String: String] = [:], startSeconds: Double = 0) {
+    func load(
+        url: URL,
+        headers: [String: String] = [:],
+        startSeconds: Double = 0,
+        useRangeCache: Bool = false
+    ) {
         releaseScopedURL()
         releaseScopedSubtitleURLs()
         releaseConvertedSubtitleURLs()
@@ -495,7 +500,12 @@ final class MPVPlayerController: NSObject {
         }
 
         applyCacheSettings()
-        bridge?.load(url, headers: headers, startSeconds: startSeconds)
+        bridge?.load(
+            url,
+            headers: headers,
+            startSeconds: startSeconds,
+            useRangeCache: useRangeCache
+        )
         setPaused(false)
     }
 
@@ -507,6 +517,14 @@ final class MPVPlayerController: NSObject {
 
     func setMuted(_ muted: Bool) {
         bridge?.setMuted(muted)
+    }
+
+    func requestPlaybackInformation(
+        completion: @escaping ([String: String]) -> Void
+    ) {
+        bridge?.requestPlaybackInformation { information in
+            completion(information)
+        }
     }
 
     func togglePaused() {

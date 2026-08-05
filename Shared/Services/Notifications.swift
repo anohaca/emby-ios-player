@@ -142,6 +142,10 @@ extension Notifications.Key {
         Key("didRequestGlobalRefresh")
     }
 
+    static var weeklyScheduleConfigurationDidChange: Key<Void> {
+        Key("weeklyScheduleConfigurationDidChange")
+    }
+
     static var willPresentVideoPlayer: Key<Void> {
         Key("willPresentVideoPlayer")
     }

@@ -319,7 +319,6 @@ final class HomeViewModel: ViewModel, Stateful {
 
     private func refresh() async throws {
         let refreshStart = CACurrentMediaTime()
-        #if DEBUG
         AppLog.event(
             "EmbyHomeExitTrace refresh-begin state=%@ background=%@ resume=%d libraries=%d",
             String(describing: state),
@@ -327,7 +326,6 @@ final class HomeViewModel: ViewModel, Stateful {
             resumeItems.count,
             libraries.count
         )
-        #endif
 
         let stagedNextUpViewModel = NextUpLibraryViewModel()
         let stagedRecentlyAddedViewModel = RecentlyAddedLibraryViewModel(homeRecentlyUpdated: true, usesRememberedSort: false)

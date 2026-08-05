@@ -7,6 +7,7 @@
 #include <math.h>
 
 #include <mpv/client.h>
+#include <mpv/stream_cb.h>
 
 static void *MPVClientBridgeQueueKey = &MPVClientBridgeQueueKey;
 static const NSUInteger MPVClientBridgeMaxDiagnosticLength = 4000;
@@ -14,6 +15,332 @@ static const NSUInteger MPVClientBridgeMaxNodeStringLength = 2000;
 static const NSUInteger MPVClientBridgeMaxNodeDepth = 4;
 static const int MPVClientBridgeMaxNodeEntries = 32;
 static const double MPVClientBridgeSubtitleBaseFontSize = 38.0;
+static const NSUInteger MPVRangeCacheChunkSize = 4 * 1024 * 1024;
+static const NSInteger MPVRangeCachePrefetchCount = 3;
+static const NSInteger MPVRangeCacheMaxConnections = 4;
+
+@interface MPVRangeCachedStream : NSObject
+@property (nonatomic, readonly) NSURL *url;
+@property (nonatomic, readonly) NSDictionary<NSString *, NSString *> *headers;
+@property (nonatomic) int64_t position;
+@property (nonatomic) int64_t contentLength;
+@property (atomic) BOOL cancelled;
+@property (nonatomic, strong) NSCache<NSNumber *, NSData *> *chunks;
+@property (nonatomic, strong) NSMutableDictionary<NSNumber *, dispatch_group_t> *inFlightFetches;
+@property (nonatomic, strong) NSOperationQueue *prefetchQueue;
+@property (nonatomic, strong) NSURLSession *session;
+@property (nonatomic, copy) void (^networkSpeedHandler)(double bytesPerSecond);
+@property (nonatomic, strong) NSMutableSet<NSURLSessionTask *> *activeNetworkTasks;
+@property (nonatomic) int64_t completedNetworkBytes;
+@property (nonatomic) int64_t lastReportedNetworkBytes;
+@property (nonatomic) CFAbsoluteTime lastSpeedReportTime;
+@property (nonatomic) dispatch_source_t speedTimer;
+- (instancetype)initWithURL:(NSURL *)url headers:(NSDictionary<NSString *, NSString *> *)headers;
+- (nullable NSData *)fetchChunkAtOffset:(int64_t)offset;
+- (int64_t)readInto:(char *)buffer count:(uint64_t)count;
+- (void)prioritizeOffset:(int64_t)offset;
+- (void)cancelAllRequests;
+@end
+
+@implementation MPVRangeCachedStream
+
+- (instancetype)initWithURL:(NSURL *)url headers:(NSDictionary<NSString *,NSString *> *)headers
+{
+    self = [super init];
+    if (!self)
+        return nil;
+    _url = url;
+    _headers = [headers copy];
+    _position = 0;
+    _contentLength = -1;
+    _chunks = [[NSCache alloc] init];
+    _chunks.totalCostLimit = 256 * 1024 * 1024;
+    _inFlightFetches = [NSMutableDictionary dictionary];
+    _activeNetworkTasks = [NSMutableSet set];
+    _lastSpeedReportTime = CFAbsoluteTimeGetCurrent();
+    _prefetchQueue = [[NSOperationQueue alloc] init];
+    _prefetchQueue.name = @"local.codex.libmpv.range-prefetch";
+    _prefetchQueue.qualityOfService = NSQualityOfServiceUserInitiated;
+    _prefetchQueue.maxConcurrentOperationCount = MPVRangeCachePrefetchCount;
+
+    NSURLSessionConfiguration *configuration = NSURLSessionConfiguration.ephemeralSessionConfiguration;
+    configuration.HTTPMaximumConnectionsPerHost = MPVRangeCacheMaxConnections;
+    configuration.requestCachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+    configuration.timeoutIntervalForRequest = 60;
+    _session = [NSURLSession sessionWithConfiguration:configuration];
+
+    dispatch_queue_t speedQueue = dispatch_queue_create(
+        "local.codex.libmpv.range-speed",
+        DISPATCH_QUEUE_SERIAL
+    );
+    _speedTimer = dispatch_source_create(
+        DISPATCH_SOURCE_TYPE_TIMER,
+        0,
+        0,
+        speedQueue
+    );
+    dispatch_source_set_timer(
+        _speedTimer,
+        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
+        (uint64_t)(0.5 * NSEC_PER_SEC),
+        (uint64_t)(0.05 * NSEC_PER_SEC)
+    );
+    __weak MPVRangeCachedStream *weakSelf = self;
+    dispatch_source_set_event_handler(_speedTimer, ^{
+        MPVRangeCachedStream *strongSelf = weakSelf;
+        if (!strongSelf || strongSelf.cancelled)
+            return;
+
+        CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+        __block int64_t totalBytes = 0;
+        @synchronized (strongSelf) {
+            totalBytes = strongSelf.completedNetworkBytes;
+            for (NSURLSessionTask *activeTask in strongSelf.activeNetworkTasks)
+                totalBytes += activeTask.countOfBytesReceived;
+        }
+        double elapsed = MAX(0.001, now - strongSelf.lastSpeedReportTime);
+        int64_t byteDelta = MAX(0, totalBytes - strongSelf.lastReportedNetworkBytes);
+        strongSelf.lastReportedNetworkBytes = totalBytes;
+        strongSelf.lastSpeedReportTime = now;
+        double bytesPerSecond = (double)byteDelta / elapsed;
+        if (strongSelf.networkSpeedHandler)
+            strongSelf.networkSpeedHandler(bytesPerSecond);
+    });
+    dispatch_resume(_speedTimer);
+    return self;
+}
+
+- (void)prefetchAfterOffset:(int64_t)offset
+{
+    for (NSInteger index = 1; index <= MPVRangeCachePrefetchCount; index++) {
+        int64_t nextOffset = offset + (int64_t)index * (int64_t)MPVRangeCacheChunkSize;
+        if (self.contentLength >= 0 && nextOffset >= self.contentLength)
+            break;
+        if ([self.chunks objectForKey:@(nextOffset)])
+            continue;
+
+        __weak MPVRangeCachedStream *weakSelf = self;
+        [self.prefetchQueue addOperationWithBlock:^{
+            MPVRangeCachedStream *strongSelf = weakSelf;
+            if (!strongSelf || strongSelf.cancelled)
+                return;
+            [strongSelf fetchChunkAtOffset:nextOffset];
+        }];
+    }
+}
+
+- (void)prioritizeOffset:(int64_t)offset
+{
+    [self.prefetchQueue cancelAllOperations];
+    int64_t chunkOffset = (offset / (int64_t)MPVRangeCacheChunkSize) *
+                          (int64_t)MPVRangeCacheChunkSize;
+    [self prefetchAfterOffset:chunkOffset];
+}
+
+- (void)cancelAllRequests
+{
+    self.cancelled = YES;
+    [self.prefetchQueue cancelAllOperations];
+    [self.session invalidateAndCancel];
+    if (self.speedTimer) {
+        dispatch_source_cancel(self.speedTimer);
+        self.speedTimer = nil;
+    }
+    if (self.networkSpeedHandler)
+        self.networkSpeedHandler(0);
+}
+
+- (NSData *)chunkAtOffset:(int64_t)offset
+{
+    NSNumber *key = @(offset);
+    NSData *cached = [self.chunks objectForKey:key];
+    if (cached) {
+        [self prefetchAfterOffset:offset];
+        return cached;
+    }
+    NSData *fetched = [self fetchChunkAtOffset:offset];
+    if (fetched)
+        [self prefetchAfterOffset:offset];
+    return fetched;
+}
+
+- (NSData *)fetchChunkAtOffset:(int64_t)offset
+{
+    NSNumber *key = @(offset);
+    NSData *cached = [self.chunks objectForKey:key];
+    if (cached)
+        return cached;
+    if (self.cancelled)
+        return nil;
+
+    __block dispatch_group_t fetchGroup = nil;
+    __block BOOL ownsFetch = NO;
+    @synchronized (self) {
+        cached = [self.chunks objectForKey:key];
+        if (cached)
+            return cached;
+
+        fetchGroup = self.inFlightFetches[key];
+        if (!fetchGroup) {
+            fetchGroup = dispatch_group_create();
+            dispatch_group_enter(fetchGroup);
+            self.inFlightFetches[key] = fetchGroup;
+            ownsFetch = YES;
+        }
+    }
+
+    if (!ownsFetch) {
+        dispatch_group_wait(fetchGroup, DISPATCH_TIME_FOREVER);
+        return [self.chunks objectForKey:key];
+    }
+
+    int64_t end = offset + (int64_t)MPVRangeCacheChunkSize - 1;
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:self.url];
+    request.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+    request.timeoutInterval = 60;
+    [self.headers enumerateKeysAndObjectsUsingBlock:^(NSString *header, NSString *value, BOOL *stop) {
+        [request setValue:value forHTTPHeaderField:header];
+    }];
+    [request setValue:[NSString stringWithFormat:@"bytes=%lld-%lld", offset, end]
+   forHTTPHeaderField:@"Range"];
+
+    dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+    CFAbsoluteTime startedAt = CFAbsoluteTimeGetCurrent();
+    __block NSData *receivedData = nil;
+    __block NSHTTPURLResponse *httpResponse = nil;
+    __block NSURLSessionDataTask *task = [self.session
+        dataTaskWithRequest:request
+        completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+            @synchronized (self) {
+                self.completedNetworkBytes += task.countOfBytesReceived;
+                [self.activeNetworkTasks removeObject:task];
+            }
+            if (!error && [response isKindOfClass:NSHTTPURLResponse.class]) {
+                NSHTTPURLResponse *candidate = (NSHTTPURLResponse *)response;
+                if (candidate.statusCode == 206 || candidate.statusCode == 200) {
+                    receivedData = data;
+                    httpResponse = candidate;
+                }
+            }
+            dispatch_semaphore_signal(semaphore);
+        }];
+    @synchronized (self) {
+        [self.activeNetworkTasks addObject:task];
+    }
+    [task resume];
+    long waitResult = dispatch_semaphore_wait(
+        semaphore,
+        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(65 * NSEC_PER_SEC))
+    );
+    if (waitResult != 0)
+        [task cancel];
+
+    NSData *chunkData = nil;
+    if (receivedData && !self.cancelled) {
+        NSString *contentRange = httpResponse.allHeaderFields[@"Content-Range"];
+        NSRange slash = [contentRange rangeOfString:@"/" options:NSBackwardsSearch];
+        if (slash.location != NSNotFound) {
+            NSString *total = [contentRange substringFromIndex:slash.location + 1];
+            long long parsed = total.longLongValue;
+            if (parsed > 0)
+                self.contentLength = parsed;
+        } else if (httpResponse.statusCode == 200 && httpResponse.expectedContentLength > 0) {
+            self.contentLength = httpResponse.expectedContentLength;
+        }
+
+        if (httpResponse.statusCode == 200) {
+            if (offset < (int64_t)receivedData.length) {
+                NSUInteger available = receivedData.length - (NSUInteger)offset;
+                NSUInteger length = MIN(MPVRangeCacheChunkSize, available);
+                chunkData = [receivedData subdataWithRange:NSMakeRange((NSUInteger)offset, length)];
+            }
+        } else {
+            chunkData = receivedData;
+        }
+
+        if (chunkData) {
+            [self.chunks setObject:chunkData forKey:key cost:chunkData.length];
+            CFAbsoluteTime finishedAt = CFAbsoluteTimeGetCurrent();
+            NSLog(@"MPVRangeCache fetch offset=%lld bytes=%lu seconds=%.3f status=%ld",
+                  offset,
+                  (unsigned long)chunkData.length,
+                  finishedAt - startedAt,
+                  (long)httpResponse.statusCode);
+        }
+    }
+
+    @synchronized (self) {
+        [self.inFlightFetches removeObjectForKey:key];
+        dispatch_group_leave(fetchGroup);
+    }
+    return chunkData;
+}
+
+- (int64_t)readInto:(char *)buffer count:(uint64_t)count
+{
+    if (self.cancelled || count == 0)
+        return self.cancelled ? -1 : 0;
+    if (self.contentLength >= 0 && self.position >= self.contentLength)
+        return 0;
+
+    uint64_t copied = 0;
+    while (copied < count) {
+        int64_t chunkOffset = (self.position / (int64_t)MPVRangeCacheChunkSize) *
+                              (int64_t)MPVRangeCacheChunkSize;
+        NSData *chunk = [self chunkAtOffset:chunkOffset];
+        if (!chunk)
+            return copied > 0 ? (int64_t)copied : -1;
+
+        NSUInteger offsetInChunk = (NSUInteger)(self.position - chunkOffset);
+        if (offsetInChunk >= chunk.length)
+            return (int64_t)copied;
+        NSUInteger available = chunk.length - offsetInChunk;
+        NSUInteger requested = (NSUInteger)MIN((uint64_t)available, count - copied);
+        [chunk getBytes:buffer + copied range:NSMakeRange(offsetInChunk, requested)];
+        copied += requested;
+        self.position += requested;
+        if (requested == 0 || chunk.length < MPVRangeCacheChunkSize)
+            break;
+    }
+    return (int64_t)copied;
+}
+
+@end
+
+static int64_t MPVRangeCacheRead(void *cookie, char *buffer, uint64_t count)
+{
+    return [(__bridge MPVRangeCachedStream *)cookie readInto:buffer count:count];
+}
+
+static int64_t MPVRangeCacheSeek(void *cookie, int64_t offset)
+{
+    MPVRangeCachedStream *stream = (__bridge MPVRangeCachedStream *)cookie;
+    if (offset < 0)
+        return -1;
+    stream.position = offset;
+    [stream prioritizeOffset:offset];
+    return offset;
+}
+
+static int64_t MPVRangeCacheSize(void *cookie)
+{
+    return ((__bridge MPVRangeCachedStream *)cookie).contentLength;
+}
+
+static void MPVRangeCacheClose(void *cookie)
+{
+    if (!cookie)
+        return;
+    MPVRangeCachedStream *stream = (__bridge_transfer MPVRangeCachedStream *)cookie;
+    [stream cancelAllRequests];
+}
+
+static void MPVRangeCacheCancel(void *cookie)
+{
+    [(__bridge MPVRangeCachedStream *)cookie cancelAllRequests];
+}
+
+static int MPVRangeCacheOpen(void *userData, char *uri, mpv_stream_cb_info *info);
 
 static const uint64_t MPVObservedTimePos = 1001;
 static const uint64_t MPVObservedDuration = 1002;
@@ -73,9 +400,116 @@ static NSString *MPVXMLTextEscapedString(NSString *string)
 @property (nonatomic) BOOL pendingStartSeekIssued;
 @property (nonatomic) BOOL fileLoaded;
 @property (nonatomic, strong) NSMutableArray<NSDictionary<NSString *, id> *> *pendingSubtitleRequests;
+@property (nonatomic, strong) NSURL *rangeCacheURL;
+@property (nonatomic, strong) NSDictionary<NSString *, NSString *> *rangeCacheHeaders;
+- (void)notifyCacheSpeed:(double)bytesPerSecond;
 @end
 
+static int MPVRangeCacheOpen(void *userData, char *uri, mpv_stream_cb_info *info)
+{
+    MPVClientBridge *bridge = (__bridge MPVClientBridge *)userData;
+    NSURL *url = bridge.rangeCacheURL;
+    if (!url)
+        return MPV_ERROR_LOADING_FAILED;
+    MPVRangeCachedStream *stream = [[MPVRangeCachedStream alloc]
+        initWithURL:url
+        headers:bridge.rangeCacheHeaders ?: @{}];
+    __weak MPVClientBridge *weakBridge = bridge;
+    stream.networkSpeedHandler = ^(double bytesPerSecond) {
+        [weakBridge notifyCacheSpeed:bytesPerSecond];
+    };
+    info->cookie = (__bridge_retained void *)stream;
+    info->read_fn = MPVRangeCacheRead;
+    info->seek_fn = MPVRangeCacheSeek;
+    info->size_fn = MPVRangeCacheSize;
+    info->close_fn = MPVRangeCacheClose;
+    info->cancel_fn = MPVRangeCacheCancel;
+    return 0;
+}
+
 @implementation MPVClientBridge
+
++ (NSSet<NSString *> *)softwareVideoDecoderCodecs
+{
+    mpv_handle *handle = mpv_create();
+    if (!handle)
+        return [NSSet set];
+
+    int configFlag = 0;
+    mpv_set_option(handle, "config", MPV_FORMAT_FLAG, &configFlag);
+    if (mpv_initialize(handle) < 0) {
+        mpv_destroy(handle);
+        return [NSSet set];
+    }
+
+    NSMutableSet<NSString *> *codecs = [NSMutableSet set];
+    mpv_node decoderList = {0};
+    if (mpv_get_property(handle, "decoder-list", MPV_FORMAT_NODE, &decoderList) >= 0 &&
+        decoderList.format == MPV_FORMAT_NODE_ARRAY &&
+        decoderList.u.list) {
+        mpv_node_list *decoders = decoderList.u.list;
+        for (int index = 0; index < decoders->num; index++) {
+            mpv_node entry = decoders->values[index];
+            if (entry.format != MPV_FORMAT_NODE_MAP || !entry.u.list)
+                continue;
+            mpv_node_list *fields = entry.u.list;
+            for (int fieldIndex = 0; fieldIndex < fields->num; fieldIndex++) {
+                const char *key = fields->keys ? fields->keys[fieldIndex] : NULL;
+                mpv_node value = fields->values[fieldIndex];
+                if (!key || strcmp(key, "codec") != 0 ||
+                    value.format != MPV_FORMAT_STRING || !value.u.string)
+                    continue;
+                NSString *codec = [NSString stringWithUTF8String:value.u.string];
+                if (codec.length > 0)
+                    [codecs addObject:codec.lowercaseString];
+            }
+        }
+    }
+    mpv_free_node_contents(&decoderList);
+    mpv_terminate_destroy(handle);
+    return [codecs copy];
+}
+
++ (NSSet<NSString *> *)softwareVideoRangeProcessingCapabilities
+{
+    mpv_handle *handle = mpv_create();
+    if (!handle)
+        return [NSSet set];
+
+    int configFlag = 0;
+    mpv_set_option(handle, "config", MPV_FORMAT_FLAG, &configFlag);
+    if (mpv_initialize(handle) < 0) {
+        mpv_destroy(handle);
+        return [NSSet set];
+    }
+
+    BOOL (^hasOption)(const char *) = ^BOOL(const char *name) {
+        NSString *property = [NSString stringWithFormat:@"option-info/%s", name];
+        mpv_node info = {0};
+        int result = mpv_get_property(handle, property.UTF8String, MPV_FORMAT_NODE, &info);
+        if (result >= 0)
+            mpv_free_node_contents(&info);
+        return result >= 0;
+    };
+
+    NSSet<NSString *> *decoders = [self softwareVideoDecoderCodecs];
+    BOOL hasHEVCDecoder = [decoders containsObject:@"hevc"] || [decoders containsObject:@"h265"];
+    BOOL hasToneMapping = hasOption("tone-mapping") && hasOption("target-trc");
+    BOOL hasDynamicColorMetadata = hasOption("target-colorspace-hint");
+
+    NSMutableSet<NSString *> *capabilities = [NSMutableSet set];
+    if (hasHEVCDecoder && hasToneMapping) {
+        [capabilities addObject:@"hdr10"];
+        [capabilities addObject:@"hlg"];
+    }
+    if (hasHEVCDecoder && hasToneMapping && hasDynamicColorMetadata) {
+        [capabilities addObject:@"hdr10plus"];
+        [capabilities addObject:@"dovi"];
+    }
+
+    mpv_terminate_destroy(handle);
+    return [capabilities copy];
+}
 
 - (instancetype)initWithLayer:(CALayer *)layer
 {
@@ -114,6 +548,18 @@ static NSString *MPVXMLTextEscapedString(NSString *string)
     self.mpv = mpv_create();
     if (!self.mpv) {
         [self fillError:error code:-1 message:@"mpv_create failed"];
+        return NO;
+    }
+
+    int streamCacheRC = mpv_stream_cb_add_ro(self.mpv,
+                                             "embyrange",
+                                             (__bridge void *)self,
+                                             MPVRangeCacheOpen);
+    if (streamCacheRC < 0) {
+        [self fillError:error
+                   code:streamCacheRC
+                message:[NSString stringWithFormat:@"range cache registration failed: %s",
+                                                   mpv_error_string(streamCacheRC)]];
         return NO;
     }
 
@@ -486,12 +932,25 @@ static NSString *MPVXMLTextEscapedString(NSString *string)
         headers:(NSDictionary<NSString *, NSString *> *)headers
    startSeconds:(double)startSeconds
 {
+    [self loadURL:url headers:headers startSeconds:startSeconds useRangeCache:NO];
+}
+
+- (void)loadURL:(NSURL *)url
+        headers:(NSDictionary<NSString *, NSString *> *)headers
+   startSeconds:(double)startSeconds
+  useRangeCache:(BOOL)useRangeCache
+{
     if (!self.mpv || !url)
         return;
 
     [self applyHTTPHeaders:headers ?: @{}];
 
-    NSString *location = url.isFileURL ? url.path : url.absoluteString;
+    self.rangeCacheURL = useRangeCache ? url : nil;
+    self.rangeCacheHeaders = useRangeCache ? (headers ?: @{}) : @{};
+    [self notifyCacheSpeed:0];
+    NSString *location = useRangeCache
+        ? @"embyrange://current"
+        : (url.isFileURL ? url.path : url.absoluteString);
     if (location.length == 0)
         return;
 
@@ -514,9 +973,11 @@ static NSString *MPVXMLTextEscapedString(NSString *string)
         cmdWithStart[4] = startOption.UTF8String;
     }
     [self commandAsync:startOption ? cmdWithStart : cmdWithoutStart];
-    [self notifyDiagnosticLine:[NSString stringWithFormat:@"mpv-loadfile url=%@ isFile=%@ headerCount=%lu startSeconds=%.3f",
+    [self notifyDiagnosticLine:[NSString stringWithFormat:@"mpv-loadfile url=%@ isFile=%@ rangeCache=%@ chunkMiB=%lu headerCount=%lu startSeconds=%.3f",
                                                            url.isFileURL ? url.path : url.absoluteString,
                                                            url.isFileURL ? @"true" : @"false",
+                                                           useRangeCache ? @"true" : @"false",
+                                                           (unsigned long)(MPVRangeCacheChunkSize / 1024 / 1024),
                                                            (unsigned long)headers.count,
                                                            startSeconds]];
 }
@@ -858,6 +1319,41 @@ static NSString *MPVXMLTextEscapedString(NSString *string)
     [self notifyDiagnosticLine:@"mpv-subtitle-select id=no"];
 }
 
+- (void)requestPlaybackInformation:
+    (void (^)(NSDictionary<NSString *, NSString *> *information))completion
+{
+    if (!completion)
+        return;
+
+    mpv_handle *handle = self.mpv;
+    if (!handle) {
+        completion(@{});
+        return;
+    }
+
+    NSArray<NSString *> *properties = @[
+        @"container-format", @"video-codec", @"video-format", @"hwdec-current",
+        @"video-params/w", @"video-params/h", @"video-params/pixelformat",
+        @"video-params/primaries", @"video-params/gamma", @"video-params/colormatrix",
+        @"video-params/colorlevels", @"video-params/dolby-vision-profile",
+        @"estimated-vf-fps", @"audio-codec-name", @"audio-params/samplerate",
+        @"audio-params/channel-count", @"decoder-frame-drop-count", @"avsync",
+        @"demuxer-cache-duration",
+    ];
+    NSMutableDictionary<NSString *, NSString *> *information = [NSMutableDictionary dictionary];
+    for (NSString *property in properties) {
+        char *rawValue = mpv_get_property_string(handle, property.UTF8String);
+        if (!rawValue)
+            continue;
+        NSString *value = [NSString stringWithUTF8String:rawValue];
+        mpv_free(rawValue);
+        if (value.length > 0)
+            information[property] = value;
+    }
+    information[@"range-cache"] = self.rangeCacheURL ? @"yes" : @"no";
+    completion([information copy]);
+}
+
 - (void)shutdown
 {
     mpv_handle *handle = self.mpv;
@@ -1024,7 +1520,8 @@ static NSString *MPVXMLTextEscapedString(NSString *string)
     } else if (strcmp(name, "demuxer-cache-time") == 0 && property->data && property->format == MPV_FORMAT_DOUBLE) {
         [self notifyCachedTime:*(double *)property->data];
     } else if (strcmp(name, "cache-speed") == 0 && property->data && property->format == MPV_FORMAT_INT64) {
-        [self notifyCacheSpeed:(double)(*(int64_t *)property->data)];
+        if (!self.rangeCacheURL)
+            [self notifyCacheSpeed:(double)(*(int64_t *)property->data)];
     } else if (strcmp(name, "osd-dimensions") == 0 && property->data && property->format == MPV_FORMAT_NODE) {
         [self handleOSDDimensions:(mpv_node *)property->data];
     } else if (strcmp(name, "track-list") == 0 && property->data && property->format == MPV_FORMAT_NODE) {

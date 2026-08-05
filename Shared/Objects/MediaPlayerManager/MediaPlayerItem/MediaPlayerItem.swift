@@ -53,7 +53,6 @@ class MediaPlayerItem: ViewModel, MediaPlayerObserver {
     let thumbnailProvider: ThumbnailProvider?
     let url: URL
     let httpHeaders: [String: String]
-
     let audioStreams: [MediaStream]
     let subtitleStreams: [MediaStream]
     let videoStreams: [MediaStream]
@@ -85,7 +84,6 @@ class MediaPlayerItem: ViewModel, MediaPlayerObserver {
         self.thumbnailProvider = thumbnailProvider
         self.url = url
         self.httpHeaders = httpHeaders
-
         let adjustedMediaStreams = mediaSource.mediaStreams?.adjustedTrackIndexes(
             for: mediaSource.transcodingURL == nil ? .directPlay : .transcode,
             selectedAudioStreamIndex: mediaSource.defaultAudioStreamIndex ?? 0

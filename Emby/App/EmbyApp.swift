@@ -52,6 +52,8 @@ struct EmbyApp: App {
             }
         } else if ProcessInfo.processInfo.arguments.contains("-EmbyPlayerLocalizationSmoke") {
             DebugPlayerLocalizationSmokeView()
+        } else if ProcessInfo.processInfo.arguments.contains("-EmbyPlaybackInformationQuerySmoke") {
+            DebugPlaybackInformationQuerySmokeView()
         } else if ProcessInfo.processInfo.arguments.contains("-EmbySubtitleAdjustmentSmoke") {
             DebugSubtitleAdjustmentSmokeView()
         } else if ProcessInfo.processInfo.arguments.contains("-EmbySelectUserInitialServerSmoke") {

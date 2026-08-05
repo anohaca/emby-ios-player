@@ -164,6 +164,9 @@ struct AlertTextFieldPresenter: UIViewControllerRepresentable {
     let placeholder: String
     let text: String
     let keyboardType: UIKeyboardType
+    var showsCancel = false
+    var textContentType: UITextContentType? = nil
+    var forcesLeftToRight = false
     @Binding
     var isPresented: Bool
 
@@ -185,6 +188,18 @@ struct AlertTextFieldPresenter: UIViewControllerRepresentable {
                 textField.placeholder = placeholder
                 textField.text = text
                 textField.keyboardType = keyboardType
+                textField.textContentType = textContentType
+                if forcesLeftToRight {
+                    textField.semanticContentAttribute = .forceLeftToRight
+                    textField.textAlignment = .left
+                    let fullRange = textField.textRange(
+                        from: textField.beginningOfDocument,
+                        to: textField.endOfDocument
+                    )
+                    if let fullRange {
+                        textField.setBaseWritingDirection(.leftToRight, for: fullRange)
+                    }
+                }
                 textField.addTarget(
                     context.coordinator,
                     action: #selector(Coordinator.textDidChange(_:)),
@@ -196,6 +211,11 @@ struct AlertTextFieldPresenter: UIViewControllerRepresentable {
             alert.addAction(UIAlertAction(title: L10n.ok, style: .default) { _ in
                 context.coordinator.commit()
             })
+            if showsCancel {
+                alert.addAction(UIAlertAction(title: L10n.cancel, style: .cancel) { _ in
+                    context.coordinator.cancel()
+                })
+            }
 
             context.coordinator.alert = alert
             DispatchQueue.main.async {
@@ -231,6 +251,11 @@ struct AlertTextFieldPresenter: UIViewControllerRepresentable {
             alert = nil
         }
 
+        func cancel() {
+            configuration?.isPresented = false
+            alert = nil
+        }
+
     }
 }
 
@@ -251,6 +276,12 @@ private enum AlertTextFieldChrome {
     }
 
     private static func applyOnce(to textField: UITextField) {
+        let selectionOffsets = textField.selectedTextRange.map { range in
+            (
+                textField.offset(from: textField.beginningOfDocument, to: range.start),
+                textField.offset(from: textField.beginningOfDocument, to: range.end)
+            )
+        }
         let inputBackgroundColor = UIColor(
             red: 48 / 255,
             green: 48 / 255,
@@ -278,6 +309,13 @@ private enum AlertTextFieldChrome {
             subview.backgroundColor = inputBackgroundColor
             subview.layer.backgroundColor = inputBackgroundColor.cgColor
             subview.isOpaque = false
+        }
+
+        if let selectionOffsets,
+           let start = textField.position(from: textField.beginningOfDocument, offset: selectionOffsets.0),
+           let end = textField.position(from: textField.beginningOfDocument, offset: selectionOffsets.1)
+        {
+            textField.selectedTextRange = textField.textRange(from: start, to: end)
         }
     }
 }

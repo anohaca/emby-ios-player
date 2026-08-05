@@ -227,6 +227,7 @@ extension MediaPlayerItem {
 
             guard let fullTranscodeURL = userSession.embyClient.absoluteURL(forPathOrURL: transcodingURL)
             else { throw ErrorMessage("Unable to make transcode URL") }
+
             return fullTranscodeURL
         }
 

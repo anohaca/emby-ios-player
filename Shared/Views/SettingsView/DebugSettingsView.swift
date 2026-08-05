@@ -16,8 +16,10 @@ import SwiftUI
 #if DEBUG
 struct DebugSettingsView: View {
 
-    @Default(.isLiquidGlassEnabled)
-    private var isLiquidGlassEnabled
+    private static let softwareVideoDecoderCodecs = MPVClientBridge.softwareVideoDecoderCodecs()
+    private static let softwareVideoRangeCapabilities =
+        MPVClientBridge.softwareVideoRangeProcessingCapabilities()
+
     @Default(.sendProgressReports)
     private var sendProgressReports
 
@@ -26,12 +28,6 @@ struct DebugSettingsView: View {
 
             Section(L10n.settings) {
                 Toggle(L10n.sendProgressReports, isOn: $sendProgressReports)
-            }
-
-            Section {
-                Toggle("Liquid Glass", isOn: $isLiquidGlassEnabled)
-            } footer: {
-                Text("Requires app restart to take effect.")
             }
 
             Section("Device Details") {
@@ -46,7 +42,12 @@ struct DebugSettingsView: View {
                 )
             }
 
-            Section("Video Codec Support") {
+            Section("Hardware Video Decode Support") {
+                LabeledContent(
+                    VideoCodec.h264.displayTitle,
+                    value: PlaybackCapabilities.supportsH264 ? L10n.yes : L10n.no
+                )
+
                 LabeledContent(
                     VideoCodec.av1.displayTitle,
                     value: PlaybackCapabilities.supportsAV1 ? L10n.yes : L10n.no
@@ -63,9 +64,16 @@ struct DebugSettingsView: View {
                 )
             }
 
-            Section("Video Range Support") {
+            Section("Software Video Decode Support") {
+                softwareDecoderRow(VideoCodec.h264, aliases: ["h264"])
+                softwareDecoderRow(VideoCodec.hevc, aliases: ["hevc", "h265"])
+                softwareDecoderRow(VideoCodec.av1, aliases: ["av1"])
+                softwareDecoderRow(VideoCodec.vp9, aliases: ["vp9"])
+            }
+
+            Section("Hardware Video Range Support") {
                 LabeledContent(
-                    VideoRangeType.hdr10Plus.displayTitle,
+                    VideoRangeType.hdr10.displayTitle,
                     value: PlaybackCapabilities.supportsHDR10 ? L10n.yes : L10n.no
                 )
 
@@ -79,9 +87,30 @@ struct DebugSettingsView: View {
                     value: PlaybackCapabilities.supportsDolbyVision ? L10n.yes : L10n.no
                 )
             }
+
+            Section("Software Video Range Processing") {
+                softwareVideoRangeRow(VideoRangeType.hdr10, capability: "hdr10")
+                softwareVideoRangeRow(VideoRangeType.hdr10Plus, capability: "hdr10plus")
+                softwareVideoRangeRow(VideoRangeType.hlg, capability: "hlg")
+                softwareVideoRangeRow(VideoRangeType.dovi, capability: "dovi")
+            }
         }
         .labeledContentStyle(.focusable)
         .navigationTitle("Debug")
+    }
+
+    private func softwareDecoderRow(_ codec: VideoCodec, aliases: Set<String>) -> some View {
+        LabeledContent(
+            codec.displayTitle,
+            value: !Self.softwareVideoDecoderCodecs.isDisjoint(with: aliases) ? L10n.yes : L10n.no
+        )
+    }
+
+    private func softwareVideoRangeRow(_ range: VideoRangeType, capability: String) -> some View {
+        LabeledContent(
+            range.displayTitle,
+            value: Self.softwareVideoRangeCapabilities.contains(capability) ? L10n.yes : L10n.no
+        )
     }
 }
 #endif

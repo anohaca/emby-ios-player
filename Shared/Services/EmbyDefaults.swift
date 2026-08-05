@@ -555,6 +555,18 @@ extension Defaults.Keys {
                 CurrentUserKey("homeShowContinueWatching", default: false)
             }
 
+            static var showLogButton: Key<Bool> {
+                UserKey("homeShowLogButton", default: false)
+            }
+
+            static var weeklyScheduleEnabled: Key<Bool> {
+                CurrentUserKey("homeWeeklyScheduleEnabled", default: false)
+            }
+
+            static var aniRSSURL: Key<String> {
+                CurrentUserKey("homeAniRSSURL", default: "")
+            }
+
             static var resumeNextUp: Key<Bool> {
                 UserKey("homeResumeNextUp", default: false)
             }
@@ -761,6 +773,7 @@ extension Defaults.Keys {
             static var mpvCachePauseEnabled: Key<Bool> {
                 UserKey("mpvCachePauseEnabled", default: true)
             }
+
         }
 
         // TODO: transition into a SubtitleConfiguration instead of multiple types
@@ -847,7 +860,6 @@ extension Defaults.Keys {
         Key(name, default: `default`, suite: .appSuite)
     }
 
-    static let isLiquidGlassEnabled: Key<Bool> = DebugKey("experimentalLiquidGlass", default: false)
     static let sendProgressReports: Key<Bool> = DebugKey("sendProgressReports", default: true)
 }
 #endif

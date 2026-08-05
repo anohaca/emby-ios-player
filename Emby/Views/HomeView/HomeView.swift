@@ -17,12 +17,21 @@ import UIKit
 //       - indicated by snapping to the top
 struct HomeView: View {
 
+    private enum HomeDestination: String, CaseIterable, Identifiable {
+        case library = "首页"
+        case weekly = "星期"
+
+        var id: Self { self }
+    }
+
     @Default(.Customization.nextUpPosterType)
     private var nextUpPosterType
     @Default(.Customization.Home.showRecentlyAdded)
     private var showRecentlyAdded
     @Default(.Customization.Home.showContinueWatching)
     private var showContinueWatching
+    @Default(.Customization.Home.showLogButton)
+    private var showHomeLogButton
     @Default(.Customization.Home.sectionOrder)
     private var sectionOrder
     @Default(.Customization.Home.hiddenSectionIDs)
@@ -37,6 +46,12 @@ struct HomeView: View {
     private var viewModel = HomeViewModel()
     @State
     private var isPullRefreshControlActive = false
+    @State
+    private var selectedDestination = HomeDestination.library
+    @State
+    private var appliedWeeklyScheduleEnabled = Defaults[.Customization.Home.weeklyScheduleEnabled]
+    @State
+    private var appliedAniRSSURL = Defaults[.Customization.Home.aniRSSURL]
     @State
     private var pullRefreshRowResetRevision = 0
     @State
@@ -232,22 +247,74 @@ struct HomeView: View {
         }
     }
 
+    private var destinationPicker: some View {
+        Picker("首页界面", selection: $selectedDestination) {
+            ForEach(HomeDestination.allCases) { destination in
+                Text(destination.rawValue).tag(destination)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+    }
+
+    private var configuredAniRSSURL: URL? {
+        let value = appliedAniRSSURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        let normalized = value.contains("://") ? value : "http://\(value)"
+        guard var components = URLComponents(string: normalized),
+              components.host != nil
+        else { return nil }
+        if components.path.isEmpty {
+            components.path = "/"
+        }
+        return components.url
+    }
+
+    private var showsWeeklySchedule: Bool {
+        appliedWeeklyScheduleEnabled && configuredAniRSSURL != nil
+    }
+
     var body: some View {
         ZStack {
             homeBackground
 
-            switch viewModel.state {
-            case .content:
-                contentView
-            case let .error(error):
-                ErrorView(error: error)
-            case .initial, .refreshing:
-                ProgressView()
+            VStack(spacing: 0) {
+                if showsWeeklySchedule {
+                    destinationPicker
+                }
+
+                switch selectedDestination {
+                case .library:
+                    switch viewModel.state {
+                    case .content:
+                        contentView
+                    case let .error(error):
+                        ErrorView(error: error)
+                    case .initial, .refreshing:
+                        ProgressView()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                case .weekly:
+                    if let configuredAniRSSURL {
+                        WeeklyScheduleView(baseURL: configuredAniRSSURL)
+                    }
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .environment(\.homeTransitionLockedRowWidth, isHomeLayoutLockedForPlayer ? validHomeViewportSizeForPlayer.width : nil)
         .environment(\.homeRowResetRevision, pullRefreshRowResetRevision)
+        .onChange(of: showsWeeklySchedule) { isEnabled in
+            if !isEnabled {
+                selectedDestination = .library
+            }
+        }
+        .onReceive(Notifications[.weeklyScheduleConfigurationDidChange].publisher) {
+            appliedAniRSSURL = Defaults[.Customization.Home.aniRSSURL]
+            appliedWeeklyScheduleEnabled = Defaults[.Customization.Home.weeklyScheduleEnabled]
+        }
         .onSizeChanged { size, _ in
             homeViewportSize = size
             guard !isHomeLayoutLockedForPlayer,
@@ -305,6 +372,15 @@ struct HomeView: View {
             if !isHomeToolbarHiddenForPlayerTransition {
                 if viewModel.backgroundStates.contains(.refresh), !isPullRefreshControlActive {
                     ProgressView()
+                }
+
+                if showHomeLogButton {
+                    Button {
+                        router.route(to: .log)
+                    } label: {
+                        Image(systemName: "text.page")
+                    }
+                    .accessibilityLabel("查看日志")
                 }
 
                 SettingsBarButton(

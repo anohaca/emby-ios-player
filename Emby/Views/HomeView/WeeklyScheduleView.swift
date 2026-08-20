@@ -211,15 +211,22 @@ private final class WeeklyScheduleViewModel: ViewModel {
                 as: EmbyPortItemsResponse<BaseItemDto>.self
             )
             let series = response.items ?? []
+            let seriesByTMDB = Dictionary(
+                series.compactMap { item -> (String, BaseItemDto)? in
+                    guard let tmdbID = Self.tmdbID(of: item) else { return nil }
+                    return (tmdbID, item)
+                },
+                uniquingKeysWith: { first, _ in first }
+            )
+            let seriesByTitle = Dictionary(
+                series.map { (Self.normalized($0.displayTitle), $0) },
+                uniquingKeysWith: { first, _ in first }
+            )
             var result: [String: PlaybackIndicator] = [:]
             var matches: [String: BaseItemDto] = [:]
             for scheduleItem in weeks.flatMap(\.items) {
-                let titleMatch = { (item: BaseItemDto) in
-                    Self.normalized(item.displayTitle) == Self.normalized(scheduleItem.title)
-                }
-                let match = scheduleItem.tmdbID.flatMap { tmdbID in
-                    series.first { Self.tmdbID(of: $0) == tmdbID }
-                } ?? series.first(where: titleMatch)
+                let match = scheduleItem.tmdbID.flatMap { seriesByTMDB[$0] } ??
+                    seriesByTitle[Self.normalized(scheduleItem.title)]
                 guard let match else { continue }
                 matches[scheduleItem.id] = match
                 result[scheduleItem.id] = PlaybackIndicator(

@@ -76,7 +76,7 @@ enum PlaybackBitrate: Int, CaseIterable, Displayable, Storable {
             return Self.max.rawValue
         }
 
-        let bitrateTestSize = Defaults[.VideoPlayer.appMaximumBitrateTest]
+        let bitrateTestSize = Defaults[.VideoPlayer.Playback.appMaximumBitrateTest]
         do {
             return try await testBitrate(with: bitrateTestSize.rawValue)
         } catch {

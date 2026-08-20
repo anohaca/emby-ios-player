@@ -21,9 +21,17 @@ protocol MediaPlayerQueue: ObservableObject, MediaPlayerObserver, MediaPlayerSup
     var hasPreviousItemPublisher: Published<Bool>.Publisher { get set }
     var nextItemPublisher: Published<MediaPlayerItemProvider?>.Publisher { get set }
     var previousItemPublisher: Published<MediaPlayerItemProvider?>.Publisher { get set }
+
+    /// Whether this queue owns the given media item.  Managers use this to
+    /// avoid carrying a collection queue into a separately selected episode.
+    func contains(itemID: String) -> Bool
 }
 
 extension MediaPlayerQueue {
+
+    func contains(itemID: String) -> Bool {
+        false
+    }
 
     var hasNextItem: Bool {
         nextItem != nil
@@ -59,6 +67,10 @@ class AnyMediaPlayerQueue: MediaPlayerQueue {
 
     var id: String {
         wrapped.id
+    }
+
+    func contains(itemID: String) -> Bool {
+        wrapped.contains(itemID: itemID)
     }
 
     weak var manager: MediaPlayerManager? {

@@ -184,11 +184,12 @@ private final class GroupedLogViewModel: ObservableObject {
 
     func reload() {
         reloadWorkItem?.cancel()
-        let messages = (try? store.messages(
-            sortDescriptors: [SortDescriptor(\.createdAt, order: .reverse)],
-            predicate: nil
-        )) ?? []
-        groups = Self.makeGroups(from: Array(messages.prefix(1_000)))
+        let request = NSFetchRequest<LoggerMessageEntity>(entityName: "LoggerMessageEntity")
+        request.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+        request.fetchLimit = 1_000
+        request.fetchBatchSize = 1_000
+        let messages = (try? store.viewContext.fetch(request)) ?? []
+        groups = Self.makeGroups(from: messages)
     }
 
     func removeAll() {

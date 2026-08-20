@@ -153,15 +153,11 @@ struct PosterButton<Item: Poster>: View {
                         posterImageView(overlay: overlay)
                     }
 
-                    Button {
-                        action(namespace)
-                    } label: {
-                        if showPosterLabels {
+                    if showPosterLabels {
+                        Button {
+                            action(namespace)
+                        } label: {
                             labelView()
-                        } else {
-                            // Keep the secondary action available when labels are hidden.
-                            // The label area stays in the same place, but renders nothing.
-                            labelView().hidden()
                         }
                     }
                 }

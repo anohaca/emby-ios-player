@@ -333,37 +333,50 @@ struct CustomizeSettingsView: View {
             throw AniRSSValidationError.invalidAddress
         }
 
-        var request = URLRequest(url: baseURL.appending(path: "api/listAni"))
-        request.httpMethod = "POST"
-        request.timeoutInterval = 12
+        var autoComponents = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
+        autoComponents?.port = 7892
+        autoComponents?.path = "/"
+        autoComponents?.query = nil
+        autoComponents?.fragment = nil
+        let autoURL = autoComponents?.url ?? baseURL
 
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let response = response as? HTTPURLResponse,
-                  (200 ..< 300).contains(response.statusCode)
-            else {
-                throw AniRSSValidationError.unreachable
+        func endpointIsValid(_ url: URL, method: String = "GET") async -> Bool {
+            var request = URLRequest(url: url)
+            request.httpMethod = method
+            request.timeoutInterval = 12
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let response = response as? HTTPURLResponse,
+                      (200 ..< 300).contains(response.statusCode),
+                      let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                else { return false }
+
+                if url.path.contains("listAni") {
+                    guard let code = object["code"] as? Int,
+                          (200 ..< 300).contains(code),
+                          let payload = object["data"] as? [String: Any]
+                    else { return false }
+                    return payload["weekList"] is [[String: Any]]
+                }
+
+                return object["items"] is [[String: Any]]
+            } catch {
+                return false
             }
-            guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let code = object["code"] as? Int,
-                  (200 ..< 300).contains(code),
-                  let payload = object["data"] as? [String: Any],
-                  let weeks = payload["weekList"] as? [[String: Any]]
-            else {
-                throw AniRSSValidationError.invalidResponse
-            }
-            let itemCount = weeks.reduce(0) { count, week in
-                count + ((week["items"] as? [Any])?.count ?? 0)
-            }
-            guard itemCount > 0 else {
-                throw AniRSSValidationError.noContent
-            }
-            return normalized
-        } catch let error as AniRSSValidationError {
-            throw error
-        } catch {
-            throw AniRSSValidationError.connectionFailed(error.localizedDescription)
         }
+
+        async let nativeValid = endpointIsValid(
+            baseURL.appending(path: "api/listAni"),
+            method: "POST"
+        )
+        async let autoBangumiValid = endpointIsValid(
+            autoURL.appending(path: "api/v1/integration/ani-rss")
+        )
+        let (native, autoBangumi) = await (nativeValid, autoBangumiValid)
+        guard native || autoBangumi else {
+            throw AniRSSValidationError.unreachable
+        }
+        return normalized
     }
 
     private func normalizedAniRSSAddress(_ value: String) -> String {

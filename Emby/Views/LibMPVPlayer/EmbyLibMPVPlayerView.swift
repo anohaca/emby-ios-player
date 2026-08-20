@@ -2335,9 +2335,11 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         updateRenderedSubtitle(nil)
 
         applyDefaultTrackLanguageOptions()
-        let useRangeCache =
-            item.mediaSource.transcodingURL == nil &&
-            ["http", "https"].contains(item.url.scheme?.lowercased() ?? "")
+        // Let libmpv own normal HTTP range requests.  The custom embyrange
+        // stream remains available for targeted diagnostics, but it is not a
+        // default playback path: a server that ignores Range must not cause a
+        // complete movie to be buffered into memory before we can reject it.
+        let useRangeCache = false
         player.load(
             url: item.url,
             headers: item.httpHeaders,
@@ -2898,7 +2900,8 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     }
 
     private func toggleEpisodeList() {
-        guard manager?.queue != nil else {
+        guard manager?.item.type == .episode,
+              manager?.queue?.id == "EpisodeMediaPlayerQueue" else {
             showControls()
             return
         }
@@ -2967,7 +2970,8 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
     private func loadEpisodeListIfNeeded() {
         guard let item = manager?.item,
-              let seriesID = item.seriesID ?? item.parentID
+              item.type == .episode,
+              let seriesID = item.seriesID
         else { return }
 
         if episodeListSeriesID == seriesID, !episodeListItems.isEmpty {
@@ -3038,7 +3042,11 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
     private func updateEpisodeListForCurrentItemIfNeeded(_ item: BaseItemDto) {
         guard isEpisodeListVisible else { return }
-        let seriesID = item.seriesID ?? item.parentID
+        guard item.type == .episode else {
+            setEpisodeListVisible(false, animated: false)
+            return
+        }
+        let seriesID = item.seriesID
         if seriesID != episodeListSeriesID {
             episodeListSeriesID = nil
             loadEpisodeListIfNeeded()
@@ -3164,15 +3172,16 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
     }
 
     private func updateEpisodeNavigation() {
-        let hasQueue = manager?.queue != nil
-        if !hasQueue, isEpisodeListVisible {
+        let isEpisodeQueue = manager?.item.type == .episode &&
+            manager?.queue?.id == "EpisodeMediaPlayerQueue"
+        if !isEpisodeQueue, isEpisodeListVisible {
             setEpisodeListVisible(false, animated: true)
         }
 
         controlsView.updateEpisodeNavigation(
             canGoPrevious: manager?.queue?.previousItem != nil,
             canGoNext: manager?.queue?.nextItem != nil,
-            canShowEpisodeList: hasQueue
+            canShowEpisodeList: isEpisodeQueue
         )
     }
 

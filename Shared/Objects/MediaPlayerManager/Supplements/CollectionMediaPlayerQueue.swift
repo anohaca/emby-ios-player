@@ -71,14 +71,26 @@ final class CollectionMediaPlayerQueue: ViewModel, MediaPlayerQueue {
             guard let manager else { return }
             playbackItemCancellable = manager.$playbackItem
                 .sink { [weak self] playbackItem in
-                    guard let item = playbackItem?.baseItem,
-                          let itemID = item.id,
-                          self?.items.contains(where: { $0.id == itemID }) == true
+                    guard let self,
+                          let item = playbackItem?.baseItem,
+                          let itemID = item.id
                     else { return }
-                    self?.currentItemID = itemID
-                    self?.updateAdjacentItems()
+                    guard self.items.contains(where: { $0.id == itemID }) else {
+                        self.currentItemID = itemID
+                        self.nextItem = nil
+                        self.previousItem = nil
+                        self.hasNextItem = false
+                        self.hasPreviousItem = false
+                        return
+                    }
+                    self.currentItemID = itemID
+                    self.updateAdjacentItems()
                 }
         }
+    }
+
+    func contains(itemID: String) -> Bool {
+        items.contains { $0.id == itemID }
     }
 
     @Published

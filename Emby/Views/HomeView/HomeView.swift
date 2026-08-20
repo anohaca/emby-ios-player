@@ -391,14 +391,18 @@ struct HomeView: View {
                 DragGesture(minimumDistance: 8, coordinateSpace: .local)
                     .updating($destinationPageDragOffset) { value, state, _ in
                         guard value.startLocation.y <= destinationPageGestureActivationHeight,
-                              abs(value.translation.width) > abs(value.translation.height)
+                              abs(value.translation.width) > abs(value.translation.height),
+                              (selectedDestination == .library && value.translation.width < 0) ||
+                              (selectedDestination == .weekly && value.translation.width > 0)
                         else { return }
                         state = value.translation.width
                     }
                     .onEnded { value in
                         guard value.startLocation.y <= destinationPageGestureActivationHeight,
                               abs(value.translation.width) > abs(value.translation.height),
-                              abs(value.translation.width) > 60
+                              abs(value.translation.width) > 60,
+                              (selectedDestination == .library && value.translation.width < 0) ||
+                              (selectedDestination == .weekly && value.translation.width > 0)
                         else { return }
 
                         withAnimation(destinationPageAnimation) {

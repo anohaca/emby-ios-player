@@ -290,6 +290,17 @@ final class MediaPlayerManager: ViewModel {
         let previousPlaybackItem = playbackItem
         previousPlaybackItem?.prepareForReplacement()
         item = provider.item
+
+        // Selecting an episode from the in-player episode list can move out
+        // of the collection that originally opened the player.  Do not retain
+        // that collection's next/previous movie context in the new episode.
+        if let itemID = provider.item.id,
+           queue?.id == "CollectionMediaPlayerQueue",
+           provider.item.type == .episode,
+           queue?.contains(itemID: itemID) == false {
+            queue = AnyMediaPlayerQueue(EpisodeMediaPlayerQueue(episode: provider.item))
+            queue?.manager = self
+        }
         setSupplements()
         proxy?.stop()
         playbackItem = try await provider()

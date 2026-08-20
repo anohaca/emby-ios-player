@@ -23,7 +23,7 @@ extension MediaPlayerItem {
         selectedAudioStreamIndex: Int? = nil,
         selectedSubtitleStreamIndex: Int? = nil,
         videoPlayerType: VideoPlayerType = Defaults[.VideoPlayer.videoPlayerType],
-        requestedBitrate: PlaybackBitrate = .max,
+        requestedBitrate: PlaybackBitrate = Defaults[.VideoPlayer.Playback.appMaximumBitrate],
         modifyItem: ((inout BaseItemDto) -> Void)? = nil
     ) async throws -> MediaPlayerItem {
 

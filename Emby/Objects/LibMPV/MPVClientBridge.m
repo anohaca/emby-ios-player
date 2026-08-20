@@ -19,6 +19,134 @@ static const NSUInteger MPVRangeCacheChunkSize = 4 * 1024 * 1024;
 static const NSInteger MPVRangeCachePrefetchCount = 3;
 static const NSInteger MPVRangeCacheMaxConnections = 4;
 
+@class MPVRangeCachedStream;
+
+@interface MPVRangeFetchDelegate : NSObject <NSURLSessionDataDelegate>
+@property (nonatomic, weak) MPVRangeCachedStream *stream;
+@property (nonatomic) int64_t requestedOffset;
+@property (nonatomic) int64_t requestedEnd;
+@property (nonatomic, strong) NSMutableData *data;
+@property (nonatomic, strong) NSHTTPURLResponse *httpResponse;
+@property (nonatomic, strong) NSError *responseError;
+@property (nonatomic) NSUInteger expectedLength;
+@property (nonatomic) int64_t totalLength;
+@property (nonatomic) dispatch_semaphore_t completionSemaphore;
+@property (nonatomic) BOOL acceptedResponse;
+@end
+
+static BOOL MPVParseContentRange(NSString *header,
+                                 int64_t *start,
+                                 int64_t *end,
+                                 int64_t *total)
+{
+    if (header.length == 0)
+        return NO;
+
+    NSRegularExpression *expression = [NSRegularExpression
+        regularExpressionWithPattern:@"^bytes ([0-9]+)-([0-9]+)/([0-9]+)$"
+                               options:NSRegularExpressionCaseInsensitive
+                                 error:nil];
+    NSTextCheckingResult *match = [expression firstMatchInString:header
+                                                            options:0
+                                                              range:NSMakeRange(0, header.length)];
+    if (!match || match.numberOfRanges != 4)
+        return NO;
+
+    NSString *(^value)(NSUInteger) = ^NSString *(NSUInteger index) {
+        return [header substringWithRange:[match rangeAtIndex:index]];
+    };
+    int64_t parsedStart = value(1).longLongValue;
+    int64_t parsedEnd = value(2).longLongValue;
+    int64_t parsedTotal = value(3).longLongValue;
+    if (parsedStart < 0 || parsedEnd < parsedStart || parsedTotal <= parsedEnd)
+        return NO;
+
+    if (start)
+        *start = parsedStart;
+    if (end)
+        *end = parsedEnd;
+    if (total)
+        *total = parsedTotal;
+    return YES;
+}
+
+@implementation MPVRangeFetchDelegate
+
+- (void)URLSession:(NSURLSession *)session
+          dataTask:(NSURLSessionDataTask *)dataTask
+didReceiveResponse:(NSURLResponse *)response
+ completionHandler:(void (^)(NSURLSessionResponseDisposition disposition))completionHandler
+{
+    if (![response isKindOfClass:NSHTTPURLResponse.class]) {
+        self.responseError = [NSError errorWithDomain:@"MPVRangeCache"
+                                                   code:-1
+                                               userInfo:@{NSLocalizedDescriptionKey: @"Range response is not HTTP"}];
+        completionHandler(NSURLSessionResponseCancel);
+        return;
+    }
+
+    self.httpResponse = (NSHTTPURLResponse *)response;
+    int64_t responseStart = 0;
+    int64_t responseEnd = 0;
+    int64_t responseTotal = 0;
+    NSString *contentRange = self.httpResponse.allHeaderFields[@"Content-Range"];
+    BOOL validRange = self.httpResponse.statusCode == 206 &&
+        MPVParseContentRange(contentRange, &responseStart, &responseEnd, &responseTotal) &&
+        responseStart == self.requestedOffset &&
+        responseEnd >= responseStart &&
+        responseEnd <= self.requestedEnd;
+
+    if (!validRange) {
+        NSString *reason = self.httpResponse.statusCode == 200
+            ? @"server ignored Range"
+            : @"invalid Content-Range";
+        self.responseError = [NSError errorWithDomain:@"MPVRangeCache"
+                                                   code:self.httpResponse.statusCode
+                                               userInfo:@{NSLocalizedDescriptionKey: reason}];
+        completionHandler(NSURLSessionResponseCancel);
+        return;
+    }
+
+    self.totalLength = responseTotal;
+    self.expectedLength = (NSUInteger)(responseEnd - responseStart + 1);
+    self.data = [NSMutableData dataWithCapacity:self.expectedLength];
+    self.acceptedResponse = YES;
+    completionHandler(NSURLSessionResponseAllow);
+}
+
+- (void)URLSession:(NSURLSession *)session
+          dataTask:(NSURLSessionDataTask *)dataTask
+    didReceiveData:(NSData *)data
+{
+    if (!self.acceptedResponse || self.responseError)
+        return;
+
+    if (self.data.length + data.length > self.expectedLength) {
+        self.responseError = [NSError errorWithDomain:@"MPVRangeCache"
+                                                   code:-2
+                                               userInfo:@{NSLocalizedDescriptionKey: @"Range response length exceeded Content-Range"}];
+        [dataTask cancel];
+        return;
+    }
+    [self.data appendData:data];
+}
+
+- (void)URLSession:(NSURLSession *)session
+              task:(NSURLSessionTask *)task
+didCompleteWithError:(NSError *)error
+{
+    if (error && !self.responseError)
+        self.responseError = error;
+    if (self.acceptedResponse && !self.responseError && self.data.length != self.expectedLength) {
+        self.responseError = [NSError errorWithDomain:@"MPVRangeCache"
+                                                   code:-3
+                                               userInfo:@{NSLocalizedDescriptionKey: @"Range response length did not match Content-Range"}];
+    }
+    dispatch_semaphore_signal(self.completionSemaphore);
+}
+
+@end
+
 @interface MPVRangeCachedStream : NSObject
 @property (nonatomic, readonly) NSURL *url;
 @property (nonatomic, readonly) NSDictionary<NSString *, NSString *> *headers;
@@ -29,12 +157,14 @@ static const NSInteger MPVRangeCacheMaxConnections = 4;
 @property (nonatomic, strong) NSMutableDictionary<NSNumber *, dispatch_group_t> *inFlightFetches;
 @property (nonatomic, strong) NSOperationQueue *prefetchQueue;
 @property (nonatomic, strong) NSURLSession *session;
+@property (nonatomic, strong) NSMutableSet<NSURLSession *> *activeNetworkSessions;
 @property (nonatomic, copy) void (^networkSpeedHandler)(double bytesPerSecond);
 @property (nonatomic, strong) NSMutableSet<NSURLSessionTask *> *activeNetworkTasks;
 @property (nonatomic) int64_t completedNetworkBytes;
 @property (nonatomic) int64_t lastReportedNetworkBytes;
 @property (nonatomic) CFAbsoluteTime lastSpeedReportTime;
 @property (nonatomic) dispatch_source_t speedTimer;
+@property (nonatomic) NSUInteger requestGeneration;
 - (instancetype)initWithURL:(NSURL *)url headers:(NSDictionary<NSString *, NSString *> *)headers;
 - (nullable NSData *)fetchChunkAtOffset:(int64_t)offset;
 - (int64_t)readInto:(char *)buffer count:(uint64_t)count;
@@ -54,9 +184,10 @@ static const NSInteger MPVRangeCacheMaxConnections = 4;
     _position = 0;
     _contentLength = -1;
     _chunks = [[NSCache alloc] init];
-    _chunks.totalCostLimit = 256 * 1024 * 1024;
+    _chunks.totalCostLimit = 64 * 1024 * 1024;
     _inFlightFetches = [NSMutableDictionary dictionary];
     _activeNetworkTasks = [NSMutableSet set];
+    _activeNetworkSessions = [NSMutableSet set];
     _lastSpeedReportTime = CFAbsoluteTimeGetCurrent();
     _prefetchQueue = [[NSOperationQueue alloc] init];
     _prefetchQueue.name = @"local.codex.libmpv.range-prefetch";
@@ -132,6 +263,13 @@ static const NSInteger MPVRangeCacheMaxConnections = 4;
 - (void)prioritizeOffset:(int64_t)offset
 {
     [self.prefetchQueue cancelAllOperations];
+    @synchronized (self) {
+        self.requestGeneration += 1;
+        for (NSURLSessionTask *task in self.activeNetworkTasks)
+            [task cancel];
+        for (NSURLSession *session in self.activeNetworkSessions)
+            [session invalidateAndCancel];
+    }
     int64_t chunkOffset = (offset / (int64_t)MPVRangeCacheChunkSize) *
                           (int64_t)MPVRangeCacheChunkSize;
     [self prefetchAfterOffset:chunkOffset];
@@ -141,6 +279,13 @@ static const NSInteger MPVRangeCacheMaxConnections = 4;
 {
     self.cancelled = YES;
     [self.prefetchQueue cancelAllOperations];
+    @synchronized (self) {
+        self.requestGeneration += 1;
+        for (NSURLSessionTask *task in self.activeNetworkTasks)
+            [task cancel];
+        for (NSURLSession *session in self.activeNetworkSessions)
+            [session invalidateAndCancel];
+    }
     [self.session invalidateAndCancel];
     if (self.speedTimer) {
         dispatch_source_cancel(self.speedTimer);
@@ -175,10 +320,13 @@ static const NSInteger MPVRangeCacheMaxConnections = 4;
 
     __block dispatch_group_t fetchGroup = nil;
     __block BOOL ownsFetch = NO;
+    NSUInteger generation = 0;
     @synchronized (self) {
         cached = [self.chunks objectForKey:key];
         if (cached)
             return cached;
+
+        generation = self.requestGeneration;
 
         fetchGroup = self.inFlightFetches[key];
         if (!fetchGroup) {
@@ -206,26 +354,23 @@ static const NSInteger MPVRangeCacheMaxConnections = 4;
 
     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
     CFAbsoluteTime startedAt = CFAbsoluteTimeGetCurrent();
-    __block NSData *receivedData = nil;
-    __block NSHTTPURLResponse *httpResponse = nil;
-    __block NSURLSessionDataTask *task = [self.session
-        dataTaskWithRequest:request
-        completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-            @synchronized (self) {
-                self.completedNetworkBytes += task.countOfBytesReceived;
-                [self.activeNetworkTasks removeObject:task];
-            }
-            if (!error && [response isKindOfClass:NSHTTPURLResponse.class]) {
-                NSHTTPURLResponse *candidate = (NSHTTPURLResponse *)response;
-                if (candidate.statusCode == 206 || candidate.statusCode == 200) {
-                    receivedData = data;
-                    httpResponse = candidate;
-                }
-            }
-            dispatch_semaphore_signal(semaphore);
-        }];
+    MPVRangeFetchDelegate *delegate = [MPVRangeFetchDelegate new];
+    delegate.stream = self;
+    delegate.requestedOffset = offset;
+    delegate.requestedEnd = end;
+    delegate.completionSemaphore = semaphore;
+
+    NSURLSessionConfiguration *configuration = NSURLSessionConfiguration.ephemeralSessionConfiguration;
+    configuration.HTTPMaximumConnectionsPerHost = MPVRangeCacheMaxConnections;
+    configuration.requestCachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+    configuration.timeoutIntervalForRequest = 60;
+    NSURLSession *fetchSession = [NSURLSession sessionWithConfiguration:configuration
+                                                                 delegate:delegate
+                                                            delegateQueue:nil];
+    NSURLSessionDataTask *task = [fetchSession dataTaskWithRequest:request];
     @synchronized (self) {
         [self.activeNetworkTasks addObject:task];
+        [self.activeNetworkSessions addObject:fetchSession];
     }
     [task resume];
     long waitResult = dispatch_semaphore_wait(
@@ -235,38 +380,35 @@ static const NSInteger MPVRangeCacheMaxConnections = 4;
     if (waitResult != 0)
         [task cancel];
 
+    [fetchSession finishTasksAndInvalidate];
+    @synchronized (self) {
+        self.completedNetworkBytes += task.countOfBytesReceived;
+        [self.activeNetworkTasks removeObject:task];
+        [self.activeNetworkSessions removeObject:fetchSession];
+    }
+
     NSData *chunkData = nil;
-    if (receivedData && !self.cancelled) {
-        NSString *contentRange = httpResponse.allHeaderFields[@"Content-Range"];
-        NSRange slash = [contentRange rangeOfString:@"/" options:NSBackwardsSearch];
-        if (slash.location != NSNotFound) {
-            NSString *total = [contentRange substringFromIndex:slash.location + 1];
-            long long parsed = total.longLongValue;
-            if (parsed > 0)
-                self.contentLength = parsed;
-        } else if (httpResponse.statusCode == 200 && httpResponse.expectedContentLength > 0) {
-            self.contentLength = httpResponse.expectedContentLength;
-        }
-
-        if (httpResponse.statusCode == 200) {
-            if (offset < (int64_t)receivedData.length) {
-                NSUInteger available = receivedData.length - (NSUInteger)offset;
-                NSUInteger length = MIN(MPVRangeCacheChunkSize, available);
-                chunkData = [receivedData subdataWithRange:NSMakeRange((NSUInteger)offset, length)];
-            }
-        } else {
-            chunkData = receivedData;
-        }
-
-        if (chunkData) {
+    BOOL generationStillCurrent = NO;
+    @synchronized (self) {
+        generationStillCurrent = generation == self.requestGeneration;
+    }
+    if (delegate.data && delegate.acceptedResponse && !delegate.responseError &&
+        !self.cancelled && generationStillCurrent) {
+        self.contentLength = delegate.totalLength;
+        chunkData = [delegate.data copy];
+        if (chunkData.length > 0) {
             [self.chunks setObject:chunkData forKey:key cost:chunkData.length];
             CFAbsoluteTime finishedAt = CFAbsoluteTimeGetCurrent();
             NSLog(@"MPVRangeCache fetch offset=%lld bytes=%lu seconds=%.3f status=%ld",
                   offset,
                   (unsigned long)chunkData.length,
                   finishedAt - startedAt,
-                  (long)httpResponse.statusCode);
+                  (long)delegate.httpResponse.statusCode);
         }
+    } else if (delegate.responseError) {
+        NSLog(@"MPVRangeCache rejected offset=%lld reason=%@",
+              offset,
+              delegate.responseError.localizedDescription);
     }
 
     @synchronized (self) {

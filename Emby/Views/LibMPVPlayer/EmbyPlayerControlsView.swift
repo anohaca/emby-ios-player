@@ -521,12 +521,17 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         }
     }
 
-    func updateEpisodeNavigation(canGoPrevious: Bool, canGoNext: Bool, canShowEpisodeList: Bool) {
+    func updateEpisodeNavigation(
+        canGoPrevious: Bool,
+        canGoNext: Bool,
+        canShowEpisodeList: Bool,
+        canShowEndNextEpisode: Bool = false
+    ) {
         setNavigationButton(previousEpisodeButton, enabled: canGoPrevious)
         setNavigationButton(nextEpisodeButton, enabled: canGoNext)
         setNavigationButton(episodeListButton, enabled: canShowEpisodeList)
         endNextEpisodeAvailable = canGoNext
-        canShowEndNextEpisode = canShowEpisodeList
+        self.canShowEndNextEpisode = canShowEndNextEpisode
         updateEndNextEpisodeVisibility(time: Double(slider.value), duration: mediaDuration)
     }
 

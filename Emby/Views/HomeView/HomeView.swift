@@ -22,7 +22,9 @@ struct HomeView: View {
         response: 0.34,
         dampingFraction: 0.88
     )
-    private let destinationPageGestureActivationHeight: CGFloat = 140
+    // Keep the destination swipe inside the shared picker/title strip so the
+    // first poster row's horizontal scroll view never competes for the drag.
+    private let destinationPageGestureActivationHeight: CGFloat = 68
 
     private enum HomeDestination: String, CaseIterable, Identifiable {
         case library = "首页"

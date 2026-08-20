@@ -3181,7 +3181,8 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         controlsView.updateEpisodeNavigation(
             canGoPrevious: manager?.queue?.previousItem != nil,
             canGoNext: manager?.queue?.nextItem != nil,
-            canShowEpisodeList: isEpisodeQueue
+            canShowEpisodeList: isEpisodeQueue,
+            canShowEndNextEpisode: isEpisodeQueue
         )
     }
 

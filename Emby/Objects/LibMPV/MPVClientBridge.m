@@ -94,7 +94,10 @@ didReceiveResponse:(NSURLResponse *)response
         MPVParseContentRange(contentRange, &responseStart, &responseEnd, &responseTotal) &&
         responseStart == self.requestedOffset &&
         responseEnd >= responseStart &&
-        responseEnd <= self.requestedEnd;
+        responseEnd <= self.requestedEnd &&
+        // A shorter 206 is valid only when the requested range reaches EOF.
+        // Otherwise the next read would silently skip the missing bytes.
+        (responseEnd == self.requestedEnd || responseEnd == responseTotal - 1);
 
     if (!validRange) {
         NSString *reason = self.httpResponse.statusCode == 200
@@ -311,6 +314,7 @@ didCompleteWithError:(NSError *)error
 
 - (NSData *)fetchChunkAtOffset:(int64_t)offset
 {
+    while (YES) {
     NSNumber *key = @(offset);
     NSData *cached = [self.chunks objectForKey:key];
     if (cached)
@@ -339,7 +343,21 @@ didCompleteWithError:(NSError *)error
 
     if (!ownsFetch) {
         dispatch_group_wait(fetchGroup, DISPATCH_TIME_FOREVER);
-        return [self.chunks objectForKey:key];
+        cached = [self.chunks objectForKey:key];
+        if (cached)
+            return cached;
+
+        // A seek may cancel the owner and remove its result. Retry under the
+        // new generation instead of turning this transient race into a stall.
+        NSUInteger currentGeneration = 0;
+        BOOL cancelled = NO;
+        @synchronized (self) {
+            currentGeneration = self.requestGeneration;
+            cancelled = self.cancelled;
+        }
+        if (cancelled || currentGeneration == generation)
+            return nil;
+        continue;
     }
 
     int64_t end = offset + (int64_t)MPVRangeCacheChunkSize - 1;
@@ -415,7 +433,15 @@ didCompleteWithError:(NSError *)error
         [self.inFlightFetches removeObjectForKey:key];
         dispatch_group_leave(fetchGroup);
     }
-    return chunkData;
+    if (chunkData)
+        return chunkData;
+    if (self.cancelled || generationStillCurrent)
+        return nil;
+
+    // The request was canceled by a seek. Start over for the new generation
+    // so libmpv never observes a false EOF/stall.
+    continue;
+    }
 }
 
 - (int64_t)readInto:(char *)buffer count:(uint64_t)count

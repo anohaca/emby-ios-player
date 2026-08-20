@@ -12,7 +12,7 @@ import SwiftUI
 extension RemoteSearchResult: Poster {
 
     var preferredPosterDisplayType: PosterDisplayType {
-        .portrait // Some exceptions (E.G. Music Videos)
+        .landscape // Some exceptions (E.G. Music Videos)
     }
 
     var unwrappedIDHashOrZero: Int {

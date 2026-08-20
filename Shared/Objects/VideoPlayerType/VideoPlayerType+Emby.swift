@@ -185,20 +185,4 @@ extension VideoPlayerType {
         []
     }
 
-    @ArrayBuilder<VideoRangeType>
-    private static var embyHDRProfiles: [VideoRangeType] {
-
-        VideoRangeType.sdr
-        VideoRangeType.doviWithSDR
-
-        if PlaybackCapabilities.hdrEnabled {
-            VideoRangeType.hlg
-            VideoRangeType.hdr10
-            VideoRangeType.hdr10Plus
-            VideoRangeType.doviWithHLG
-            VideoRangeType.doviWithHDR10
-            VideoRangeType.doviWithHDR10Plus
-            VideoRangeType.doviWithELHDR10Plus
-        }
-    }
 }

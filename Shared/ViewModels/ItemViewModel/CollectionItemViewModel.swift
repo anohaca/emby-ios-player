@@ -72,6 +72,34 @@ final class CollectionItemViewModel: ItemViewModel {
             .randomElement()
     }
 
+    var playableItems: [BaseItemDto] {
+        let orderedSections: [OrderedDictionary<BaseItemKind, ItemLibraryViewModel>.Elements.Element] = {
+            let sections = Array(sections.elements)
+            guard item.type == .boxSet else { return sections }
+
+            return sections.enumerated()
+                .sorted { lhs, rhs in
+                    let lhsPriority = playableSectionPriority(lhs.element.key)
+                    let rhsPriority = playableSectionPriority(rhs.element.key)
+                    return lhsPriority == rhsPriority
+                        ? lhs.offset < rhs.offset
+                        : lhsPriority < rhsPriority
+                }
+                .map(\.element)
+        }()
+
+        return orderedSections
+            .flatMap(\.value.elements)
+            .filter { item in
+                switch item.type {
+                case .episode, .movie, .musicVideo, .video:
+                    item.isPlayable
+                default:
+                    false
+                }
+            }
+    }
+
     private func updatePlayButtonItem(from sections: OrderedDictionary<BaseItemKind, ItemLibraryViewModel>) {
         guard item.type == .boxSet else { return }
 

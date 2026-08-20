@@ -374,6 +374,23 @@ extension Defaults.Keys {
             appSuite.set(legacyBorderSize, forKey: borderSizeKey)
         }
     }
+
+    /// Move values from the removed square poster option to landscape.
+    static func migrateRemovedSquarePosterSettingsIfNeeded() {
+        let posterKeys = [
+            "libraryPosterType",
+            "nextUpPosterType",
+            "recentlyAddedPosterType",
+            "latestInLibraryPosterType",
+            "similarPosterType",
+            "searchPosterType",
+        ]
+
+        let appSuite = UserDefaults.appSuite
+        for key in posterKeys where appSuite.string(forKey: key) == "square" {
+            appSuite.set("landscape", forKey: key)
+        }
+    }
 }
 
 // MARK: User
@@ -732,14 +749,6 @@ extension Defaults.Keys {
 
             static var appMaximumBitrateTest: Key<PlaybackBitrateTestSize> {
                 UserKey("appMaximumBitrateTest", default: .regular)
-            }
-
-            static var compatibilityMode: Key<PlaybackCompatibility> {
-                UserKey("compatibilityMode", default: .auto)
-            }
-
-            static var customDeviceProfileAction: Key<CustomDeviceProfileAction> {
-                UserKey("customDeviceProfileAction", default: .add)
             }
 
             static var rates: Key<[Float]> {

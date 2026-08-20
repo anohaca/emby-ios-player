@@ -46,24 +46,6 @@ extension NavigationRoute {
     }
     #endif
 
-    static var createDeviceProfile: NavigationRoute {
-        NavigationRoute(
-            id: "createDeviceProfile",
-            style: .sheet
-        ) {
-            CustomDeviceProfilesView.EditDeviceProfileView(profile: nil)
-                .navigationTitle(L10n.customProfile.localizedCapitalized)
-        }
-    }
-
-    static var customDeviceProfilesSettings: NavigationRoute {
-        NavigationRoute(
-            id: "customDeviceProfilesSettings"
-        ) {
-            CustomDeviceProfilesView()
-        }
-    }
-
     static var customizeSettingsView: NavigationRoute {
         NavigationRoute(
             id: "customizeSettingsView"
@@ -89,37 +71,6 @@ extension NavigationRoute {
         }
     }
     #endif
-
-    static func editDeviceProfile(profile: Binding<CustomDeviceProfile>) -> NavigationRoute {
-        NavigationRoute(
-            id: "editDeviceProfile",
-            style: .sheet
-        ) {
-            CustomDeviceProfilesView.EditDeviceProfileView(profile: profile)
-                .navigationTitle(L10n.customProfile.localizedCapitalized)
-        }
-    }
-
-    static func editDeviceProfileAudio(selection: Binding<[AudioCodec]>) -> NavigationRoute {
-        NavigationRoute(id: "editDeviceProfileAudio") {
-            OrderedSectionSelectorView(systemImage: "waveform", selection: selection, sources: AudioCodec.allCases)
-                .navigationTitle(L10n.audio)
-        }
-    }
-
-    static func editDeviceProfileContainer(selection: Binding<[MediaContainer]>) -> NavigationRoute {
-        NavigationRoute(id: "editDeviceProfileContainer") {
-            OrderedSectionSelectorView(systemImage: "archivebox", selection: selection, sources: MediaContainer.allCases)
-                .navigationTitle(L10n.containers)
-        }
-    }
-
-    static func editDeviceProfileVideo(selection: Binding<[VideoCodec]>) -> NavigationRoute {
-        NavigationRoute(id: "editDeviceProfileVideo") {
-            OrderedSectionSelectorView(systemImage: "play.rectangle", selection: selection, sources: VideoCodec.allCases)
-                .navigationTitle(L10n.video)
-        }
-    }
 
     static func editServer(server: ServerState, isEditing: Bool = false) -> NavigationRoute {
         NavigationRoute(id: "editServer") {
@@ -236,14 +187,6 @@ extension NavigationRoute {
         }
     }
     #endif
-
-    static var playbackQualitySettings: NavigationRoute {
-        NavigationRoute(
-            id: "playbackQualitySettings"
-        ) {
-            PlaybackQualitySettingsView()
-        }
-    }
 
     #if os(iOS)
     static func resetUserPassword(userID: String) -> NavigationRoute {

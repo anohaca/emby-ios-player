@@ -75,7 +75,7 @@ extension MediaPeopleSupplement {
             #if os(iOS)
             PosterButton(
                 item: person,
-                type: .portrait
+                type: .landscape
             ) { _ in
             } label: {
                 PosterButton<BaseItemPerson>.TitleSubtitleContentView(item: person)
@@ -83,7 +83,7 @@ extension MediaPeopleSupplement {
             #else
             PosterButton(
                 item: person,
-                type: .portrait
+                type: .landscape
             ) {} label: {
                 PosterButton<BaseItemPerson>.TitleSubtitleContentView(item: person)
             }
@@ -151,7 +151,7 @@ extension MediaPeopleSupplement {
             ListRow(insets: .init(horizontal: EdgeInsets.edgePadding)) {
                 PosterImage(
                     item: person,
-                    type: .portrait,
+                    type: .landscape,
                     contentMode: .fit,
                     maxWidth: 60
                 )

@@ -43,9 +43,6 @@ struct VideoPlayerSettingsView: View {
     @Default(.VideoPlayer.Transition.continuePlayingInBackground)
     private var continuePlayingInBackground
 
-    @Router
-    private var router
-
     var body: some View {
         Form {
 
@@ -150,27 +147,6 @@ struct VideoPlayerSettingsView: View {
                 Text(L10n.resumeOffsetDescription)
             }
 
-            Section {
-                ChevronButton(L10n.gestures) {
-                    router.route(to: .gestureSettings)
-                }
-            }
-
-            ButtonSection()
-                .disabled(true)
-                .foregroundStyle(.secondary)
-
-            SupplementSection()
-                .disabled(true)
-                .foregroundStyle(.secondary)
-
-            SliderSection()
-                .disabled(true)
-                .foregroundStyle(.secondary)
-
-            TimestampSection()
-                .disabled(true)
-                .foregroundStyle(.secondary)
         }
         .onAppear {
             playbackRate = Self.normalizedPlaybackRate(playbackRate)

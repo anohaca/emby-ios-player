@@ -23,8 +23,7 @@ extension MediaPlayerItem {
         selectedAudioStreamIndex: Int? = nil,
         selectedSubtitleStreamIndex: Int? = nil,
         videoPlayerType: VideoPlayerType = Defaults[.VideoPlayer.videoPlayerType],
-        requestedBitrate: PlaybackBitrate = Defaults[.VideoPlayer.Playback.appMaximumBitrate],
-        compatibilityMode: PlaybackCompatibility = Defaults[.VideoPlayer.Playback.compatibilityMode],
+        requestedBitrate: PlaybackBitrate = .max,
         modifyItem: ((inout BaseItemDto) -> Void)? = nil
     ) async throws -> MediaPlayerItem {
 
@@ -77,7 +76,6 @@ extension MediaPlayerItem {
 
         let deviceProfile = DeviceProfile.build(
             for: resolvedVideoPlayerType,
-            compatibilityMode: compatibilityMode,
             maxBitrate: maxBitrate
         )
 

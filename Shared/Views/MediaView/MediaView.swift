@@ -13,6 +13,9 @@ import SwiftUI
 
 struct MediaView: View {
 
+    @Default(.Customization.Library.showFavorites)
+    private var showFavorites
+
     @Router
     private var router
 
@@ -92,6 +95,9 @@ struct MediaView: View {
             viewModel.refresh()
         }
         .onFirstAppear {
+            viewModel.refresh()
+        }
+        .onChange(of: showFavorites) { _ in
             viewModel.refresh()
         }
         .if(UIDevice.isTV) { view in

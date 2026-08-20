@@ -190,7 +190,7 @@ struct ItemImagesView: View {
                 }
                 .pipeline(.Emby.other)
             }
-            .posterStyle(imageInfo.height ?? 0 > imageInfo.width ?? 0 ? .portrait : .landscape)
+            .posterStyle(.landscape)
             .frame(maxHeight: 150)
             .posterShadow()
         }

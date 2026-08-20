@@ -2209,7 +2209,6 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             guard let self else { return }
             SkipIntroDismissalStore.setSeconds(seconds, for: self.manager?.item)
             SkipIntroDismissalStore.setDismissed(true, item: self.manager?.item)
-            self.scheduleControlsHide(after: 0)
         }
 
         controlsView.onSkipIntroAdjustmentEnded = { [weak self] in
@@ -3183,6 +3182,15 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
             return
         }
 
+        // The first tap after skipping the intro hides the normal controls so
+        // playback can continue unobstructed. Keep the adjustment session
+        // alive, however, and let the next tap reveal the controls again. The
+        // normal controls and the adjustment buttons use independent timers.
+        if controlsView.isSkipIntroAdjustmentActive, controlsHidden {
+            showControls()
+            return
+        }
+
         if controlsView.commitSkipIntroAdjustmentIfNeeded() {
             hideControls()
             return
@@ -3211,9 +3219,6 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
     private func hideControls(animated: Bool = true) {
         if controlsView.isSubtitleAdjustmentPanelVisible {
-            return
-        }
-        if controlsView.isSkipIntroAdjustmentActive {
             return
         }
 
@@ -3576,10 +3581,6 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         let item = DispatchWorkItem { [weak self] in
             guard let self else { return }
             if self.controlsView.isSubtitleAdjustmentPanelVisible {
-                self.hideControlsWorkItem = nil
-                return
-            }
-            if self.controlsView.isSkipIntroAdjustmentActive {
                 self.hideControlsWorkItem = nil
                 return
             }

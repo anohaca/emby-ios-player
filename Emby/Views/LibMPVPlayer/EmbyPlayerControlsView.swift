@@ -349,7 +349,9 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
             self.leftEndNextEpisodeButton.isHidden = effectiveHidden || !self.endNextEpisodeVisible
             self.topBar.isUserInteractionEnabled = !effectiveHidden
             self.bottomBar.isUserInteractionEnabled = !effectiveHidden
-            self.skipIntroStack.isUserInteractionEnabled = !effectiveHidden && !self.skipIntroButtonsDismissed && !self.endNextEpisodeVisible
+            self.skipIntroStack.isUserInteractionEnabled = !effectiveHidden &&
+                !self.skipIntroButtonsDismissed &&
+                !self.endNextEpisodeVisible
             self.endNextEpisodeButton.isUserInteractionEnabled = !effectiveHidden && self.endNextEpisodeVisible
             self.leftEndNextEpisodeButton.isUserInteractionEnabled = !effectiveHidden && self.endNextEpisodeVisible
         }

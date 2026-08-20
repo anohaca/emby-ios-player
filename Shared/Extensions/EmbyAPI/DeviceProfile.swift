@@ -6,13 +6,10 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
-import Defaults
-
 extension DeviceProfile {
 
     static func build(
         for videoPlayer: VideoPlayerType,
-        compatibilityMode: PlaybackCompatibility,
         maxBitrate: Int? = nil
     ) -> DeviceProfile {
 
@@ -23,46 +20,10 @@ extension DeviceProfile {
         deviceProfile.codecProfiles = videoPlayer.codecProfiles
         deviceProfile.subtitleProfiles = videoPlayer.subtitleProfiles
 
-        // MARK: - DirectPlay & Transcoding Profiles
-
-        switch compatibilityMode {
-        case .auto:
-            deviceProfile.directPlayProfiles = videoPlayer.directPlayProfiles
-            deviceProfile.transcodingProfiles = videoPlayer.transcodingProfiles
-
-        case .mostCompatible:
-            deviceProfile.directPlayProfiles = PlaybackCompatibility.Video.compatibilityDirectPlayProfile
-            deviceProfile.transcodingProfiles = PlaybackCompatibility.Video.compatibilityTranscodingProfile
-
-        case .directPlay:
-            deviceProfile.directPlayProfiles = PlaybackCompatibility.Video.forcedDirectPlayProfile
-
-        case .custom:
-            let customProfileMode = Defaults[.VideoPlayer.Playback.customDeviceProfileAction]
-            let playbackDeviceProfile = StoredValues[.User.customDeviceProfiles]
-
-            if customProfileMode == .add {
-                deviceProfile.directPlayProfiles = videoPlayer.directPlayProfiles
-                deviceProfile.transcodingProfiles = videoPlayer.transcodingProfiles
-            } else {
-                deviceProfile.directPlayProfiles = []
-
-                // Only clear the Transcoding Profiles if one of the CustomProfiles is active as a Transcoding Profile
-                if playbackDeviceProfile.contains(where: { $0.useAsTranscodingProfile == true }) {
-                    deviceProfile.transcodingProfiles = []
-                } else {
-                    deviceProfile.transcodingProfiles = videoPlayer.transcodingProfiles
-                }
-            }
-
-            for profile in playbackDeviceProfile where profile.type == .video {
-                deviceProfile.directPlayProfiles?.append(profile.directPlayProfile)
-
-                if profile.useAsTranscodingProfile {
-                    deviceProfile.transcodingProfiles?.append(profile.transcodingProfile)
-                }
-            }
-        }
+        // Use the player's normal profiles. Compatibility overrides and custom
+        // profile injection were removed so playback behavior is deterministic.
+        deviceProfile.directPlayProfiles = videoPlayer.directPlayProfiles
+        deviceProfile.transcodingProfiles = videoPlayer.transcodingProfiles
 
         // MARK: - Assign the Bitrate if provided
 

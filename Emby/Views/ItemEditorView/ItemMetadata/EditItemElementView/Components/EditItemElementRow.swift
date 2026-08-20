@@ -97,7 +97,7 @@ extension EditItemElementView {
 
             PosterImage(
                 item: person,
-                type: .portrait
+                type: .landscape
             )
             .frame(width: 60)
             .posterShadow()

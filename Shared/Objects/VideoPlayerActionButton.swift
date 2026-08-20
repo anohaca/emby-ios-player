@@ -15,7 +15,6 @@ enum VideoPlayerActionButton: String, CaseIterable, Displayable, Equatable, Iden
     case autoPlay
     case gestureLock
     case playbackSpeed
-//    case playbackQuality
     case playNextItem
     case playPreviousItem
     case subtitles
@@ -32,8 +31,6 @@ enum VideoPlayerActionButton: String, CaseIterable, Displayable, Equatable, Iden
             L10n.gestureLock
         case .playbackSpeed:
             L10n.playbackSpeed
-//        case .playbackQuality:
-//            return L10n.playbackQuality
         case .playNextItem:
             L10n.playNextItem
         case .playPreviousItem:
@@ -54,7 +51,6 @@ enum VideoPlayerActionButton: String, CaseIterable, Displayable, Equatable, Iden
         case .autoPlay: "play.circle.fill"
         case .gestureLock: "lock.circle.fill"
         case .playbackSpeed: "speedometer"
-//        case .playbackQuality: "tv.circle.fill"
         case .playNextItem: "forward.end.circle.fill"
         case .playPreviousItem: "backward.end.circle.fill"
         case .subtitles: "captions.bubble.fill"

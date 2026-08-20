@@ -200,7 +200,7 @@ extension BaseItemKind {
         case .folder, .program, .musicVideo, .video, .userView:
             .landscape
         default:
-            .portrait
+            .landscape
         }
     }
 }

@@ -158,7 +158,7 @@ struct AddItemImageView: View {
         } label: {
             posterImage(
                 image,
-                posterStyle: (image.height ?? 0) > (image.width ?? 0) ? .portrait : .landscape
+                posterStyle: .landscape
             )
         }
     }

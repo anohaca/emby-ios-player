@@ -180,7 +180,7 @@ extension ItemView.CompactPosterScrollView {
 
                     PosterImage(
                         item: viewModel.item,
-                        type: .portrait,
+                        type: .landscape,
                         contentMode: .fit
                     )
                     .environment(\.isOverComplexContent, true)

@@ -74,12 +74,11 @@ extension ItemView {
                 return
             }
 
-            let queue: (any MediaPlayerQueue)? = {
-                if item.type == .episode {
-                    return EpisodeMediaPlayerQueue(episode: item)
-                }
-                return nil
-            }()
+            let queue: (any MediaPlayerQueue)? =
+                CollectionMediaPlayerQueue.make(
+                    items: viewModel.playableItems,
+                    currentItem: item
+                ) ?? (item.type == .episode ? EpisodeMediaPlayerQueue(episode: item) : nil)
 
             router.route(
                 to: .videoPlayer(

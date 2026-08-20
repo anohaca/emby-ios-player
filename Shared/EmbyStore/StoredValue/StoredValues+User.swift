@@ -154,13 +154,6 @@ extension StoredValues.Keys {
             )
         }
 
-        static var customDeviceProfiles: Key<[CustomDeviceProfile]> {
-            CurrentUserKey(
-                field: "customDeviceProfiles",
-                default: []
-            )
-        }
-
         static var enableItemEditing: Key<Bool> {
             CurrentUserKey(
                 field: "enableItemEditing",
@@ -203,18 +196,5 @@ extension StoredValues.Keys {
             )
         }
 
-        static var forceDVTranscode: Key<Bool> {
-            CurrentUserKey(
-                field: "forceDVTranscode",
-                default: false
-            )
-        }
-
-        static var forceHDRTranscode: Key<Bool> {
-            CurrentUserKey(
-                field: "forceHDRTranscode",
-                default: false
-            )
-        }
     }
 }

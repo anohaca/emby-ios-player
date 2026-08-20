@@ -420,7 +420,6 @@ private final class GroupedLogViewModel: ObservableObject {
         case "subtitleSettings": return "字幕设置"
         case "subtitleFontSettings": return "字幕字体设置"
         case "videoPlayerSettings": return "播放器设置"
-        case "playbackQualitySettings": return "播放质量设置"
         case "gestureSettings": return "手势设置"
         case "cacheStatistics": return "缓存统计"
         case "log": return "日志"

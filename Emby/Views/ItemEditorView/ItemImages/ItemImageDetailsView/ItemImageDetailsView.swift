@@ -88,7 +88,7 @@ struct ItemImageDetailsView: View {
         List {
             HeaderSection(
                 imageSource: imageSource,
-                posterType: height ?? 0 > width ?? 0 ? .portrait : .landscape
+                posterType: .landscape
             )
 
             DetailsSection(

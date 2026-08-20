@@ -169,6 +169,14 @@ extension ItemView {
         #endif
 
         let queue: (any MediaPlayerQueue)? = {
+            if let collectionViewModel = viewModel as? CollectionItemViewModel,
+               let collectionQueue = CollectionMediaPlayerQueue.make(
+                   items: collectionViewModel.playableItems,
+                   currentItem: playButtonItem
+               ) {
+                return collectionQueue
+            }
+
             if playButtonItem.type == .episode {
                 return EpisodeMediaPlayerQueue(episode: playButtonItem)
             }

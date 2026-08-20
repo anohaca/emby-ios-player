@@ -188,7 +188,7 @@ extension ItemView.iPadOSCinematicScrollView {
                                 .failure {
                                     SystemImageContentView(systemName: viewModel.item.systemImage)
                                 }
-                                .posterStyle(.portrait, contentMode: .fit)
+                                .posterStyle(.landscape, contentMode: .fit)
                                 .frame(width: 200)
                                 .accessibilityIgnoresInvertColors()
                         } else if viewModel.item.presentPlayButton {

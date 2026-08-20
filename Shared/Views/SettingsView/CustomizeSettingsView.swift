@@ -178,9 +178,8 @@ struct CustomizeSettingsView: View {
                 message: "确定后会检查该地址是否能返回星期表内容。",
                 placeholder: "例如：http://192.168.1.2:7789",
                 text: aniRSSURLPrompt,
-                keyboardType: .URL,
+                keyboardType: .asciiCapable,
                 showsCancel: true,
-                textContentType: .URL,
                 forcesLeftToRight: true,
                 isPresented: $isPresentingAniRSSURL
             ) { text in

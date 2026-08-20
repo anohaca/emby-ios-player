@@ -117,7 +117,7 @@ struct ItemElementSearchView<Element: Hashable>: View {
             HStack(spacing: EdgeInsets.edgePadding) {
                 PosterImage(
                     item: person,
-                    type: .portrait
+                    type: .landscape
                 )
                 .frame(width: 60)
                 .posterShadow()

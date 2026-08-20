@@ -23,7 +23,7 @@ extension IdentifyItemView {
         var body: some View {
             Button(action: action) {
                 HStack {
-                    PosterImage(item: result, type: .portrait)
+                    PosterImage(item: result, type: .landscape)
                         .frame(width: 60)
                         .padding()
 

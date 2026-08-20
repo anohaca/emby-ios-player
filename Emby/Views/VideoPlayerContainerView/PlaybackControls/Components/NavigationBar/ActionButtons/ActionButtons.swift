@@ -46,7 +46,6 @@ extension VideoPlayer.PlaybackControls.NavigationBar {
                 filteredButtons.removeAll { $0 == .audio }
                 filteredButtons.removeAll { $0 == .autoPlay }
                 filteredButtons.removeAll { $0 == .playbackSpeed }
-//                filteredButtons.removeAll { $0 == .playbackQuality }
                 filteredButtons.removeAll { $0 == .subtitles }
             }
 
@@ -74,8 +73,6 @@ extension VideoPlayer.PlaybackControls.NavigationBar {
                 GestureLock()
             case .playbackSpeed:
                 PlaybackRateMenu()
-//            case .playbackQuality:
-//                PlaybackQuality()
             case .playNextItem:
                 PlayNextItem()
             case .playPreviousItem:

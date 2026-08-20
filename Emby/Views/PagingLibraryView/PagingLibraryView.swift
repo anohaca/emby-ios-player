@@ -101,7 +101,12 @@ struct PagingLibraryView<Element: Poster>: View {
 
         let displayType = StoredValues[.User.libraryDisplayType(parentID: viewModel.parent?.id)]
         let listColumnCount = StoredValues[.User.libraryListColumnCount(parentID: viewModel.parent?.id)]
-        let posterType = StoredValues[.User.libraryPosterType(parentID: viewModel.parent?.id)]
+        let storedPosterType = StoredValues[.User.libraryPosterType(parentID: viewModel.parent?.id)]
+        let posterType = storedPosterType == .square ? .landscape : storedPosterType
+
+        if storedPosterType != posterType {
+            StoredValues[.User.libraryPosterType(parentID: viewModel.parent?.id)] = posterType
+        }
 
         let initialDisplayType = Defaults[.Customization.Library.rememberLayout] ? displayType : defaultDisplayType
         let initialListColumnCount = Defaults[.Customization.Library.rememberLayout] ? listColumnCount : defaultListColumnCount

@@ -29,10 +29,18 @@ private struct AniRSSItem: Codable, Equatable, Identifiable {
     let totalEpisodeNumber: Int?
     let score: Double?
     let enable: Bool?
+    let tmdb: AniRSSTMDB?
+    let tmdbId: String?
+
+    var tmdbID: String? { tmdbId ?? tmdb?.id }
 
     var episodeText: String {
         "\(currentEpisodeNumber ?? 0) / \(totalEpisodeNumber.map(String.init) ?? "*")"
     }
+}
+
+private struct AniRSSTMDB: Codable, Equatable {
+    let id: String?
 }
 
 private struct AutoBangumiSchedule: Decodable {
@@ -57,6 +65,7 @@ private struct AutoBangumiRule: Decodable {
 }
 
 private struct AutoBangumiMetadata: Decodable {
+    let tmdbId: String?
     let bgmName: String?
     let title: String?
     let jpTitle: String?
@@ -196,6 +205,7 @@ private final class WeeklyScheduleViewModel: ViewModel {
             parameters.includeItemTypes = [.series]
             parameters.isRecursive = true
             parameters.limit = 10_000
+            parameters.fields = [.providerIDs]
             let response: EmbyPortItemsResponse<BaseItemDto> = try await userSession.embyClient.items(
                 parameters,
                 as: EmbyPortItemsResponse<BaseItemDto>.self
@@ -204,8 +214,13 @@ private final class WeeklyScheduleViewModel: ViewModel {
             var result: [String: PlaybackIndicator] = [:]
             var matches: [String: BaseItemDto] = [:]
             for scheduleItem in weeks.flatMap(\.items) {
-                let title = Self.normalized(scheduleItem.title)
-                guard let match = series.first(where: { Self.normalized($0.displayTitle) == title }) else { continue }
+                let titleMatch = { (item: BaseItemDto) in
+                    Self.normalized(item.displayTitle) == Self.normalized(scheduleItem.title)
+                }
+                let match = scheduleItem.tmdbID.flatMap { tmdbID in
+                    series.first { Self.tmdbID(of: $0) == tmdbID }
+                } ?? series.first(where: titleMatch)
+                guard let match else { continue }
                 matches[scheduleItem.id] = match
                 result[scheduleItem.id] = PlaybackIndicator(
                     isPlayed: match.userData?.isPlayed == true,
@@ -300,7 +315,8 @@ private final class WeeklyScheduleViewModel: ViewModel {
                         cover: original.cover, image: original.image, subgroup: original.subgroup,
                         currentEpisodeNumber: max(original.currentEpisodeNumber ?? 0, current),
                         totalEpisodeNumber: max(original.totalEpisodeNumber ?? 0, total),
-                        score: original.score ?? metadata.score, enable: original.enable
+                        score: original.score ?? metadata.score, enable: original.enable,
+                        tmdb: original.tmdb, tmdbId: original.tmdbId ?? metadata.tmdbId
                     )
                 }
                 continue
@@ -314,7 +330,7 @@ private final class WeeklyScheduleViewModel: ViewModel {
                 subgroup: rule.groupName,
                 currentEpisodeNumber: metadata.currentEpisodeNumber,
                 totalEpisodeNumber: metadata.totalEpisodeNumber, score: metadata.score,
-                enable: !(rule.deleted ?? false)
+                enable: !(rule.deleted ?? false), tmdb: nil, tmdbId: metadata.tmdbId
             )
             grouped[metadata.weekLabel!, default: []].append(item)
         }
@@ -330,6 +346,12 @@ private final class WeeklyScheduleViewModel: ViewModel {
 
     private static func normalized(_ value: String) -> String {
         value.lowercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }.map(String.init).joined()
+    }
+
+    private static func tmdbID(of item: BaseItemDto) -> String? {
+        item.providerIDs?.first {
+            $0.key.caseInsensitiveCompare("tmdb") == .orderedSame
+        }?.value
     }
 
     private static func firstNonempty(_ values: String?...) -> String? {
@@ -352,9 +374,17 @@ struct WeeklyScheduleView: View {
     @StateObject private var viewModel: WeeklyScheduleViewModel
     @Router private var router
     private let baseURL: URL
+    private let topContentInset: CGFloat
+    private let onScrollOffsetChange: ((CGFloat) -> Void)?
 
-    init(baseURL: URL) {
+    init(
+        baseURL: URL,
+        topContentInset: CGFloat = 0,
+        onScrollOffsetChange: ((CGFloat) -> Void)? = nil
+    ) {
         self.baseURL = baseURL
+        self.topContentInset = topContentInset
+        self.onScrollOffsetChange = onScrollOffsetChange
         self._viewModel = StateObject(wrappedValue: WeeklyScheduleViewModel(baseURL: baseURL))
     }
 
@@ -365,45 +395,65 @@ struct WeeklyScheduleView: View {
     ]
 
     var body: some View {
-        VStack(spacing: 0) {
-            switch viewModel.state {
-            case .initial, .loading:
-                ProgressView("正在读取 ANI-RSS…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case let .failed(message):
-                VStack(spacing: 14) {
-                    Image(systemName: "wifi.exclamationmark")
-                        .font(.largeTitle)
-                        .foregroundStyle(.secondary)
-                    Text("无法加载星期表")
-                        .font(.headline)
-                    Text(message)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                    Button("重试") {
-                        Task { await viewModel.reload() }
-                    }
-                }
-                .padding()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .content:
-                scheduleContent
+        contentStateView
+            .task {
+                await viewModel.load()
             }
-        }
-        .task {
-            await viewModel.load()
+    }
+
+    @ViewBuilder
+    private var contentStateView: some View {
+        switch viewModel.state {
+        case .initial, .loading:
+            ProgressView("正在读取 ANI-RSS…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case let .failed(message):
+            VStack(spacing: 14) {
+                Image(systemName: "wifi.exclamationmark")
+                    .font(.largeTitle)
+                    .foregroundStyle(.secondary)
+                Text("无法加载星期表")
+                    .font(.headline)
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("重试") {
+                    Task { await viewModel.reload() }
+                }
+            }
+            .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .content:
+            scheduleContent
         }
     }
 
     @ViewBuilder
     private var scheduleContent: some View {
         if viewModel.weeks.allSatisfy(\.items.isEmpty) {
-            ContentUnavailableView("没有星期数据", systemImage: "calendar")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ScrollView {
+                VStack(spacing: 24) {
+                    if topContentInset > 0 {
+                        Color.clear.frame(height: topContentInset)
+                    }
+
+                    ContentUnavailableView("没有星期数据", systemImage: "calendar")
+                        .frame(maxWidth: .infinity, minHeight: 300)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .clearScrollViewBackground()
+            .onScrollViewOffsetChange { offset in
+                onScrollOffsetChange?(offset)
+            }
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
+                    if topContentInset > 0 {
+                        Color.clear.frame(height: topContentInset)
+                    }
+
                     ForEach(viewModel.weeks) { week in
                         VStack(alignment: .leading, spacing: 9) {
                             HStack {
@@ -441,8 +491,12 @@ struct WeeklyScheduleView: View {
                 .padding(.top, 24)
                 .padding(.bottom, 24)
             }
+            .clearScrollViewBackground()
             .refreshable {
                 await viewModel.reload()
+            }
+            .onScrollViewOffsetChange { offset in
+                onScrollOffsetChange?(offset)
             }
         }
     }
@@ -533,7 +587,10 @@ private struct WeeklyScheduleCard: View {
                     }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Do not use an infinite height inside LazyVGrid. It makes each card
+        // expand to the scroll view's proposed height and causes rows to overlap.
+        .aspectRatio(2 / 3, contentMode: .fill)
+        .frame(maxWidth: .infinity)
         .clipped()
     }
 

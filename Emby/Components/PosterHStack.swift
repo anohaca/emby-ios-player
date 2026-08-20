@@ -196,6 +196,7 @@ struct PosterHStack<Element: Poster, Data: Collection>: View where Data.Element 
             .edgePadding(.horizontal)
 
             stack
+                .id(type)
         }
     }
 }

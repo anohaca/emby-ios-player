@@ -105,9 +105,6 @@ struct SettingsView: View {
                 router.route(to: .subtitleSettings)
             }
 
-            ChevronButton(L10n.playbackQuality) {
-                router.route(to: .playbackQualitySettings)
-            }
         }
     }
 

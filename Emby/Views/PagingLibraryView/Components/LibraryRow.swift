@@ -6,6 +6,7 @@
 // Copyright (c) 2026 Jellyfin & Jellyfin Contributors
 //
 
+import Defaults
 import SwiftUI
 
 private let landscapeMaxWidth: CGFloat = 110
@@ -14,6 +15,9 @@ private let portraitMaxWidth: CGFloat = 60
 extension PagingLibraryView {
 
     struct LibraryRow: View {
+
+        @Default(.Customization.showPosterLabels)
+        private var showPosterLabels
 
         @Namespace
         private var namespace
@@ -74,12 +78,14 @@ extension PagingLibraryView {
         private var rowContent: some View {
             HStack {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(item.displayTitle)
-                        .font(posterType == .landscape ? .subheadline : .callout)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
+                    if showPosterLabels {
+                        Text(item.displayTitle)
+                            .font(posterType == .landscape ? .subheadline : .callout)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                    }
 
                     accessoryView
                         .font(.caption)

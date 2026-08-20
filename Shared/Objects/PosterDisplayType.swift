@@ -12,6 +12,12 @@ enum PosterDisplayType: String, CaseIterable, Displayable, Storable, SystemImage
     case portrait
     case square
 
+    /// Layouts available to user-facing poster settings.
+    /// Square remains an internal layout for media types that require it.
+    static var allCases: [PosterDisplayType] {
+        [.landscape, .portrait]
+    }
+
     var displayTitle: String {
         switch self {
         case .landscape:

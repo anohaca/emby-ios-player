@@ -50,8 +50,10 @@ struct SearchView: View {
                     placeholder: L10n.search,
                     isFocused: $isSearchFocused
                 )
+                .frame(maxWidth: .infinity)
             }
             .padding(.horizontal, 18)
+            .frame(maxWidth: .infinity)
             .frame(height: 50)
             .background(.thinMaterial, in: Capsule())
             .overlay {
@@ -346,6 +348,7 @@ private struct ClearSearchTextField: UIViewRepresentable {
             for: .editingChanged
         )
         textField.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        textField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return textField
     }
 

@@ -175,6 +175,14 @@ extension View {
         modifier(ScrollViewOffsetModifier(scrollViewOffset: scrollViewOffset))
     }
 
+    func onScrollViewOffsetChange(_ onChange: @escaping (CGFloat) -> Void) -> some View {
+        modifier(ScrollViewOffsetCallbackModifier(onChange: onChange))
+    }
+
+    func clearScrollViewBackground() -> some View {
+        modifier(ClearScrollViewBackgroundModifier())
+    }
+
     func backgroundParallaxHeader(
         _ scrollViewOffset: Binding<CGFloat>,
         height: CGFloat,

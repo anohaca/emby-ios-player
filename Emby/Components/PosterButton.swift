@@ -60,6 +60,9 @@ final class BaseItemPosterOverlayState: ObservableObject {
 
 struct PosterButton<Item: Poster>: View {
 
+    @Default(.Customization.showPosterLabels)
+    private var showPosterLabels
+
     @EnvironmentTypeValue<Item>(\.posterOverlayRegistry)
     private var posterOverlayRegistry
 
@@ -98,8 +101,10 @@ struct PosterButton<Item: Poster>: View {
         VStack(alignment: .leading) {
             posterImageView(overlay: overlay)
 
-            labelView()
-                .allowsHitTesting(false)
+            if showPosterLabels {
+                labelView()
+                    .allowsHitTesting(false)
+            }
         }
     }
 
@@ -151,7 +156,13 @@ struct PosterButton<Item: Poster>: View {
                     Button {
                         action(namespace)
                     } label: {
-                        labelView()
+                        if showPosterLabels {
+                            labelView()
+                        } else {
+                            // Keep the secondary action available when labels are hidden.
+                            // The label area stays in the same place, but renders nothing.
+                            labelView().hidden()
+                        }
                     }
                 }
                 .modifier(TrackingContextMenuSizeModifier(isEnabled: usesContextMenuPreview, size: $posterSize))

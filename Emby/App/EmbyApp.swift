@@ -60,8 +60,6 @@ struct EmbyApp: App {
             DebugSelectUserInitialServerSmokeView()
         } else if ProcessInfo.processInfo.arguments.contains("-EmbySubtitleLanguageSmoke") {
             DebugSubtitleLanguageSmokeView()
-        } else if ProcessInfo.processInfo.arguments.contains("-EmbyCompatibilitySmoke") {
-            DebugCompatibilitySmokeView()
         } else if ProcessInfo.processInfo.arguments.contains("-EmbyFavoritesSmoke") {
             DebugFavoritesSmokeView()
         } else if ProcessInfo.processInfo.arguments.contains("-EmbySearchSmoke") {
@@ -132,6 +130,7 @@ struct EmbyApp: App {
         // UIKit
 
         Defaults.Keys.migrateUserSettingsToAppSuiteIfNeeded()
+        Defaults.Keys.migrateRemovedSquarePosterSettingsIfNeeded()
 
         if Defaults[.appearance] != .dark {
             Defaults[.appearance] = .dark

@@ -215,6 +215,14 @@ extension HomeView {
                     .proxy(collectionHStackProxy)
                     .scrollBehavior(.continuousLeadingEdge)
                     .frame(width: width, height: rowHeight(for: width), alignment: .leading)
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: HomeHorizontalPosterRegionPreferenceKey.self,
+                                value: [proxy.frame(in: .named(HomePosterInteractionCoordinateSpace.content))]
+                            )
+                        }
+                    }
                 }
                 .contextMenu(for: BaseItemDto.self) { item in
                     Button {

@@ -86,6 +86,11 @@ private final class ScrollViewCallbackObserver: NSObject, ObservableObject {
     func attach(to scrollView: UIScrollView, onChange: @escaping (CGFloat) -> Void) {
         self.onChange = onChange
 
+        // The home pager observes horizontal drags at the same time as this
+        // vertical scroll view. Locking the scroll view to its initial axis
+        // prevents a diagonal page swipe from nudging the content vertically.
+        scrollView.isDirectionalLockEnabled = true
+
         guard self.scrollView !== scrollView else { return }
 
         if let previousScrollView = self.scrollView {

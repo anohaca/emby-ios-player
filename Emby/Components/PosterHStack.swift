@@ -9,6 +9,19 @@
 import CollectionHStack
 import SwiftUI
 
+enum HomePosterInteractionCoordinateSpace {
+    static let content = "HomePosterInteractionContent"
+}
+
+struct HomeHorizontalPosterRegionPreferenceKey: PreferenceKey {
+
+    static let defaultValue: [CGRect] = []
+
+    static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
 private struct HomeTransitionLockedRowWidthKey: EnvironmentKey {
     static let defaultValue: CGFloat? = nil
 }
@@ -101,6 +114,14 @@ struct PosterHStack<Element: Poster, Data: Collection>: View where Data.Element 
             .itemSpacing(itemSpacing)
             .scrollBehavior(.continuousLeadingEdge)
             .frame(width: width, height: rowHeight(for: width), alignment: .leading)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: HomeHorizontalPosterRegionPreferenceKey.self,
+                        value: [proxy.frame(in: .named(HomePosterInteractionCoordinateSpace.content))]
+                    )
+                }
+            }
         }
         .posterOverlay(for: BaseItemDto.self) { item in
             PosterButton<BaseItemDto>.BaseItemOverlay(

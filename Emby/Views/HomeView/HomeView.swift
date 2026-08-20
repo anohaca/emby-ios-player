@@ -12,6 +12,21 @@ import Foundation
 import SwiftUI
 import UIKit
 
+@MainActor
+private final class HomeScrollMetrics: ObservableObject {
+
+    var libraryOffset: CGFloat = 0
+    var weeklyOffset: CGFloat = 0
+
+    func update(_ offset: CGFloat, isWeekly: Bool) {
+        if isWeekly {
+            weeklyOffset = max(0, offset)
+        } else {
+            libraryOffset = max(0, offset)
+        }
+    }
+}
+
 // TODO: seems to redraw view when popped to sometimes?
 //       - similar to MediaView TODO bug?
 //       - indicated by snapping to the top
@@ -19,8 +34,9 @@ struct HomeView: View {
 
     private let destinationPickerHeight: CGFloat = 52
     private let destinationPageAnimation = Animation.interactiveSpring(
-        response: 0.34,
-        dampingFraction: 0.88
+        response: 0.24,
+        dampingFraction: 0.9,
+        blendDuration: 0.04
     )
     private enum HomeDestination: String, CaseIterable, Identifiable {
         case library = "首页"
@@ -55,6 +71,10 @@ struct HomeView: View {
     private var selectedDestination = HomeDestination.library
     @GestureState
     private var destinationPageDragOffset: CGFloat = 0
+    @StateObject
+    private var homeScrollMetrics = HomeScrollMetrics()
+    @State
+    private var horizontalPosterRegions: [CGRect] = []
     @State
     private var libraryScrollOffset: CGFloat = 0
     @State
@@ -212,6 +232,7 @@ struct HomeView: View {
                 }
             }
             .edgePadding(.vertical)
+            .coordinateSpace(name: HomePosterInteractionCoordinateSpace.content)
             .onSizeChanged { size, _ in
                 homeSectionsStackSize = size
                 if isHomeSnapshotOverlayVisible,
@@ -280,6 +301,10 @@ struct HomeView: View {
         // ScrollViewOffsetCallbackModifier reports a normalized distance from
         // the actual top, so the top is always zero for both destinations.
         return max(0, offset)
+    }
+
+    private var isDestinationPageDragging: Bool {
+        abs(destinationPageDragOffset) > 0.5
     }
 
     private var sharedDestinationPicker: some View {
@@ -364,6 +389,7 @@ struct HomeView: View {
             HStack(spacing: 0) {
                 libraryDestinationContent
                     .frame(width: proxy.size.width, height: proxy.size.height)
+                    .allowsHitTesting(!isDestinationPageDragging)
 
                 if let configuredAniRSSURL {
                     WeeklyScheduleView(
@@ -374,6 +400,7 @@ struct HomeView: View {
                         }
                     )
                         .frame(width: proxy.size.width, height: proxy.size.height)
+                        .allowsHitTesting(!isDestinationPageDragging)
                 }
             }
             .offset(
@@ -381,22 +408,23 @@ struct HomeView: View {
             )
             .animation(destinationPageAnimation, value: selectedDestination)
             .contentShape(Rectangle())
-            // Use the normal gesture priority so a nested horizontal poster
-            // scroller wins its own drag. Outside those poster scrollers the
-            // page-level drag changes the destination; vertical ScrollView
-            // drags remain owned by the active page.
-            .gesture(
-                DragGesture(minimumDistance: 16, coordinateSpace: .local)
+            // Track the page drag at the same time as the child ScrollViews,
+            // but let a horizontal poster row keep the gesture for itself.
+            // This preserves one-to-one finger tracking everywhere else.
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 6, coordinateSpace: .local)
                     .updating($destinationPageDragOffset) { value, state, _ in
-                        guard abs(value.translation.width) > abs(value.translation.height) * 1.2,
+                        guard !isHorizontalPosterStart(value.startLocation),
+                              abs(value.translation.width) > abs(value.translation.height) * 1.08,
                               (selectedDestination == .library && value.translation.width < 0) ||
                               (selectedDestination == .weekly && value.translation.width > 0)
                         else { return }
                         state = value.translation.width
                     }
                     .onEnded { value in
-                        guard abs(value.translation.width) > abs(value.translation.height) * 1.2,
-                              abs(value.translation.width) > 72,
+                        guard !isHorizontalPosterStart(value.startLocation),
+                              abs(value.translation.width) > abs(value.translation.height) * 1.08,
+                              abs(value.translation.width) > 56,
                               (selectedDestination == .library && value.translation.width < 0) ||
                               (selectedDestination == .weekly && value.translation.width > 0)
                         else { return }
@@ -410,6 +438,10 @@ struct HomeView: View {
                         }
                     }
             )
+        }
+        .onPreferenceChange(HomeHorizontalPosterRegionPreferenceKey.self) { regions in
+            guard !regionsAreEqual(horizontalPosterRegions, regions) else { return }
+            horizontalPosterRegions = regions
         }
     }
 
@@ -651,6 +683,8 @@ struct HomeView: View {
     }
 
     private func handleDestinationScrollOffset(_ offset: CGFloat, destination: HomeDestination) {
+        homeScrollMetrics.update(offset, isWeekly: destination == .weekly)
+
         // The header only needs the first 52 points of scroll travel. Keeping
         // the full offset in @State caused a parent HomeView update for every
         // pixel of a fling, which made the nested poster grids feel sticky on
@@ -666,6 +700,30 @@ struct HomeView: View {
         case .weekly:
             guard abs(weeklyScrollOffset - collapsedOffset) >= updateThreshold else { return }
             weeklyScrollOffset = collapsedOffset
+        }
+    }
+
+    private func isHorizontalPosterStart(_ location: CGPoint) -> Bool {
+        guard selectedDestination == .library else { return false }
+
+        let contentLocation = CGPoint(
+            x: location.x,
+            y: location.y + homeScrollMetrics.libraryOffset
+        )
+
+        return horizontalPosterRegions.contains { region in
+            region.insetBy(dx: -2, dy: -2).contains(contentLocation)
+        }
+    }
+
+    private func regionsAreEqual(_ lhs: [CGRect], _ rhs: [CGRect]) -> Bool {
+        guard lhs.count == rhs.count else { return false }
+
+        return zip(lhs, rhs).allSatisfy { left, right in
+            abs(left.minX - right.minX) < 0.5 &&
+                abs(left.minY - right.minY) < 0.5 &&
+                abs(left.width - right.width) < 0.5 &&
+                abs(left.height - right.height) < 0.5
         }
     }
 
@@ -920,6 +978,10 @@ private final class HomeRefreshControlCoordinator: NSObject, ObservableObject {
     ) {
         self.onRefresh = onRefresh
         self.onScrollOffsetChange = onScrollOffsetChange
+
+        // Keep a horizontal destination swipe from moving the vertical home
+        // feed a few points before the pager takes over.
+        scrollView.isDirectionalLockEnabled = true
 
         if self.scrollView !== scrollView {
             self.scrollView?.removeObserver(

@@ -26,6 +26,11 @@ struct HomeView: View {
     // first poster row's horizontal scroll view never competes for the drag.
     private let destinationPageGestureActivationHeight: CGFloat = 68
 
+    private var visibleDestinationPageGestureHeight: CGFloat {
+        guard activeDestinationScrollDelta < destinationPickerHeight else { return 0 }
+        return max(0, destinationPageGestureActivationHeight - activeDestinationScrollDelta)
+    }
+
     private enum HomeDestination: String, CaseIterable, Identifiable {
         case library = "首页"
         case weekly = "星期"
@@ -392,7 +397,8 @@ struct HomeView: View {
             .simultaneousGesture(
                 DragGesture(minimumDistance: 8, coordinateSpace: .local)
                     .updating($destinationPageDragOffset) { value, state, _ in
-                        guard value.startLocation.y <= destinationPageGestureActivationHeight,
+                        guard activeDestinationScrollDelta < destinationPickerHeight,
+                              value.startLocation.y <= visibleDestinationPageGestureHeight,
                               abs(value.translation.width) > abs(value.translation.height),
                               (selectedDestination == .library && value.translation.width < 0) ||
                               (selectedDestination == .weekly && value.translation.width > 0)
@@ -400,7 +406,8 @@ struct HomeView: View {
                         state = value.translation.width
                     }
                     .onEnded { value in
-                        guard value.startLocation.y <= destinationPageGestureActivationHeight,
+                        guard activeDestinationScrollDelta < destinationPickerHeight,
+                              value.startLocation.y <= visibleDestinationPageGestureHeight,
                               abs(value.translation.width) > abs(value.translation.height),
                               abs(value.translation.width) > 60,
                               (selectedDestination == .library && value.translation.width < 0) ||

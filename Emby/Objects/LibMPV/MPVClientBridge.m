@@ -150,6 +150,14 @@ didCompleteWithError:(NSError *)error
 
 @end
 
+@interface MPVRangeInFlightFetch : NSObject
+@property (nonatomic) dispatch_group_t group;
+@property (nonatomic) NSUInteger generation;
+@end
+
+@implementation MPVRangeInFlightFetch
+@end
+
 @interface MPVRangeCachedStream : NSObject
 @property (nonatomic, readonly) NSURL *url;
 @property (nonatomic, readonly) NSDictionary<NSString *, NSString *> *headers;
@@ -157,7 +165,7 @@ didCompleteWithError:(NSError *)error
 @property (nonatomic) int64_t contentLength;
 @property (atomic) BOOL cancelled;
 @property (nonatomic, strong) NSCache<NSNumber *, NSData *> *chunks;
-@property (nonatomic, strong) NSMutableDictionary<NSNumber *, dispatch_group_t> *inFlightFetches;
+@property (nonatomic, strong) NSMutableDictionary<NSNumber *, MPVRangeInFlightFetch *> *inFlightFetches;
 @property (nonatomic, strong) NSOperationQueue *prefetchQueue;
 @property (nonatomic, strong) NSURLSession *session;
 @property (nonatomic, strong) NSMutableSet<NSURLSession *> *activeNetworkSessions;
@@ -323,6 +331,7 @@ didCompleteWithError:(NSError *)error
         return nil;
 
     __block dispatch_group_t fetchGroup = nil;
+    NSUInteger fetchGeneration = 0;
     __block BOOL ownsFetch = NO;
     NSUInteger generation = 0;
     @synchronized (self) {
@@ -332,11 +341,17 @@ didCompleteWithError:(NSError *)error
 
         generation = self.requestGeneration;
 
-        fetchGroup = self.inFlightFetches[key];
-        if (!fetchGroup) {
+        MPVRangeInFlightFetch *inFlight = self.inFlightFetches[key];
+        if (inFlight) {
+            fetchGroup = inFlight.group;
+            fetchGeneration = inFlight.generation;
+        } else {
             fetchGroup = dispatch_group_create();
             dispatch_group_enter(fetchGroup);
-            self.inFlightFetches[key] = fetchGroup;
+            MPVRangeInFlightFetch *newFetch = [MPVRangeInFlightFetch new];
+            newFetch.group = fetchGroup;
+            newFetch.generation = generation;
+            self.inFlightFetches[key] = newFetch;
             ownsFetch = YES;
         }
     }
@@ -355,7 +370,7 @@ didCompleteWithError:(NSError *)error
             currentGeneration = self.requestGeneration;
             cancelled = self.cancelled;
         }
-        if (cancelled || currentGeneration == generation)
+        if (cancelled || currentGeneration == fetchGeneration)
             return nil;
         continue;
     }

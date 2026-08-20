@@ -186,9 +186,31 @@ private final class GroupedLogViewModel: ObservableObject {
         reloadWorkItem?.cancel()
         let request = NSFetchRequest<LoggerMessageEntity>(entityName: "LoggerMessageEntity")
         request.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
-        request.fetchLimit = 1_000
         request.fetchBatchSize = 1_000
-        let messages = (try? store.viewContext.fetch(request)) ?? []
+        let windowSize = 1_000
+        let maximumBoundaryLookback = 5_000
+        request.fetchLimit = windowSize
+        var messages = (try? store.viewContext.fetch(request)) ?? []
+
+        // The oldest item in the visible window may be a continuation of a
+        // behavior whose marker is just outside the window.  Fetch bounded
+        // older pages until that marker is included, so grouping never falls
+        // back to the synthetic startup behavior solely because of truncation.
+        var fetchOffset = messages.count
+        while let oldest = messages.last,
+              Self.behavior(for: oldest) == nil,
+              fetchOffset < windowSize + maximumBoundaryLookback
+        {
+            request.fetchOffset = fetchOffset
+            request.fetchLimit = windowSize
+            guard let olderPage = try? store.viewContext.fetch(request),
+                  olderPage.isNotEmpty
+            else { break }
+            messages.append(contentsOf: olderPage)
+            fetchOffset += olderPage.count
+            if olderPage.count < windowSize { break }
+        }
+
         groups = Self.makeGroups(from: messages)
     }
 

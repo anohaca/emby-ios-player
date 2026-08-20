@@ -22,15 +22,6 @@ struct HomeView: View {
         response: 0.34,
         dampingFraction: 0.88
     )
-    // Keep the destination swipe inside the shared picker/title strip so the
-    // first poster row's horizontal scroll view never competes for the drag.
-    private let destinationPageGestureActivationHeight: CGFloat = 68
-
-    private var visibleDestinationPageGestureHeight: CGFloat {
-        guard activeDestinationScrollDelta < destinationPickerHeight else { return 0 }
-        return max(0, destinationPageGestureActivationHeight - activeDestinationScrollDelta)
-    }
-
     private enum HomeDestination: String, CaseIterable, Identifiable {
         case library = "首页"
         case weekly = "星期"
@@ -390,26 +381,22 @@ struct HomeView: View {
             )
             .animation(destinationPageAnimation, value: selectedDestination)
             .contentShape(Rectangle())
-            // Keep this simultaneous with the nested vertical/horizontal
-            // scroll views. The start-area guard below prevents a poster's
-            // own horizontal paging gesture from becoming a destination
-            // switch, while the nested scroll view remains fully responsive.
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 8, coordinateSpace: .local)
+            // Use the normal gesture priority so a nested horizontal poster
+            // scroller wins its own drag. Outside those poster scrollers the
+            // page-level drag changes the destination; vertical ScrollView
+            // drags remain owned by the active page.
+            .gesture(
+                DragGesture(minimumDistance: 16, coordinateSpace: .local)
                     .updating($destinationPageDragOffset) { value, state, _ in
-                        guard activeDestinationScrollDelta < destinationPickerHeight,
-                              value.startLocation.y <= visibleDestinationPageGestureHeight,
-                              abs(value.translation.width) > abs(value.translation.height),
+                        guard abs(value.translation.width) > abs(value.translation.height) * 1.2,
                               (selectedDestination == .library && value.translation.width < 0) ||
                               (selectedDestination == .weekly && value.translation.width > 0)
                         else { return }
                         state = value.translation.width
                     }
                     .onEnded { value in
-                        guard activeDestinationScrollDelta < destinationPickerHeight,
-                              value.startLocation.y <= visibleDestinationPageGestureHeight,
-                              abs(value.translation.width) > abs(value.translation.height),
-                              abs(value.translation.width) > 60,
+                        guard abs(value.translation.width) > abs(value.translation.height) * 1.2,
+                              abs(value.translation.width) > 72,
                               (selectedDestination == .library && value.translation.width < 0) ||
                               (selectedDestination == .weekly && value.translation.width > 0)
                         else { return }
@@ -664,11 +651,21 @@ struct HomeView: View {
     }
 
     private func handleDestinationScrollOffset(_ offset: CGFloat, destination: HomeDestination) {
+        // The header only needs the first 52 points of scroll travel. Keeping
+        // the full offset in @State caused a parent HomeView update for every
+        // pixel of a fling, which made the nested poster grids feel sticky on
+        // device. Clamp and quantize the value so vertical scrolling remains
+        // owned by the child ScrollView while the header still tracks smoothly.
+        let collapsedOffset = min(destinationPickerHeight, max(0, offset))
+        let updateThreshold: CGFloat = 1
+
         switch destination {
         case .library:
-            libraryScrollOffset = offset
+            guard abs(libraryScrollOffset - collapsedOffset) >= updateThreshold else { return }
+            libraryScrollOffset = collapsedOffset
         case .weekly:
-            weeklyScrollOffset = offset
+            guard abs(weeklyScrollOffset - collapsedOffset) >= updateThreshold else { return }
+            weeklyScrollOffset = collapsedOffset
         }
     }
 

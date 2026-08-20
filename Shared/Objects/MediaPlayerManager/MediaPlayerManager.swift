@@ -251,7 +251,14 @@ final class MediaPlayerManager: ViewModel {
             return
         }
 
-        if let nextItem = queue?.nextItem, Defaults[.VideoPlayer.autoPlayEnabled] {
+        // Collection queues expose a manual “下一项” control, but they are
+        // not episodic playback.  Automatic end-of-item continuation remains
+        // limited to the episode queue so a movie collection never silently
+        // starts another title when the current movie ends.
+        if queue?.id == "EpisodeMediaPlayerQueue",
+           let nextItem = queue?.nextItem,
+           Defaults[.VideoPlayer.autoPlayEnabled]
+        {
             await self.playNewItem(provider: nextItem)
         } else {
             await self.stop()

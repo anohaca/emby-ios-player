@@ -508,9 +508,25 @@ final class PlayerControlsView: UIView, UITextFieldDelegate {
         if dismissed {
             cancelSkipIntroAdjustment()
         }
-        skipIntroStack.alpha = areControlsHidden || dismissed ? 0 : 1
-        skipIntroStack.isHidden = areControlsHidden || dismissed
-        skipIntroStack.isUserInteractionEnabled = !areControlsHidden && !dismissed
+        let hidden = areControlsHidden || dismissed || endNextEpisodeVisible
+        skipIntroStack.alpha = hidden ? 0 : 1
+        skipIntroStack.isHidden = hidden
+        skipIntroStack.isUserInteractionEnabled = !areControlsHidden && !dismissed && !endNextEpisodeVisible
+    }
+
+    /// Clears the previous item's skip-intro UI before a new item is loaded.
+    ///
+    /// The controls view is reused for the whole player session. Without an
+    /// explicit transition reset, an active +/- adjustment session (or its
+    /// pending fade animation) can keep the previous item's button state
+    /// visible while the next episode is loading.
+    func resetSkipIntroForItemTransition() {
+        cancelSkipIntroAdjustment()
+        skipIntroButtonsDismissed = true
+        skipIntroStack.layer.removeAllAnimations()
+        skipIntroStack.alpha = 0
+        skipIntroStack.isHidden = true
+        skipIntroStack.isUserInteractionEnabled = false
     }
 
     func updateSkipIntroSeconds(_ seconds: Int) {

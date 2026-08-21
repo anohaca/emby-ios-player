@@ -2053,13 +2053,23 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
                 UIApplication.shared.isIdleTimerDisabled = false
                 self.controlsView.suppressPausedIndicatorTemporarily()
                 self.controlsView.setPaused(true)
-                self.showControls()
-                guard self.manager?.item.isLiveStream != true else { return }
+                if self.manager?.item.isLiveStream == true {
+                    self.showControls()
+                    return
+                }
                 if self.manager?.item.userData?.isPlayed != true,
                    SkipIntroDismissalStore.contains(item: self.manager?.item) {
                     SkipIntroDismissalStore.reset(for: self.manager?.item)
                 }
-                self.updateSkipIntroButtonVisibility(for: self.manager?.item)
+                if self.manager?.queue?.nextItem == nil {
+                    // There is no next item to replace the action, so the
+                    // completed episode must not leave its skip-intro button
+                    // visible in the paused end state.
+                    self.controlsView.resetSkipIntroForItemTransition()
+                } else {
+                    self.updateSkipIntroButtonVisibility(for: self.manager?.item)
+                }
+                self.showControls()
                 self.manager?.ended()
             }
         }
@@ -2308,6 +2318,12 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
 
     private func playNew(item: MediaPlayerItem) {
         currentPlaybackIsTranscoding = item.mediaSource.transcodingURL != nil
+        // The controls view is reused between episodes. Clear the previous
+        // episode's skip-intro session before applying the new item's value,
+        // otherwise an uncommitted button/adjustment can leak into the next
+        // item while its first frame is still loading.
+        controlsView.resetSkipIntroForItemTransition()
+        updateSkipIntroButtonVisibility(for: item.baseItem)
         hidePlaybackChromeForNewItem()
         loadSubtitleAdjustmentSettings(for: item.baseItem)
         prepareVideoSurfaceForLoading()
@@ -2894,6 +2910,7 @@ final class EmbyLibMPVPlayerViewController: UIViewController,
         }
 
         controlsView.suppressPausedIndicatorTemporarily()
+        controlsView.resetSkipIntroForItemTransition()
         isManuallyAdvancingItem = true
         hidePlaybackChromeForNewItem()
         manager?.playNewItem(provider: provider)

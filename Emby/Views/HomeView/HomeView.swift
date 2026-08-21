@@ -27,6 +27,17 @@ private final class HomeScrollMetrics: ObservableObject {
     }
 }
 
+struct HomePageDragSuppressionKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var homePageDragSuppressed: Bool {
+        get { self[HomePageDragSuppressionKey.self] }
+        set { self[HomePageDragSuppressionKey.self] = newValue }
+    }
+}
+
 // TODO: seems to redraw view when popped to sometimes?
 //       - similar to MediaView TODO bug?
 //       - indicated by snapping to the top
@@ -75,6 +86,8 @@ struct HomeView: View {
     private var homeScrollMetrics = HomeScrollMetrics()
     @State
     private var horizontalPosterRegions: [CGRect] = []
+    @State
+    private var suppressDestinationSelections = false
     @State
     private var libraryScrollOffset: CGFloat = 0
     @State
@@ -390,6 +403,7 @@ struct HomeView: View {
                 libraryDestinationContent
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .allowsHitTesting(!isDestinationPageDragging)
+                    .scrollDisabled(isDestinationPageDragging)
 
                 if let configuredAniRSSURL {
                     WeeklyScheduleView(
@@ -401,8 +415,10 @@ struct HomeView: View {
                     )
                         .frame(width: proxy.size.width, height: proxy.size.height)
                         .allowsHitTesting(!isDestinationPageDragging)
+                        .scrollDisabled(isDestinationPageDragging)
                 }
             }
+            .environment(\.homePageDragSuppressed, suppressDestinationSelections)
             .offset(
                 x: -CGFloat(selectedDestination == .weekly ? 1 : 0) * proxy.size.width + destinationPageDragOffset
             )
@@ -412,29 +428,33 @@ struct HomeView: View {
             // but let a horizontal poster row keep the gesture for itself.
             // This preserves one-to-one finger tracking everywhere else.
             .simultaneousGesture(
-                DragGesture(minimumDistance: 6, coordinateSpace: .local)
+                DragGesture(minimumDistance: 0, coordinateSpace: .local)
                     .updating($destinationPageDragOffset) { value, state, _ in
-                        guard !isHorizontalPosterStart(value.startLocation),
-                              abs(value.translation.width) > abs(value.translation.height) * 1.08,
-                              (selectedDestination == .library && value.translation.width < 0) ||
-                              (selectedDestination == .weekly && value.translation.width > 0)
-                        else { return }
+                        guard isDestinationPageDragIntent(value) else { return }
                         state = value.translation.width
                     }
+                    .onChanged { value in
+                        if isDestinationPageDragIntent(value) {
+                            suppressDestinationSelections = true
+                        }
+                    }
                     .onEnded { value in
-                        guard !isHorizontalPosterStart(value.startLocation),
-                              abs(value.translation.width) > abs(value.translation.height) * 1.08,
-                              abs(value.translation.width) > 56,
-                              (selectedDestination == .library && value.translation.width < 0) ||
-                              (selectedDestination == .weekly && value.translation.width > 0)
-                        else { return }
+                        let shouldSwitch = isDestinationPageDragIntent(value) &&
+                            abs(value.translation.width) > 56
 
-                        withAnimation(destinationPageAnimation) {
-                            if value.translation.width < 0 {
-                                selectedDestination = .weekly
-                            } else {
-                                selectedDestination = .library
+                        if shouldSwitch {
+                            withAnimation(destinationPageAnimation) {
+                                if value.translation.width < 0 {
+                                    selectedDestination = .weekly
+                                } else {
+                                    selectedDestination = .library
+                                }
                             }
+                        }
+
+                        guard suppressDestinationSelections else { return }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                            suppressDestinationSelections = false
                         }
                     }
             )
@@ -714,6 +734,14 @@ struct HomeView: View {
         return horizontalPosterRegions.contains { region in
             region.insetBy(dx: -2, dy: -2).contains(contentLocation)
         }
+    }
+
+    private func isDestinationPageDragIntent(_ value: DragGesture.Value) -> Bool {
+        !isHorizontalPosterStart(value.startLocation) &&
+            abs(value.translation.width) > 2 &&
+            abs(value.translation.width) > abs(value.translation.height) * 1.05 &&
+            ((selectedDestination == .library && value.translation.width < 0) ||
+                (selectedDestination == .weekly && value.translation.width > 0))
     }
 
     private func regionsAreEqual(_ lhs: [CGRect], _ rhs: [CGRect]) -> Bool {

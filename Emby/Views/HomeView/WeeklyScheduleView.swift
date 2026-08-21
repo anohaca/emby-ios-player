@@ -380,6 +380,7 @@ private final class WeeklyScheduleViewModel: ViewModel {
 struct WeeklyScheduleView: View {
     @StateObject private var viewModel: WeeklyScheduleViewModel
     @Router private var router
+    @Environment(\.homePageDragSuppressed) private var isHomePageDragSuppressed
     private let baseURL: URL
     private let topContentInset: CGFloat
     private let onScrollOffsetChange: ((CGFloat) -> Void)?
@@ -509,6 +510,8 @@ struct WeeklyScheduleView: View {
     }
 
     private func select(_ item: AniRSSItem, in namespace: Namespace.ID) {
+        guard !isHomePageDragSuppressed else { return }
+
         if let libraryItem = viewModel.matchedLibraryItems[item.id] {
             router.route(to: .item(item: libraryItem), in: namespace)
         } else {

@@ -767,7 +767,12 @@ static int MPVRangeCacheOpen(void *userData, char *uri, mpv_stream_cb_info *info
         {"sub-auto", "no"},
         {"sub-visibility", "yes"},
         {"sub-ass", "yes"},
-        {"sub-ass-override", "no"},
+        // Keep the user-adjustable subtitle controls effective for ASS/SSA
+        // tracks.  With `no`, libass renders the subtitle script exactly as
+        // authored and ignores runtime changes to sub-pos, sub-font-size and
+        // sub-border-size, so the in-player adjustment UI appears to do
+        // nothing.  `force` is the mpv mode that applies those controls.
+        {"sub-ass-override", "force"},
         {"sub-font-provider", "none"},
         {"sub-font", "Noto Sans CJK SC"},
         {"sub-border-style", "outline-and-shadow"},
